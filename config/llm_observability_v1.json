@@ -1,0 +1,46 @@
+{
+  "system_name": "OpenClaw LLM Observability v1",
+  "version": "1.0.0",
+  "description": "LLM 可觀測性層配置",
+  "policy": {
+    "sampling_rate": 1.0,
+    "required_fields": [
+      "agent",
+      "model",
+      "prompt_hash",
+      "response_hash",
+      "input_tokens",
+      "output_tokens",
+      "latency_ms",
+      "confidence",
+      "decision_id",
+      "created_at"
+    ],
+    "masking_rules": {
+      "api_keys": true,
+      "personal_info": true,
+      "internal_ips": true
+    },
+    "retention": {
+      "raw_traces_days": 30,
+      "aggregated_stats_days": 90,
+      "archival_enabled": true
+    },
+    "alerting": {
+      "high_latency_threshold_ms": 30000,
+      "high_token_usage_threshold": 10000,
+      "low_confidence_threshold": 0.3
+    }
+  },
+  "storage": {
+    "table_name": "llm_traces",
+    "indexes": ["created_at", "decision_id", "agent", "model"],
+    "compression_enabled": true
+  },
+  "monitoring": {
+    "daily_summary": true,
+    "summary_time": "23:30",
+    "anomaly_detection": true,
+    "cost_tracking": true
+  }
+}
