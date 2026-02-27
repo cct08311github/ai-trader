@@ -1,0 +1,57 @@
+{
+  "system_name": "OpenClaw Prompt Guard v1",
+  "version": "1.0.0",
+  "description": "Prompt injection 防護策略配置",
+  "policy": {
+    "max_input_chars": 10000,
+    "block_patterns": [
+      "ignore\\s+(all|previous|prior)\\s+instructions",
+      "system\\s+prompt",
+      "developer\\s+message",
+      "you\\s+are\\s+chatgpt",
+      "jailbreak",
+      "do\\s+anything\\s+now",
+      "execute\\s+order",
+      "open\\s+new\\s+positions?\\s+now",
+      "disable\\s+risk",
+      "bypass\\s+risk",
+      "忽略.*風控",
+      "立刻.*下單",
+      "系統指令"
+    ],
+    "strip_patterns": [
+      "\\[[^\\]]*(system|系統)\\s*(prompt|指令)[^\\]]*\\]",
+      "<(system|developer)[^>]*>",
+      "</(system|developer)>"
+    ],
+    "tool_whitelist": {
+      "trading": [
+        "get_market_data",
+        "check_portfolio",
+        "place_order",
+        "cancel_order"
+      ],
+      "data": [
+        "fetch_news",
+        "get_financial_data",
+        "analyze_sentiment"
+      ],
+      "system": [
+        "check_budget",
+        "evaluate_risk",
+        "create_snapshot"
+      ]
+    },
+    "action_on_block": {
+      "log_incident": true,
+      "record_trace": true,
+      "notify_telegram": false,
+      "severity": "medium"
+    }
+  },
+  "monitoring": {
+    "sampling_rate": 1.0,
+    "alert_channels": ["incident_log"],
+    "review_interval_hours": 24
+  }
+}
