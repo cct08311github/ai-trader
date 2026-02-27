@@ -1,5 +1,7 @@
-# GitHub Actions CI Template for Node.js Projects
+# GitHub Actions CI Template
 # 由 TaskHub 自動推送至新專案
+#
+# 設計原則：新 repo 可能還沒有 package.json / lockfile / 測試指令，CI 不應直接報錯。
 
 name: CI
 
@@ -14,29 +16,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: 🧪 Run Tests
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
-    strategy:
-      matrix:
-        node-version: [20]
 
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js ${{ matrix.node-version }}
+      # Node.js CI (only when package.json exists)
+      - name: 🟢 Setup Node.js
+        if: ${{ hashFiles('package.json') != '' }}
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 20
 
-      - name: 📦 Install dependencies
-        run: npm install
+      - name: 📦 Install dependencies (Node)
+        if: ${{ hashFiles('package.json') != '' }}
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
-      - name: 🧪 Run tests
+      - name: 🧪 Run tests (Node)
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm test
         env:
           CI: true
           NODE_ENV: test
+
+      - name: ℹ️ Skip Node CI (no package.json)
+        if: ${{ hashFiles('package.json') == '' }}
+        run: echo "No package.json detected; skipping Node CI."
