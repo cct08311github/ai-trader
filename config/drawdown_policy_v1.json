@@ -1,0 +1,35 @@
+{
+  "system_name": "OpenClaw Drawdown Guard v1",
+  "version": "1.0.0",
+  "description": "累計回撤閾值監控策略配置",
+  "policy": {
+    "monthly_drawdown_suspend_pct": 0.15,
+    "losing_streak_reduce_only_days": 5,
+    "rolling_win_rate_disable_threshold": 0.40,
+    "rolling_win_rate_window": 20,
+    "action_sequence": ["warn", "reduce_only", "suspended"],
+    "thresholds": {
+      "warn": {
+        "drawdown_pct": 0.10,
+        "action": "record_incident",
+        "notification": "telegram"
+      },
+      "reduce_only": {
+        "drawdown_pct": 0.12,
+        "action": "reduce_only_mode",
+        "notification": "telegram_urgent"
+      },
+      "suspended": {
+        "drawdown_pct": 0.15,
+        "action": "trading_suspended",
+        "notification": "telegram_critical"
+      }
+    }
+  },
+  "monitoring": {
+    "recalculation_interval_minutes": 5,
+    "daily_summary_time": "23:00",
+    "alert_channels": ["telegram", "incident_log", "email"],
+    "telegram_chat_id": "-1003772422881"
+  }
+}
