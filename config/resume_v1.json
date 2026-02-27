@@ -1,0 +1,44 @@
+{
+  "system_name": "OpenClaw Resume Protocol v1",
+  "version": "1.0.0",
+  "description": "重啟恢復協議配置",
+  "policy": {
+    "snapshot": {
+      "enabled": true,
+      "interval_minutes": 30,
+      "max_snapshots": 48,
+      "snapshot_path": "./snapshots",
+      "compression_enabled": true
+    },
+    "boot_self_check": {
+      "required_tables": [
+        "decisions",
+        "risk_checks",
+        "orders",
+        "fills",
+        "order_events",
+        "incidents",
+        "token_usage_monthly",
+        "token_budget_events"
+      ],
+      "strict_mode": true,
+      "auto_create_missing": false
+    },
+    "resume_mechanism": {
+      "auto_resume_enabled": true,
+      "resume_required_open_orders": 1,
+      "resume_timeout_seconds": 300,
+      "action_on_resume_failure": "abort_trading"
+    },
+    "backup": {
+      "pre_snapshot_backup": true,
+      "backup_retention_days": 7,
+      "backup_path": "./backups"
+    }
+  },
+  "commands": {
+    "resume_command": "/RESUME",
+    "snapshot_command": "/SNAPSHOT",
+    "status_command": "/STATUS"
+  }
+}

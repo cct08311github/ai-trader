@@ -1,0 +1,33 @@
+{
+  "system_name": "OpenClaw Sentinel v1",
+  "version": "1.0.0",
+  "description": "Sentinel 硬熔斷與 PM 事後稽核策略配置",
+  "policy": {
+    "trading_locked_enabled": true,
+    "broker_disconnected_enabled": true,
+    "db_latency_enabled": true,
+    "max_db_write_p99_ms": 200,
+    "drawdown_suspended_enabled": true,
+    "budget_halt_enabled": true,
+    "reduce_only_enabled": true,
+    "reduce_only_mode_trigger": "drawdown_guard",
+    "hard_block_overrides_pm_veto": true,
+    "incident_logging": {
+      "enabled": true,
+      "severity_mapping": {
+        "SENTINEL_TRADING_LOCKED": "critical",
+        "SENTINEL_BROKER_DISCONNECTED": "critical",
+        "SENTINEL_DB_LATENCY": "warning",
+        "SENTINEL_DRAWDOWN_SUSPENDED": "critical",
+        "SENTINEL_BUDGET_HALT": "critical",
+        "SENTINEL_BUDGET_SOFT": "warning",
+        "SENTINEL_REDUCE_ONLY": "warning"
+      }
+    }
+  },
+  "monitoring": {
+    "health_check_interval_seconds": 30,
+    "alert_channels": ["telegram", "incident_log"],
+    "telegram_chat_id": "-1003772422881"
+  }
+}
