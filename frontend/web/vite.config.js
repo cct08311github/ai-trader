@@ -12,5 +12,9 @@ export default defineConfig({
       key: fs.readFileSync('/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/key.pem'),
       cert: fs.readFileSync('/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/cert.pem')
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true
   }
 })
