@@ -92,3 +92,141 @@ Edge 評估應 **盡量使用 net PnL**：
 
 - 指標計算：`src/openclaw/edge_metrics.py`
 - 測試：`tests/test_v4_16_edge_metrics.py`
+
+---
+
+## 7. 與交易決策流程整合
+
+Edge metrics 已透過 `edge_integration.py` 模組整合到交易決策流程中：
+
+### 7.1 決策流程整合
+
+在每次交易決策時，系統會：
+1. 分析策略的歷史交易記錄（預設：過去30天）
+2. 計算 edge metrics 和 edge score
+3. 根據 edge 質量調整交易決策：
+   - Edge 質量良好：正常執行交易
+   - Edge 質量不足：減少部位規模（減少50%）
+   - Edge 質量極差：阻擋交易
+
+### 7.2 整合函數
+
+主要整合函數：
+```python
+from openclaw.edge_integration import integrate_edge_into_decision
+
+# 在決策流程中整合 edge 分析
+updated_decision, recommendation = integrate_edge_into_decision(
+    db_path="data/sqlite/trades.db",
+    strategy_id="your_strategy_id",
+    decision_data=current_decision,
+    edge_threshold=50.0  # 最低 edge score 門檻
+)
+```
+
+### 7.3 自動化策略版本更新
+
+系統提供自動化功能來更新所有策略版本的 edge metrics：
+
+```python
+from openclaw.edge_integration import batch_update_all_strategy_versions
+
+# 批次更新所有 active 的策略版本
+stats = batch_update_all_strategy_versions(
+    db_path="data/sqlite/trades.db",
+    days_back=30
+)
+```
+
+### 7.4 決策影響
+
+Edge 分析會影響以下決策層面：
+1. **部位規模調整**：根據 edge score 動態調整
+2. **交易阻擋**：edge 質量極差時完全阻擋交易
+3. **風險評估**：納入整體風險評估框架
+4. **策略版本管理**：每個版本都記錄當時的 edge metrics
+
+---
+
+## 8. 使用範例
+
+### 8.1 分析策略 Edge
+
+```python
+from openclaw.edge_integration import analyze_strategy_edge
+
+result = analyze_strategy_edge(
+    db_path="data/sqlite/trades.db",
+    strategy_id="momentum_strategy_v2",
+    days_back=30,
+    min_trades=10
+)
+
+print(f"Edge Score: {result.edge_score:.1f}")
+print(f"Is Edge OK: {result.is_edge_ok}")
+print(f"Recommendation: {result.recommendation}")
+print(f"Metrics: {result.metrics.as_dict()}")
+```
+
+### 8.2 整合到決策管道
+
+在 `decision_pipeline_v4.py` 或類似決策流程中：
+
+```python
+# 在風險評估階段後加入 edge 分析
+if not decision_data.get('trade_blocked'):
+    decision_data, edge_recommendation = integrate_edge_into_decision(
+        db_path=db_path,
+        strategy_id=strategy_id,
+        decision_data=decision_data,
+        edge_threshold=50.0
+    )
+    
+    # 記錄 edge 分析結果
+    log_edge_analysis(decision_data['edge_analysis'])
+```
+
+### 8.3 定期批次更新
+
+可設定 cron job 定期更新策略版本的 edge metrics：
+
+```bash
+# 每日凌晨更新所有策略版本的 edge metrics
+0 2 * * * cd /path/to/ai-trader && python -c "from openclaw.edge_integration import batch_update_all_strategy_versions; stats = batch_update_all_strategy_versions('data/sqlite/trades.db', 30); print(stats)"
+```
+
+---
+
+## 9. 監控與警報
+
+建議設定以下監控：
+
+1. **Edge Score 趨勢**：監控 edge score 的長期趨勢
+2. **交易數量**：確保有足夠的交易樣本
+3. **Profit Factor 警報**：當 profit factor 低於 1.0 時發出警報
+4. **Expectancy 警報**：當 expectancy 轉為負值時發出警報
+
+---
+
+## 10. 未來擴展
+
+Edge Definition 系統設計為可擴展：
+
+1. **更多指標**：可加入 Sharpe ratio、最大回撤等指標
+2. **市場狀態調整**：根據市場 regime 調整 edge 評估標準
+3. **機器學習整合**：使用 ML 模型預測 edge 變化
+4. **即時監控**：即時計算和顯示 edge metrics
+
+---
+
+## 總結
+
+Edge Definition 系統（v4 #16）已完整實作，包含：
+
+✅ **核心指標計算** (`edge_metrics.py`)  
+✅ **完整文件說明** (`docs/edge_definition.md`)  
+✅ **決策流程整合** (`edge_integration.py`)  
+✅ **策略版本整合** (與 v4 #28 整合)  
+✅ **完整測試覆蓋** (`test_v4_16_edge_metrics.py`, `test_edge_integration.py`)  
+
+系統已準備好投入生產環境使用，可有效評估策略 edge 質量並整合到交易決策中。
