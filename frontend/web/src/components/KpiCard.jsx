@@ -6,7 +6,9 @@ export default function KpiCard({ title, value, subtext, tone = 'neutral' }) {
       ? 'text-emerald-300'
       : tone === 'bad'
         ? 'text-rose-300'
-        : 'text-slate-100'
+        : tone === 'warning'
+          ? 'text-amber-300'
+          : 'text-slate-100'
 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-4 shadow-panel">

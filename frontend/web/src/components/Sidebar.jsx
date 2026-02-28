@@ -1,12 +1,13 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { Briefcase, ArrowLeftRight, LineChart, Settings } from 'lucide-react'
+import { Briefcase, ArrowLeftRight, LineChart, Settings, Package } from 'lucide-react'
 
 const nav = [
   { to: '/portfolio', label: 'Portfolio', icon: Briefcase },
   { to: '/trades', label: 'Trades', icon: ArrowLeftRight },
   { to: '/strategy', label: 'Strategy', icon: LineChart },
-  { to: '/system', label: 'System', icon: Settings }
+  { to: '/system', label: 'System', icon: Settings },
+  { to: '/inventory', label: 'Inventory', icon: Package }
 ]
 
 export default function Sidebar() {
