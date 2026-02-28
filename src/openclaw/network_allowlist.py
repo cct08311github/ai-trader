@@ -157,17 +157,22 @@ def enforce_network_security(
 
     close_after = False
     try:
-        if conn is None:
-            resolved_db_path = db_path or os.getenv("OPENCLAW_DB_PATH") or "data/sqlite/trades.db"
-            conn = sqlite3.connect(resolved_db_path)
-            close_after = True
-        _insert_incident_best_effort(
-            conn=conn,
-            code="SEC_NETWORK_IP_DENIED",
-            detail_json=str(detail),
-            severity="critical",
-            source="network_security",
-        )
+        try:
+            if conn is None:
+                resolved_db_path = db_path or os.getenv("OPENCLAW_DB_PATH") or "data/sqlite/trades.db"
+                conn = sqlite3.connect(resolved_db_path)
+                close_after = True
+            _insert_incident_best_effort(
+                conn=conn,
+                code="SEC_NETWORK_IP_DENIED",
+                detail_json=str(detail),
+                severity="critical",
+                source="network_security",
+            )
+        except Exception:
+            # Logging must be best-effort; never block the security decision.
+            pass
+
     finally:
         if conn is not None and close_after:
             try:

@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import sqlite3
-from typing import Optional
 import json
-import os
 import sqlite3
 import time
 from datetime import datetime
@@ -12,10 +9,8 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
-from app.core.config import get_settings
-from app.db import get_conn
+import app.db as db
 from app.services.strategy_service import StrategyService
-from app.db import fetch_rows, get_conn, get_conn_rw
 
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])
 
@@ -23,10 +18,14 @@ service = StrategyService()
 
 
 def conn_dep():
-def _conn_dep():
-    # FastAPI dependency wrapper around contextmanager (read-only)
+    """Read-only DB connection dependency.
+
+    Note: we import the db module (not get_conn directly) so that test suites that
+    reload app.db after setting env vars still use the refreshed DB_PATH.
+    """
+
     try:
-        with get_conn() as conn:
+        with db.get_conn() as conn:
             yield conn
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
@@ -36,37 +35,17 @@ def _conn_dep():
         raise HTTPException(status_code=500, detail=f"DB connection failed: {e}")
 
 
-def require_ops_token(x_ops_token: Optional[str] = Header(default=None)) -> None:
-    settings = get_settings()
-    if not settings.strategy_ops_token:
-        raise HTTPException(status_code=503, detail="STRATEGY_OPS_TOKEN not configured on backend")
-    if not x_ops_token or x_ops_token != settings.strategy_ops_token:
-def _conn_rw_dep():
-    # FastAPI dependency wrapper around contextmanager (read-write)
-    try:
-        with get_conn_rw() as conn:
-            yield conn
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB connection failed: {e}")
-
-
-def _require_ops_token(x_ops_token: Optional[str] = Header(default=None)) -> None:
+def require_ops_token(x_ops_token: Optional[str] = Header(default=None, alias="X-OPS-TOKEN")) -> None:
     """Require an operator token for state-changing operations.
 
-    Set env var STRATEGY_OPS_TOKEN on the backend.
-    Client must pass header: X-OPS-TOKEN: <token>
-
-    If STRATEGY_OPS_TOKEN is missing, we *deny by default* for safety.
+    Note: use env lookup directly to avoid stale lru_cache state across tests.
     """
+
+    import os
 
     expected = os.environ.get("STRATEGY_OPS_TOKEN")
     if not expected:
         raise HTTPException(status_code=503, detail="STRATEGY_OPS_TOKEN not configured on backend")
-
     if not x_ops_token or x_ops_token != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -81,11 +60,6 @@ def _now_iso() -> str:
 
 
 def _ensure_tables(conn: sqlite3.Connection) -> None:
-    """Ensure required tables exist.
-
-    production DB already has these, but keep it safe for fresh environments.
-    """
-
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS strategy_proposals (
@@ -130,37 +104,8 @@ def get_strategy_proposals(
     try:
         return service.list_proposals(conn, limit=limit, offset=offset, status=status)
     except sqlite3.OperationalError as e:
-        # If the table doesn't exist in a fresh db, return empty (read-only service).
         if "no such table" in str(e).lower():
             return {"status": "ok", "data": [], "limit": limit, "offset": offset}
-    conn=Depends(_conn_dep),
-):
-    """Read-only: return rows from strategy_proposals.
-
-    Note: strategy_proposals is a shared source for both:
-    - Sentinel proposed changes / actions
-    - Frontend operator approval workflow
-    """
-
-    try:
-        # Fetch via helper; apply filter in-memory (simple & safe)
-        data = fetch_rows(conn, table="strategy_proposals", limit=limit, offset=offset)
-        if status:
-            s = status.strip().lower()
-            data = [r for r in data if str(r.get("status") or "").lower() == s]
-        return {"status": "ok", "data": data, "limit": limit, "offset": offset}
-    except sqlite3.OperationalError as e:
-        # If table missing (fresh env), create it via RW and return empty.
-        if "no such table" in str(e).lower():
-            with get_conn_rw() as c2:
-                _ensure_tables(c2)
-            return {"status": "ok", "data": [], "limit": limit, "offset": offset}
-        raise HTTPException(status_code=500, detail=f"Failed to read strategy_proposals: {e}")
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read strategy_proposals: {e}")
 
 
@@ -176,36 +121,6 @@ def get_strategy_logs(
     except sqlite3.OperationalError as e:
         if "no such table" in str(e).lower():
             return {"status": "ok", "data": [], "limit": limit, "offset": offset}
-        raise HTTPException(status_code=500, detail=f"Failed to read llm_traces: {e}")
-
-
-    conn=Depends(_conn_dep),
-):
-    """Read-only: return rows from llm_traces.
-
-    Optional: filter by trace_id.
-    """
-
-    try:
-        if trace_id:
-            rows = conn.execute(
-                """
-                SELECT * FROM llm_traces
-                WHERE trace_id = ?
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                """,
-                (trace_id, max(1, min(int(limit), 500)), max(0, int(offset))),
-            ).fetchall()
-            data = [dict(r) for r in rows]
-        else:
-            data = fetch_rows(conn, table="llm_traces", limit=limit, offset=offset)
-        return {"status": "ok", "data": data, "limit": limit, "offset": offset}
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read llm_traces: {e}")
 
 
@@ -231,32 +146,24 @@ def _update_proposal_status(
         raise HTTPException(status_code=404, detail="Proposal not found")
 
     current = str(row["status"] or "").lower()
-    if current in {"executed"}:
-        raise HTTPException(status_code=409, detail=f"Proposal already {current}")
-    if current == new_status:
-        # idempotent
-        pass
-
     decided_at = int(time.time())
+
     conn.execute(
         "UPDATE strategy_proposals SET status = ?, decided_at = ? WHERE proposal_id = ?",
         (new_status, decided_at, proposal_id),
     )
 
-    # Audit log
-    details = {
+    details: Dict[str, Any] = {
         "proposal_id": proposal_id,
         "from": current,
         "to": new_status,
         "reason": reason,
     }
-
     try:
-        proposal_payload = row["proposal_json"]
-        if proposal_payload:
-            details["proposal_json"] = json.loads(proposal_payload)
+        payload = row["proposal_json"]
+        if payload:
+            details["proposal_json"] = json.loads(payload)
     except Exception:
-        # best-effort
         pass
 
     conn.execute(
@@ -281,43 +188,41 @@ def _update_proposal_status(
 def approve_strategy_proposal(
     proposal_id: str,
     req: DecideRequest,
-    _=Depends(require_ops_token),
+    _: None = Depends(require_ops_token),
 ):
-    settings = get_settings()
-    service.ensure_rw_allowed(settings)
-    raise HTTPException(status_code=501, detail="RW workflow is not enabled in read-only backend build")
-    conn=Depends(_conn_rw_dep),
-    _=Depends(_require_ops_token),
-):
-    """Approve a strategy proposal (manual intervention)."""
-
     try:
-        updated = _update_proposal_status(conn, proposal_id=proposal_id, new_status="approved", actor=req.actor, reason=req.reason)
+        with db.get_conn_rw() as conn:
+            updated = _update_proposal_status(
+                conn,
+                proposal_id=proposal_id,
+                new_status="approved",
+                actor=req.actor,
+                reason=req.reason,
+            )
         return {"status": "ok", "data": updated}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Approve failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve proposal: {e}")
 
 
 @router.post("/{proposal_id}/reject")
 def reject_strategy_proposal(
     proposal_id: str,
     req: DecideRequest,
-    _=Depends(require_ops_token),
+    _: None = Depends(require_ops_token),
 ):
-    settings = get_settings()
-    service.ensure_rw_allowed(settings)
-    raise HTTPException(status_code=501, detail="RW workflow is not enabled in read-only backend build")
-    conn=Depends(_conn_rw_dep),
-    _=Depends(_require_ops_token),
-):
-    """Reject a strategy proposal (manual intervention)."""
-
     try:
-        updated = _update_proposal_status(conn, proposal_id=proposal_id, new_status="rejected", actor=req.actor, reason=req.reason)
+        with db.get_conn_rw() as conn:
+            updated = _update_proposal_status(
+                conn,
+                proposal_id=proposal_id,
+                new_status="rejected",
+                actor=req.actor,
+                reason=req.reason,
+            )
         return {"status": "ok", "data": updated}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Reject failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reject proposal: {e}")
