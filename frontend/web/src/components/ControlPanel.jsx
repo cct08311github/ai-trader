@@ -1,117 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
-
-// Default backend: FastAPI command center (see frontend/backend)
-// Override via Vite env: VITE_API_BASE=http://localhost:8080
-const DEFAULT_API_BASE = 'http://localhost:8080'
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-async function fetchJsonWithTimeout(url, options = {}, { timeoutMs = 5000 } = {}) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const res = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options.headers || {})
-      }
-    })
-
-    if (!res.ok) {
-      // Try to extract FastAPI detail for better UX
-      let detail = ''
-      try {
-        const body = await res.json()
-        detail = body?.detail ? `: ${body.detail}` : ''
-      } catch {
-        // ignore
-      }
-      throw new Error(`API error: ${res.status}${detail}`)
-    }
-
-    return await res.json()
-  } catch (err) {
-    if (err?.name === 'AbortError') {
-      throw new Error(`timeout (${timeoutMs}ms)`) // normalized
-    }
-    throw err
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-async function callApiWithRetry(url, options, { retries = 1, backoffMs = 400, timeoutMs = 5000 } = {}) {
-  let lastErr
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fetchJsonWithTimeout(url, options, { timeoutMs })
-    } catch (err) {
-      lastErr = err
-      // Only retry on network/timeout type errors
-      const msg = String(err?.message || '')
-      const retryable = msg.includes('timeout') || msg.includes('Failed to fetch')
-      if (!retryable || i === retries) break
-      await sleep(backoffMs * (i + 1))
-    }
-  }
-  throw lastErr
-}
+import React from 'react'
+import { useControlStatus } from '../lib/controlApi'
 
 export default function ControlPanel() {
-  const API_BASE = useMemo(() => {
-    const base = import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE
-    return `${String(base).replace(/\/$/, '')}/api/control`
-  }, [])
-
-  const [status, setStatus] = useState(null)
-  const [loading, setLoading] = useState({})
-  const [error, setError] = useState(null)
-  const [lastAction, setLastAction] = useState(null)
-
-  const fetchStatus = async () => {
-    try {
-      const data = await callApiWithRetry(`${API_BASE}/status`, { method: 'GET' }, { retries: 1, timeoutMs: 4000 })
-      setStatus(data)
-      setError(null)
-    } catch (err) {
-      setError(`無法取得系統狀態: ${err.message}`)
-    }
-  }
-
-  useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 5000)
-    return () => clearInterval(interval)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const callApi = async (endpoint, { method = 'POST', body } = {}) => {
-    const key = endpoint.split('/').pop()
-    setLoading(prev => ({ ...prev, [key]: true }))
-    setLastAction(null)
-    try {
-      const data = await callApiWithRetry(
-        `${API_BASE}${endpoint}`,
-        {
-          method,
-          body: body ? JSON.stringify(body) : undefined
-        },
-        { retries: 1, timeoutMs: 6000 }
-      )
-      setLastAction({ endpoint, message: data.message, warning: data.warning })
-      await fetchStatus()
-      return data
-    } catch (err) {
-      setError(`操作失敗: ${err.message}`)
-      return null
-    } finally {
-      setLoading(prev => ({ ...prev, [key]: false }))
-    }
-  }
+  const { status, error, loading, lastAction, act } = useControlStatus({ pollMs: 5000 })
 
   const handleEnable = () => {
     if (status?.simulation_mode === false) {
@@ -125,18 +16,18 @@ export default function ControlPanel() {
       )
       if (!confirm) return
     }
-    callApi('/enable')
+    act('/enable')
   }
 
-  const handleDisable = () => callApi('/disable')
+  const handleDisable = () => act('/disable')
 
   const handleEmergencyStop = () => {
     const reason = prompt('請輸入緊急停止原因（可選）:', '手動緊急停止')
-    callApi('/stop', { method: 'POST', body: { reason: reason || 'User initiated manual stop' } })
+    act('/stop', { method: 'POST', body: { reason: reason || 'User initiated manual stop' } })
   }
 
-  const handleResume = () => callApi('/resume')
-  const handleSwitchToSimulation = () => callApi('/simulation')
+  const handleResume = () => act('/resume')
+  const handleSwitchToSimulation = () => act('/simulation')
   const handleSwitchToLive = () => {
     const confirm = window.confirm(
       '🚨 極度危險警告 🚨\n\n' +
@@ -149,7 +40,7 @@ export default function ControlPanel() {
         '• 請確保已設定適當的止損與風險控制\n\n' +
         '確定要切換到實際盤嗎？'
     )
-    if (confirm) callApi('/live')
+    if (confirm) act('/live')
   }
 
   if (!status) {
@@ -172,7 +63,9 @@ export default function ControlPanel() {
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold">系統主控制面板</div>
-          <div className="mt-1 text-xs text-slate-400">風險控制第一優先 • {isSimulation ? '模擬盤 (安全)' : '實際盤 (資金風險)'}</div>
+          <div className="mt-1 text-xs text-slate-400">
+            風險控制第一優先 • {isSimulation ? '模擬盤 (安全)' : '實際盤 (資金風險)'}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div
@@ -316,7 +209,9 @@ export default function ControlPanel() {
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">交易模式</div>
-            <div className={isSimulation ? 'text-blue-300' : 'text-rose-300'}>{isSimulation ? '模擬盤 (安全)' : '實際盤 (資金風險)'}</div>
+            <div className={isSimulation ? 'text-blue-300' : 'text-rose-300'}>
+              {isSimulation ? '模擬盤 (安全)' : '實際盤 (資金風險)'}
+            </div>
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">緊急停止狀態</div>
@@ -326,7 +221,9 @@ export default function ControlPanel() {
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">最後更新</div>
-            <div className="text-slate-300">{status.last_modified ? new Date(status.last_modified).toLocaleString('zh-TW') : '未知'}</div>
+            <div className="text-slate-300">
+              {status.last_modified ? new Date(status.last_modified).toLocaleString('zh-TW') : '未知'}
+            </div>
           </div>
         </div>
       </div>
