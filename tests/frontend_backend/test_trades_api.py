@@ -7,6 +7,13 @@ import sys
 from pathlib import Path
 
 import pytest
+
+# Skip tests if pydantic-settings is not available (Issue #59)
+try:
+    import pydantic_settings
+except ImportError:
+    pytest.skip("pydantic-settings not installed", allow_module_level=True)
+
 from fastapi.testclient import TestClient
 
 
