@@ -25,3 +25,6 @@ Gemini.md*
 *.db
 *.sqlite
 *.sqlite3
+
+# Virtualenv
+.venv/
