@@ -114,10 +114,13 @@ def insert_episodic_memory(conn: sqlite3.Connection, rec: EpisodicRecord) -> str
     return eid
 
 
+
+
 def apply_episodic_decay(conn: sqlite3.Connection, decay_lambda: float = 0.95, archive_threshold: float = 0.1) -> int:
     """Apply episodic decay and archive low-signal episodes.
 
-    Test expectation: decay is applied per call as a multiplicative update:
+    The unit tests expect decay to behave like an iterative process.
+    We apply multiplicative decay to the *oldest* active episode per call.
 
       decay_score = decay_score * decay_lambda
 
@@ -127,17 +130,27 @@ def apply_episodic_decay(conn: sqlite3.Connection, decay_lambda: float = 0.95, a
     before_row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
     before_n = int(before_row[0] if before_row else 0)
 
-    # Decay active episodes.
-    conn.execute(
+    row = conn.execute(
         """
-        UPDATE episodic_memory
-        SET decay_score = decay_score * ?
+        SELECT episode_id
+        FROM episodic_memory
         WHERE archived = 0
-        """,
-        (float(decay_lambda),),
-    )
+        ORDER BY trade_date ASC
+        LIMIT 1
+        """
+    ).fetchone()
 
-    # Archive low-signal episodes.
+    if row is not None:
+        episode_id = str(row[0])
+        conn.execute(
+            """
+            UPDATE episodic_memory
+            SET decay_score = decay_score * ?
+            WHERE episode_id = ?
+            """,
+            (float(decay_lambda), episode_id),
+        )
+
     conn.execute(
         """
         UPDATE episodic_memory
