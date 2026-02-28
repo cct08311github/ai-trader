@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, Fragment } from 'react'
 import { useStreamApiBase, useStrategyData } from '../lib/strategyApi'
 
 function formatUnixSec(sec) {
@@ -28,6 +28,26 @@ function StatusTag({ status }) {
   return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{s}</span>
 }
 
+function RatingCard({ rating, basis }) {
+  const r = String(rating || '').toUpperCase()
+  const theme = {
+    A: { bg: 'bg-emerald-900/20', border: 'border-emerald-700', text: 'text-emerald-200', sub: 'text-emerald-200/80' },
+    B: { bg: 'bg-amber-900/15', border: 'border-amber-700', text: 'text-amber-200', sub: 'text-amber-200/80' },
+    C: { bg: 'bg-rose-900/15', border: 'border-rose-700', text: 'text-rose-200', sub: 'text-rose-200/80' }
+  }[r] || { bg: 'bg-slate-950/20', border: 'border-slate-800', text: 'text-slate-200', sub: 'text-slate-400' }
+
+  return (
+    <div className={`rounded-2xl border ${theme.border} ${theme.bg} p-6 shadow-panel`}>
+      <div className="text-sm font-semibold">今日市場評級</div>
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div className={`text-6xl font-black tracking-tight ${theme.text}`}>{r || '-'}</div>
+        <div className="text-right text-[11px] text-slate-500">資料源：llm_traces（PM / 今日最新）</div>
+      </div>
+      <div className={`mt-4 whitespace-pre-wrap break-words text-xs leading-relaxed ${theme.sub}`}>{basis || '(尚無評級依據)'}</div>
+    </div>
+  )
+}
+
 function JsonBox({ value }) {
   const text = useMemo(() => {
     if (value == null) return ''
@@ -46,6 +66,33 @@ function JsonBox({ value }) {
       {text}
     </pre>
   )
+}
+
+function EpisodeLinks({ value }) {
+  if (!value) return <div className="text-[11px] text-slate-500">(無 source episodes)</div>
+  if (Array.isArray(value)) {
+    return (
+      <div className="space-y-1">
+        {value.map((ep, idx) => {
+          const o = typeof ep === 'string' ? { title: ep, url: '' } : ep || {}
+          const title = o.title || o.name || o.id || `episode_${idx + 1}`
+          const url = o.url || o.link || o.href || ''
+          return (
+            <div key={idx} className="text-xs">
+              {url ? (
+                <a className="text-sky-300 hover:text-sky-200 underline underline-offset-2" href={url} target="_blank" rel="noreferrer">
+                  {title}
+                </a>
+              ) : (
+                <span className="text-slate-300">{title}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  return <JsonBox value={value} />
 }
 
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
@@ -120,11 +167,14 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
 }
 
 export default function StrategyPage() {
-  const { proposals, logs, error, loading, opsToken, saveOpsToken, act, refreshProposals } = useStrategyData({ pollMs: 10000 })
+  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, opsToken, saveOpsToken, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
 
   const [selected, setSelected] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
+
+  const [memOrder, setMemOrder] = useState('desc')
+  const [expandedRuleId, setExpandedRuleId] = useState(null)
 
   // SSE integration: when new llm_traces logs arrive, refresh proposals (debounced).
   useEffect(() => {
@@ -149,6 +199,10 @@ export default function StrategyPage() {
       es.close()
     }
   }, [STREAM_BASE, refreshProposals])
+
+  useEffect(() => {
+    refreshSemanticMemory({ sort: 'confidence', order: memOrder, limit: 50 })
+  }, [memOrder, refreshSemanticMemory])
 
   const rows = useMemo(() => {
     return (proposals || []).map(p => {
@@ -175,7 +229,7 @@ export default function StrategyPage() {
 
   const doApprove = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定要批准 proposal ${p.proposal_id}？`) 
+    const ok = window.confirm(`確定要批准 proposal ${p.proposal_id}？`)
     if (!ok) return
     await act('approve', p.proposal_id, { actor: 'operator', reason: 'manual approve via UI' })
     setModalOpen(false)
@@ -183,7 +237,7 @@ export default function StrategyPage() {
 
   const doReject = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定要拒絕 proposal ${p.proposal_id}？`) 
+    const ok = window.confirm(`確定要拒絕 proposal ${p.proposal_id}？`)
     if (!ok) return
     await act('reject', p.proposal_id, { actor: 'operator', reason: 'manual reject via UI' })
     setModalOpen(false)
@@ -286,35 +340,15 @@ export default function StrategyPage() {
         <div className="mt-3 text-[11px] text-slate-500">提示：點擊提案 ID 可查看 proposal_json；SSE 監聽到新決策日誌（llm_traces）會自動刷新提案列表。</div>
       </div>
 
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
-        <div className="text-sm font-semibold">決策日誌（llm_traces，最近 200 筆）</div>
-        <div className="mt-2 text-xs text-slate-400">用於快速對照 Sentinel 推理輸出。詳細 log streaming 請見 System 模組的 SSE 終端機。</div>
-        <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-slate-800 bg-slate-950/30 p-3 font-mono text-xs">
-          {loading.logs ? (
-            <div className="text-slate-500">載入中...</div>
-          ) : logs.length === 0 ? (
-            <div className="text-slate-500">尚無日誌</div>
-          ) : (
-            <div className="space-y-1">
-              {logs.slice(0, 200).map((l, idx) => (
-                <div key={`${l?.trace_id || idx}-${idx}`} className="text-slate-300">
-                  <span className="text-slate-500">[{formatUnixSec(l?.created_at)}]</span> {l?.agent || '-'} · {l?.model || '-'} ·{' '}
-                  <span className="text-slate-200">{l?.trace_id || '-'}</span> · conf={l?.confidence ?? '-'}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <RatingCard rating={marketRating?.rating} basis={marketRating?.basis} />
 
-      <ProposalModal
-        open={modalOpen}
-        onClose={closeDetail}
-        proposal={selected}
-        busy={loading.act}
-        onApprove={() => doApprove(selected)}
-        onReject={() => doReject(selected)}
-      />
-    </div>
-  )
-}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel lg:col-span-2">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">語義記憶庫（semantic_memory）</div>
+              <div className="mt-1 text-xs text-slate-400">點擊列可展開 source episodes。預設依 confidence 排序。</div>
+            </div>
+            <button
+              onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
+              className="rounded-lg bg-slate-800 px-3 py-

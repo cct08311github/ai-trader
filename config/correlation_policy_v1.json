@@ -1,0 +1,8 @@
+{
+  "window": 60,
+  "min_points": 10,
+  "max_pair_abs_corr": 0.85,
+  "max_weighted_avg_abs_corr": 0.55,
+  "exposure_scale_on_breach": 0.80,
+  "description": "Position correlation guard policy (v4 #22). When breached, scale down gross/symbol exposure limits and log an incident."
+}

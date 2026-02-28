@@ -269,3 +269,100 @@ def apply_correlation_guard_to_limits(
     out["correlation_guard_reason"] = decision.reason_code
     out["correlation_guard_scale"] = scale
     return out
+
+# -----------------------------
+# v4 #22 extras: policy IO / reporting / incident logging
+# -----------------------------
+
+import json
+import sqlite3
+from pathlib import Path
+
+
+def load_correlation_guard_policy(path: str, *, default: CorrelationGuardPolicy | None = None) -> CorrelationGuardPolicy:
+    """Load correlation guard policy from a JSON file (best-effort)."""
+
+    base = default or CorrelationGuardPolicy.default()
+    try:
+        raw = json.loads(Path(path).read_text())
+    except Exception:
+        return base
+
+    def _getf(k: str, cur: float) -> float:
+        v = _safe_float(raw.get(k))
+        return cur if v is None else float(v)
+
+    def _geti(k: str, cur: int) -> int:
+        try:
+            return int(raw.get(k))
+        except Exception:
+            return cur
+
+    return CorrelationGuardPolicy(
+        window=_geti("window", base.window),
+        min_points=_geti("min_points", base.min_points),
+        max_pair_abs_corr=_getf("max_pair_abs_corr", base.max_pair_abs_corr),
+        max_weighted_avg_abs_corr=_getf("max_weighted_avg_abs_corr", base.max_weighted_avg_abs_corr),
+        exposure_scale_on_breach=_getf("exposure_scale_on_breach", base.exposure_scale_on_breach),
+    )
+
+
+def render_correlation_report(decision: CorrelationGuardDecision, *, top_n: int = 5) -> str:
+    """Render a human-readable correlation risk report."""
+
+    lines: List[str] = []
+    lines.append("Correlation Guard Report")
+    lines.append(f"ok={decision.ok} reason={decision.reason_code} n_symbols={decision.n_symbols}")
+    lines.append(
+        f"max_pair_abs_corr={decision.max_pair_abs_corr:.3f} weighted_avg_abs_corr={decision.weighted_avg_abs_corr:.3f}"
+    )
+
+    if decision.top_pairs:
+        lines.append("Top correlated pairs:")
+        for a, b, c in decision.top_pairs[: max(1, int(top_n))]:
+            lines.append(f"- {a}/{b}: corr={c:.3f}")
+
+    if decision.suggestions:
+        lines.append("Suggestions:")
+        for s in decision.suggestions:
+            lines.append(f"- {s}")
+
+    return "\n".join(lines)
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def log_correlation_incident(conn: sqlite3.Connection, decision: CorrelationGuardDecision) -> None:
+    """Best-effort incident logging when correlation thresholds are breached."""
+
+    if decision.ok:
+        return
+    if not _table_exists(conn, "incidents"):
+        return
+
+    severity = "warn"
+    if decision.max_pair_abs_corr >= 0.95 and decision.n_symbols >= 3:
+        severity = "critical"
+
+    detail = {
+        "reason": decision.reason_code,
+        "n_symbols": decision.n_symbols,
+        "max_pair_abs_corr": decision.max_pair_abs_corr,
+        "weighted_avg_abs_corr": decision.weighted_avg_abs_corr,
+        "top_pairs": decision.top_pairs,
+        "suggestions": decision.suggestions,
+    }
+
+    conn.execute(
+        """
+        INSERT INTO incidents(incident_id, ts, severity, source, code, detail_json, resolved)
+        VALUES (lower(hex(randomblob(16))), datetime('now'), ?, 'correlation_guard', ?, ?, 0)
+        """,
+        (severity, decision.reason_code, json.dumps(detail, ensure_ascii=True)),
+    )

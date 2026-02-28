@@ -165,6 +165,9 @@ def evaluate_and_build_order(
     portfolio: PortfolioState,
     limits: Dict[str, float],
     system_state: SystemState,
+    *,
+    correlation_decision: Any | None = None,
+    correlation_policy: Any | None = None,
 ) -> EvaluationResult:
     """
     Reference risk-engine flow for OpenClaw v1.1.
@@ -172,6 +175,21 @@ def evaluate_and_build_order(
     """
 
     base_metrics = _metrics(decision, market, portfolio, system_state)
+
+    # Optional dynamic limits adjustment: correlation guard (v4 #22)
+    if correlation_decision is not None:
+        try:
+            from openclaw.correlation_guard import apply_correlation_guard_to_limits
+
+            limits = apply_correlation_guard_to_limits(limits, correlation_decision, policy=correlation_policy)
+            base_metrics.update({
+                "correlation_guard_ok": limits.get("correlation_guard_ok"),
+                "correlation_guard_reason": limits.get("correlation_guard_reason"),
+                "correlation_guard_scale": limits.get("correlation_guard_scale"),
+            })
+        except Exception as e:
+            base_metrics["correlation_guard_error"] = str(e)
+
 
     if system_state.trading_locked:
         return EvaluationResult(False, "RISK_TRADING_LOCKED", metrics=base_metrics)

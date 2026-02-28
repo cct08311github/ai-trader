@@ -185,13 +185,13 @@ export default function PortfolioPage() {
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
                     <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
-                  </tr>
+                    <td className="px-4 py-3 text-[rgb(var(--text))]">                      {p.chipHealthScore ?  : "-"}                    </td>                  </tr>
                 )
               })}
 
               {positions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
                     No positions.
                   </td>
                 </tr>

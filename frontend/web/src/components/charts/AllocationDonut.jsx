@@ -14,9 +14,6 @@ export default function AllocationDonut({ data }) {
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%" minWidth={300} minHeight={220}>
-        <PieChart>
-          <Tooltip formatter={tooltipFormatter} />
-          <Legend verticalAlign="bottom" height={36} />
           <Pie
             data={data}
             dataKey="value"
@@ -26,9 +23,18 @@ export default function AllocationDonut({ data }) {
             paddingAngle={2}
             stroke="rgba(0,0,0,0.1)"
           >
-            {(data || []).map((_, idx) => (
-              <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-            ))}
+            {(data || []).map((entry, idx) => {
+              const weight = entry.weight || 0;
+              const isOver40 = weight > 0.4;
+              return (
+                <Cell
+                  key={idx}
+                  fill={COLORS[idx % COLORS.length]}
+                  stroke={isOver40 ? '#FF4D4F' : 'rgba(0,0,0,0.1)'}
+                  strokeWidth={isOver40 ? 3 : 1}
+                />
+              );
+            })}
           </Pie>
         </PieChart>
       </ResponsiveContainer>
