@@ -157,32 +157,51 @@ def _check_auto_approve_eligibility(
 
 
 def _insert_proposal(conn: sqlite3.Connection, p: StrategyProposal) -> None:
-    """Insert proposal into database."""
-    conn.execute(
-        """
-        INSERT INTO strategy_proposals (
-            proposal_id, generated_by, target_rule, rule_category,
-            current_value, proposed_value, supporting_evidence,
-            confidence, requires_human_approval, status,
-            expires_at, proposal_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            p.proposal_id,
-            p.generated_by,
-            p.target_rule,
-            p.rule_category,
-            p.current_value,
-            p.proposed_value,
-            p.supporting_evidence,
-            p.confidence,
-            1 if p.requires_human_approval else 0,
-            p.status,
-            p.expires_at,
-            p.proposal_json,
-            p.created_at,
-        ),
-    )
+    """Insert proposal into database.
+
+    Compatibility: support both legacy test schema and the richer v4 migration
+    schema by inserting only columns that exist.
+    """
+
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(strategy_proposals)").fetchall()}
+
+    values = {
+        'proposal_id': p.proposal_id,
+        'generated_by': p.generated_by,
+        'target_rule': p.target_rule,
+        'rule_category': p.rule_category,
+        'current_value': p.current_value,
+        'proposed_value': p.proposed_value,
+        'supporting_evidence': p.supporting_evidence,
+        'confidence': p.confidence,
+        'requires_human_approval': 1 if p.requires_human_approval else 0,
+        'status': p.status,
+        'expires_at': p.expires_at,
+        'proposal_json': p.proposal_json,
+        'created_at': p.created_at,
+        'decided_at': p.decided_at,
+        'decided_by': p.decided_by,
+        'decision_reason': p.decision_reason,
+        # optional v4+ columns
+        'source_episodes_json': '[]',
+        'backtest_sharpe_before': p.backtest_sharpe_before,
+        'backtest_sharpe_after': p.backtest_sharpe_after,
+        'semantic_memory_action': 'NONE',
+        'rollback_version': '',
+        'auto_approve_eligible': 0,
+    }
+
+    preferred = [
+        'proposal_id','generated_by','target_rule','rule_category',
+        'current_value','proposed_value','supporting_evidence',
+        'confidence','requires_human_approval','status',
+        'expires_at','proposal_json','created_at','decided_at','decided_by','decision_reason',
+        'source_episodes_json','backtest_sharpe_before','backtest_sharpe_after',
+        'semantic_memory_action','rollback_version','auto_approve_eligible',
+    ]
+    insert_cols=[c for c in preferred if c in cols]
+    sql=f"INSERT INTO strategy_proposals ({', '.join(insert_cols)}) VALUES ({', '.join(['?']*len(insert_cols))})"
+    conn.execute(sql, tuple(values[c] for c in insert_cols))
     conn.commit()
 
 

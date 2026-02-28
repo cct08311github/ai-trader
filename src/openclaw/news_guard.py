@@ -35,7 +35,7 @@ def sanitize_external_news_text(raw_text: str) -> NewsGuardResult:
 
     res: PromptGuardResult = sanitize_external_text(raw_text, max_chars=8000)
     if res.safe and _has_instruction_wrapper(raw_text):
-        return NewsGuardResult(False, res.sanitized_text, "INSTRUCTION_WRAPPER_DETECTED")
+        return NewsGuardResult(False, res.sanitized_text, "PROMPT_INJECTION_SUSPECTED")
     return NewsGuardResult(res.safe, res.sanitized_text, res.reason)
 
 
