@@ -1,0 +1,10 @@
+{
+  "system_name": "AI-Trader v1.0",
+  "version": "1.0.0",
+  "description": "系統主開關與執行狀態配置",
+  "trading_enabled": false,
+  "simulation_mode": true,
+  "last_modified": "2026-02-28T00:00:00+08:00",
+  "last_modified_by": "system (default)",
+  "notes": "此檔案為系統主開關。trading_enabled 必須為 true 且 .EMERGENCY_STOP 檔案不存在，系統才會開始自動交易。simulation_mode: true=模擬盤, false=實際盤。切換至實際盤應自動禁用自動交易（雙重保險）。"
+}

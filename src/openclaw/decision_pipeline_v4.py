@@ -11,6 +11,8 @@ from openclaw.model_registry import resolve_pinned_model_id
 from openclaw.news_guard import build_news_sentiment_prompt, sanitize_external_news_text
 from openclaw.pm_debate import build_debate_prompt
 from openclaw.risk_engine import OrderCandidate, SystemState
+from openclaw.system_switch import check_system_switch
+
 from openclaw.sentinel import SentinelVerdict, sentinel_pre_trade_check, sentinel_post_risk_check, pm_veto, is_hard_block
 from openclaw.token_budget import BudgetPolicy, evaluate_budget, load_budget_policy, emit_budget_event
 
@@ -122,6 +124,17 @@ def run_decision_with_sentinel(
     if decision_id is None:
         decision_id = f"dec_{uuid.uuid4().hex[:16]}"
     
+    # Step 0: Master switch check (highest priority safety)
+    import os
+
+    system_state_path = os.path.join(os.path.dirname(__file__), "../../config/system_state.json")
+    allowed, reason = check_system_switch(system_state_path)
+    if not allowed:
+        _insert_risk_check(conn, decision_id, "master_switch", False, reason)
+        # No decision record needed as this is before any order candidate
+        return False, "MASTER_SWITCH_OFF", None
+    _insert_risk_check(conn, decision_id, "master_switch", True, "Auto-trading enabled")
+    
     # Step 1: Load budget policy and evaluate budget status
     budget_policy = load_budget_policy(budget_policy_path)
     budget_status, budget_used_pct, budget_tier = evaluate_budget(conn, budget_policy)
@@ -160,9 +173,9 @@ def run_decision_with_sentinel(
         # Still insert decision record for audit trail
         if order_candidate:
             _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.direction,
-                order_candidate.quantity, order_candidate.entry_price,
-                order_candidate.stop_loss, order_candidate.take_profit,
+                conn, decision_id, order_candidate.symbol, order_candidate.side,
+                order_candidate.qty, order_candidate.price,
+                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
                 sentinel_verdict, budget_status, budget_used_pct,
                 drawdown_decision, pm_approved
             )
@@ -182,9 +195,9 @@ def run_decision_with_sentinel(
         # PM veto overrides, but not a hard block
         if order_candidate:
             _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.direction,
-                order_candidate.quantity, order_candidate.entry_price,
-                order_candidate.stop_loss, order_candidate.take_profit,
+                conn, decision_id, order_candidate.symbol, order_candidate.side,
+                order_candidate.qty, order_candidate.price,
+                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
                 sentinel_verdict, budget_status, budget_used_pct,
                 drawdown_decision, pm_approved
             )
@@ -211,9 +224,9 @@ def run_decision_with_sentinel(
         
         if is_hard_block(post_verdict) or not post_verdict.allowed:
             _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.direction,
-                order_candidate.quantity, order_candidate.entry_price,
-                order_candidate.stop_loss, order_candidate.take_profit,
+                conn, decision_id, order_candidate.symbol, order_candidate.side,
+                order_candidate.qty, order_candidate.price,
+                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
                 sentinel_verdict, budget_status, budget_used_pct,
                 drawdown_decision, pm_approved
             )
@@ -222,9 +235,9 @@ def run_decision_with_sentinel(
     # Step 7: All checks passed, insert decision record
     if order_candidate:
         _insert_decision_record(
-            conn, decision_id, order_candidate.symbol, order_candidate.direction,
-            order_candidate.quantity, order_candidate.entry_price,
-            order_candidate.stop_loss, order_candidate.take_profit,
+            conn, decision_id, order_candidate.symbol, order_candidate.side,
+            order_candidate.qty, order_candidate.price,
+            getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
             sentinel_verdict, budget_status, budget_used_pct,
             drawdown_decision, pm_approved
         )
