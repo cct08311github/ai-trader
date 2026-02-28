@@ -105,6 +105,15 @@ def init_readonly_pool(db_path: Path = DB_PATH) -> None:
     """
 
     READONLY_POOL.init(db_path)
+def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:
+    """Open sqlite connection in read-write mode.
+
+    NOTE:
+    - Use this ONLY for explicit operator actions (approve/reject).
+    - Keep the scope tight and always commit.
+    """
+
+    READONLY_POOL.init(db_path)
 
 
 @contextmanager
@@ -119,6 +128,16 @@ def get_conn(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
             yield conn
         finally:
             conn.close()
+
+
+@contextmanager
+def get_conn_rw(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
+    conn = connect_rw(db_path)
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
