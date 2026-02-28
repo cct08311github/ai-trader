@@ -13,6 +13,7 @@ def _resolve_db_path() -> Path:
     Default matches the repository layout:
     backend/app/db.py -> backend root -> ../../data/sqlite/trades.db
     """
+
     env_path = os.environ.get("DB_PATH")
     if env_path:
         return Path(env_path).expanduser().resolve()
@@ -29,6 +30,7 @@ def connect_readonly(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
     Uses sqlite URI mode=ro to guarantee no writes.
     """
+
     if not db_path.exists():
         raise FileNotFoundError(f"SQLite DB not found: {db_path}")
 
@@ -46,11 +48,37 @@ def connect_readonly(db_path: Path = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:
+    """Open sqlite connection in read-write mode.
+
+    NOTE:
+    - Use this ONLY for explicit operator actions (approve/reject).
+    - Keep the scope tight and always commit.
+    """
+
+    if not db_path.exists():
+        raise FileNotFoundError(f"SQLite DB not found: {db_path}")
+
+    conn = sqlite3.connect(db_path.as_posix(), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 @contextmanager
 def get_conn(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
     conn = connect_readonly(db_path)
     try:
         yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def get_conn_rw(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
+    conn = connect_rw(db_path)
+    try:
+        yield conn
+        conn.commit()
     finally:
         conn.close()
 
