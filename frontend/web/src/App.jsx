@@ -1,3 +1,4 @@
+import InventoryPage from './pages/Inventory'
 import React from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import DashboardLayout from './layouts/DashboardLayout'
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/trades" element={<TradesPage />} />
         <Route path="/strategy" element={<StrategyPage />} />
         <Route path="/system" element={<SystemPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/portfolio" replace />} />
     </Routes>

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from openclaw.position_sizing import calculate_position_qty
+from openclaw.tw_session_rules import apply_tw_session_risk_adjustments
 
 
 @dataclass
@@ -175,6 +176,12 @@ def evaluate_and_build_order(
     """
 
     base_metrics = _metrics(decision, market, portfolio, system_state)
+    # Apply Taiwan session‑based risk multipliers
+    limits = apply_tw_session_risk_adjustments(
+        limits,
+        now_ms=system_state.now_ms,
+        sentinel_policy_path=limits.get("sentinel_policy_path", "config/sentinel_policy_v1.json")
+    )
 
     # Optional dynamic limits adjustment: correlation guard (v4 #22)
     if correlation_decision is not None:
