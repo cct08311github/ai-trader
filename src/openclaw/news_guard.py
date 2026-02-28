@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Mapping, Optional
 
 from openclaw.prompt_security import PromptGuardResult, sanitize_external_text
+
+
+# Treat bracketed system/developer wrappers as a hard block for news.
+# Rationale: even if we strip them, their presence indicates prompt-injection intent.
+_WRAPPER_RE = re.compile(r"\[[^\]]*(system|系統)\s*(prompt|指令)[^\]]*\]", re.IGNORECASE)
+
+
+def _has_instruction_wrapper(text: str) -> bool:
+    return bool(_WRAPPER_RE.search(text or ""))
 
 
 @dataclass
@@ -17,9 +27,15 @@ def sanitize_external_news_text(raw_text: str) -> NewsGuardResult:
     """Guard untrusted news text against prompt injection.
 
     NOTE: this should be treated as a *hard gate* before calling the LLM.
+
+    Policy:
+    - If prompt-injection patterns are detected -> safe=False
+    - If we detect instruction-like wrappers (e.g. [系統指令...]) -> safe=False even if sanitized text looks clean
     """
 
     res: PromptGuardResult = sanitize_external_text(raw_text, max_chars=8000)
+    if res.safe and _has_instruction_wrapper(raw_text):
+        return NewsGuardResult(False, res.sanitized_text, "INSTRUCTION_WRAPPER_DETECTED")
     return NewsGuardResult(res.safe, res.sanitized_text, res.reason)
 
 

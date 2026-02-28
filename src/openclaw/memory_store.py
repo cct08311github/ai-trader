@@ -9,6 +9,19 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    """Return True if a column exists in a sqlite table."""
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    except Exception:
+        return False
+    for r in rows:
+        if len(r) >= 2 and str(r[1]) == column:
+            return True
+    return False
+
 @dataclass
 class EpisodicRecord:
     trade_date: str
@@ -50,27 +63,54 @@ def clear_working_memory(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM working_memory")
 
 
+
+
 def insert_episodic_memory(conn: sqlite3.Connection, rec: EpisodicRecord) -> str:
     eid = rec.episode_id or str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO episodic_memory(
-          episode_id, trade_date, symbol, strategy_id, market_regime, entry_reason, outcome_pnl, pm_score, root_cause_code, decay_score
+
+    # Unit tests may create simplified schemas (no created_at). Production schema may
+    # enforce created_at NOT NULL. Insert conditionally based on actual columns.
+    if _column_exists(conn, 'episodic_memory', 'created_at'):
+        conn.execute(
+            """
+            INSERT INTO episodic_memory(
+              episode_id, trade_date, symbol, strategy_id, market_regime, entry_reason, outcome_pnl, pm_score, root_cause_code, decay_score, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, datetime('now'))
+            """,
+            (
+                eid,
+                rec.trade_date,
+                rec.symbol,
+                rec.strategy_id,
+                rec.market_regime,
+                rec.entry_reason,
+                rec.outcome_pnl,
+                rec.pm_score,
+                rec.root_cause_code,
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0)
-        """,
-        (
-            eid,
-            rec.trade_date,
-            rec.symbol,
-            rec.strategy_id,
-            rec.market_regime,
-            rec.entry_reason,
-            rec.outcome_pnl,
-            rec.pm_score,
-            rec.root_cause_code,
-        ),
-    )
+    else:
+        conn.execute(
+            """
+            INSERT INTO episodic_memory(
+              episode_id, trade_date, symbol, strategy_id, market_regime, entry_reason, outcome_pnl, pm_score, root_cause_code, decay_score
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0)
+            """,
+            (
+                eid,
+                rec.trade_date,
+                rec.symbol,
+                rec.strategy_id,
+                rec.market_regime,
+                rec.entry_reason,
+                rec.outcome_pnl,
+                rec.pm_score,
+                rec.root_cause_code,
+            ),
+        )
+
     return eid
 
 
