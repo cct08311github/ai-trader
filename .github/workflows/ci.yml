@@ -20,7 +20,7 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: 🛡️ Guardrails: block hardcoded local paths / secret-file references
+      - name: "🛡️ Guardrails: block hardcoded local paths / secret-file references"
         run: |
           set -euo pipefail
 
