@@ -1,0 +1,17 @@
+{
+  "name": "cash_mode_policy_v1",
+  "description": "Active cash mode policy for v4 #20 feature",
+  "enabled": true,
+  "policy": {
+    "enter_below_rating": 35.0,
+    "exit_above_rating": 55.0,
+    "enter_on_bear_regime": true,
+    "bear_min_confidence": 0.45,
+    "emergency_volatility_threshold": 0.07
+  },
+  "integration": {
+    "market_regime_source": "market_regime.py",
+    "update_frequency_seconds": 60,
+    "persist_state": true
+  }
+}
