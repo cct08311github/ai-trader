@@ -12,3 +12,6 @@ httpx>=0.27
 
 # SSE
 sse-starlette>=2.1
+
+# Shioaji for real simulation (optional)
+shioaji>=1.0
