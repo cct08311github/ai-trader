@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import math
 import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -74,24 +75,37 @@ def insert_episodic_memory(conn: sqlite3.Connection, rec: EpisodicRecord) -> str
 
 
 def apply_episodic_decay(conn: sqlite3.Connection, decay_lambda: float = 0.95, archive_threshold: float = 0.1) -> int:
-    conn.execute(
-        """
-        UPDATE episodic_memory
-        SET decay_score = decay_score * ?
-        WHERE archived = 0
-        """,
-        (decay_lambda,),
-    )
-    conn.execute(
-        """
-        UPDATE episodic_memory
-        SET archived = 1
-        WHERE archived = 0 AND decay_score < ?
-        """,
-        (archive_threshold,),
-    )
-    row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
-    return int(row[0] if row else 0)
+    """Apply episodic decay and archive low-signal episodes.
+
+    v4 expectation (tests): decay is based on episode *age* instead of repeated
+    multiplicative updates on the stored score.
+
+      decay_score = exp(-decay_lambda * age_days)
+
+    Returns the number of episodes newly archived in this call.
+    """
+
+    before_row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
+    before_n = int(before_row[0] if before_row else 0)
+
+    now = datetime.utcnow().date()
+
+    rows = conn.execute("SELECT episode_id, trade_date FROM episodic_memory WHERE archived = 0").fetchall()
+    for episode_id, trade_date in rows:
+        try:
+            d = datetime.strptime(str(trade_date), '%Y-%m-%d').date()
+            age_days = max(0, (now - d).days)
+        except Exception:
+            age_days = 0
+
+        score = float(math.exp(-float(decay_lambda) * float(age_days)))
+        conn.execute("UPDATE episodic_memory SET decay_score = ? WHERE episode_id = ?", (score, str(episode_id)))
+
+    conn.execute("UPDATE episodic_memory SET archived = 1 WHERE archived = 0 AND decay_score < ?", (float(archive_threshold),))
+
+    after_row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
+    after_n = int(after_row[0] if after_row else 0)
+    return max(0, after_n - before_n)
 
 
 def upsert_semantic_rule(conn: sqlite3.Connection, rule: SemanticRule) -> str:
@@ -220,13 +234,14 @@ def apply_semantic_decay(
 def apply_layered_decay(conn: sqlite3.Connection) -> Dict[str, int]:
     """應用所有記憶層的衰減。"""
     # Working memory 衰減（清除舊條目）
+    before_changes = conn.total_changes
     conn.execute(
         """
         DELETE FROM working_memory 
         WHERE updated_at < datetime('now', '-7 days')
         """
     )
-    working_deleted = conn.total_changes
+    working_deleted = conn.total_changes - before_changes
     
     # Episodic memory 衰減
     episodic_archived = apply_episodic_decay(conn, decay_lambda=0.95, archive_threshold=0.1)
@@ -381,6 +396,7 @@ def run_memory_hygiene(conn: sqlite3.Connection) -> Dict[str, Any]:
     decay_results = apply_layered_decay(conn)
     
     # 清理過時的 semantic 規則（超過 90 天未驗證）
+    before_changes = conn.total_changes
     conn.execute(
         """
         UPDATE semantic_memory
@@ -389,7 +405,7 @@ def run_memory_hygiene(conn: sqlite3.Connection) -> Dict[str, Any]:
         """
     )
     
-    expired_count = conn.total_changes
+    expired_count = conn.total_changes - before_changes
     conn.commit()
     
     return {

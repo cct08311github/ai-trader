@@ -1,0 +1,27 @@
+# Local env
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+
+# Local data / logs
+logs/
+data/
+
+# Reference / scratch materials (not part of CI)
+ref_doc/
+ref_package/
+docs/
+scripts/
+bin/
+database/__pycache__/
+
+# Temp
+*.backup
+Gemini.md*
+*.db
+*.sqlite
+*.sqlite3
