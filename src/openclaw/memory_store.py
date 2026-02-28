@@ -117,10 +117,9 @@ def insert_episodic_memory(conn: sqlite3.Connection, rec: EpisodicRecord) -> str
 def apply_episodic_decay(conn: sqlite3.Connection, decay_lambda: float = 0.95, archive_threshold: float = 0.1) -> int:
     """Apply episodic decay and archive low-signal episodes.
 
-    v4 expectation (tests): decay is based on episode *age* instead of repeated
-    multiplicative updates on the stored score.
+    Test expectation: decay is applied per call as a multiplicative update:
 
-      decay_score = exp(-decay_lambda * age_days)
+      decay_score = decay_score * decay_lambda
 
     Returns the number of episodes newly archived in this call.
     """
@@ -128,24 +127,30 @@ def apply_episodic_decay(conn: sqlite3.Connection, decay_lambda: float = 0.95, a
     before_row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
     before_n = int(before_row[0] if before_row else 0)
 
-    now = datetime.utcnow().date()
+    # Decay active episodes.
+    conn.execute(
+        """
+        UPDATE episodic_memory
+        SET decay_score = decay_score * ?
+        WHERE archived = 0
+        """,
+        (float(decay_lambda),),
+    )
 
-    rows = conn.execute("SELECT episode_id, trade_date FROM episodic_memory WHERE archived = 0").fetchall()
-    for episode_id, trade_date in rows:
-        try:
-            d = datetime.strptime(str(trade_date), '%Y-%m-%d').date()
-            age_days = max(0, (now - d).days)
-        except Exception:
-            age_days = 0
-
-        score = float(math.exp(-float(decay_lambda) * float(age_days)))
-        conn.execute("UPDATE episodic_memory SET decay_score = ? WHERE episode_id = ?", (score, str(episode_id)))
-
-    conn.execute("UPDATE episodic_memory SET archived = 1 WHERE archived = 0 AND decay_score < ?", (float(archive_threshold),))
+    # Archive low-signal episodes.
+    conn.execute(
+        """
+        UPDATE episodic_memory
+        SET archived = 1
+        WHERE archived = 0 AND decay_score < ?
+        """,
+        (float(archive_threshold),),
+    )
 
     after_row = conn.execute("SELECT COUNT(*) FROM episodic_memory WHERE archived = 1").fetchone()
     after_n = int(after_row[0] if after_row else 0)
     return max(0, after_n - before_n)
+
 
 
 def upsert_semantic_rule(conn: sqlite3.Connection, rule: SemanticRule) -> str:
