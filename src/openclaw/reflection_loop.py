@@ -50,9 +50,9 @@ def insert_reflection_run(conn: sqlite3.Connection, trade_date: str, result: Ref
         """
         INSERT INTO reflection_runs(
           run_id, trade_date, stage1_diagnosis_json, stage2_abstraction_json, stage3_refinement_json,
-          candidate_semantic_rules, semantic_memory_size
+          candidate_semantic_rules, semantic_memory_size, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """,
         (
             run_id,

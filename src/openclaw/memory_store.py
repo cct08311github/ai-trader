@@ -55,9 +55,9 @@ def insert_episodic_memory(conn: sqlite3.Connection, rec: EpisodicRecord) -> str
     conn.execute(
         """
         INSERT INTO episodic_memory(
-          episode_id, trade_date, symbol, strategy_id, market_regime, entry_reason, outcome_pnl, pm_score, root_cause_code, decay_score
+          episode_id, trade_date, symbol, strategy_id, market_regime, entry_reason, outcome_pnl, pm_score, root_cause_code, decay_score, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1.0, datetime('now'))
         """,
         (
             eid,
