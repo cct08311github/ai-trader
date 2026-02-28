@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import queue
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
@@ -13,6 +15,7 @@ def _resolve_db_path() -> Path:
     Default matches the repository layout:
     backend/app/db.py -> backend root -> ../../data/sqlite/trades.db
     """
+
     env_path = os.environ.get("DB_PATH")
     if env_path:
         return Path(env_path).expanduser().resolve()
@@ -29,6 +32,7 @@ def connect_readonly(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
     Uses sqlite URI mode=ro to guarantee no writes.
     """
+
     if not db_path.exists():
         raise FileNotFoundError(f"SQLite DB not found: {db_path}")
 
@@ -46,13 +50,75 @@ def connect_readonly(db_path: Path = DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+@dataclass
+class SQLiteReadonlyPool:
+    size: int = 5
+    _q: queue.Queue[sqlite3.Connection] | None = None
+    _db_path: Path | None = None
+
+    def init(self, db_path: Path) -> None:
+        self._db_path = db_path
+        self._q = queue.Queue(maxsize=self.size)
+        for _ in range(self.size):
+            self._q.put(connect_readonly(db_path))
+
+    @contextmanager
+    def conn(self) -> Iterator[sqlite3.Connection]:
+        if not self._q or not self._db_path:
+            # fallback
+            c = connect_readonly(DB_PATH)
+            try:
+                yield c
+            finally:
+                c.close()
+            return
+
+        c = self._q.get()
+        try:
+            yield c
+        finally:
+            # Return to pool
+            self._q.put(c)
+
+    def close(self) -> None:
+        if not self._q:
+            return
+        while True:
+            try:
+                c = self._q.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+READONLY_POOL = SQLiteReadonlyPool(size=int(os.environ.get("DB_POOL_SIZE", "5")))
+
+
+def init_readonly_pool(db_path: Path = DB_PATH) -> None:
+    """Initialize a small read-only connection pool.
+
+    SQLite doesn't have server-side pooling; this is a pragmatic optimization to
+    avoid reconnect overhead under concurrent API calls.
+    """
+
+    READONLY_POOL.init(db_path)
+
+
 @contextmanager
 def get_conn(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
-    conn = connect_readonly(db_path)
-    try:
-        yield conn
-    finally:
-        conn.close()
+    # If pool initialized, use it.
+    if READONLY_POOL._q is not None:
+        with READONLY_POOL.conn() as conn:
+            yield conn
+    else:
+        conn = connect_readonly(db_path)
+        try:
+            yield conn
+        finally:
+            conn.close()
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> List[str]:

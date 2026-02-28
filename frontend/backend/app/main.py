@@ -1,66 +1,75 @@
 from __future__ import annotations
 
-import os
-from typing import List
+import logging
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.portfolio import router as portfolio_router
 from app.api.control import router as control_router
+from app.api.portfolio import router as portfolio_router
 from app.api.settings import router as settings_router
 from app.api.strategy import router as strategy_router
 from app.api.stream import router as stream_router
+from app.core.config import get_settings
+from app.core.errors import http_exception_handler, unhandled_exception_handler
+from app.core.logging import setup_logging
+from app.db import DB_PATH, READONLY_POOL, init_readonly_pool
+from app.middleware.rate_limit import RateLimitMiddleware
 
-def _parse_cors_origins() -> List[str]:
+# Load .env early (pydantic-settings also loads, but this helps other libs)
+load_dotenv()
+setup_logging()
+logger = logging.getLogger(__name__)
 
-    """Parse CORS origins from env.
+settings = get_settings()
 
-    - CORS_ORIGINS="http://localhost:3000,http://localhost:5173"
-    - Default: common local dev origins
-    """
+app = FastAPI(title=settings.service_name, version=settings.version)
 
-    raw = os.environ.get("CORS_ORIGINS", "").strip()
-    if raw:
-        return [o.strip() for o in raw.split(",") if o.strip()]
+# Exception handlers (unified error shape)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 
-    return [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-
-
-app = FastAPI(title="AI-Trader Command Center API", version="0.1.0")
-
-# CORS: allow frontend to call API
-cors_origins = _parse_cors_origins()
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=settings.parse_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Rate limiting
+app.add_middleware(RateLimitMiddleware, rpm=settings.rate_limit_rpm)
+
+
+@app.on_event("startup")
+def on_startup() -> None:
+    # Initialize readonly pool (best-effort)
+    try:
+        init_readonly_pool(DB_PATH)
+        logger.info("SQLite readonly pool initialized size=%s path=%s", READONLY_POOL.size, DB_PATH)
+    except Exception as e:
+        logger.warning("Failed to init readonly pool: %s", e)
+
+
+@app.on_event("shutdown")
+def on_shutdown() -> None:
+    try:
+        READONLY_POOL.close()
+    except Exception:
+        pass
+
 
 @app.get("/api/health", tags=["health"])
 def health_check():
-    return {"status": "ok", "service": "Command Center API"}
+    return {"status": "ok", "service": settings.service_name}
 
 
 # Routers
 app.include_router(control_router)
 app.include_router(settings_router)
-
 app.include_router(strategy_router)
 app.include_router(portfolio_router)
 app.include_router(stream_router)
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.environ.get("PORT", "8080"))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
