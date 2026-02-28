@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from openclaw.drawdown_guard import DrawdownDecision, evaluate_drawdown_guard, DrawdownPolicy
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
+from openclaw.model_registry import resolve_pinned_model_id
 from openclaw.news_guard import build_news_sentiment_prompt, sanitize_external_news_text
 from openclaw.pm_debate import build_debate_prompt
 from openclaw.risk_engine import OrderCandidate, SystemState
@@ -252,6 +253,7 @@ def run_news_sentiment_with_guard(
     llm_call: LLMCaller,
     decision_id: str | None = None,
 ) -> Dict[str, Any]:
+    pinned_model = resolve_pinned_model_id(model)
     guard = sanitize_external_news_text(raw_news_text)
     if not guard.safe:
         # Observability MUST still record a trace (blocked call).
@@ -267,13 +269,13 @@ def run_news_sentiment_with_guard(
                 latency_ms=0,
                 confidence=None,
                 decision_id=decision_id,
-                metadata={"stage": "news_sentiment", "blocked": True, "blocked_reason": guard.reason},
+                metadata={"stage": "news_sentiment", "blocked": True, "blocked_reason": guard.reason, "pinned_model": pinned_model},
             ),
         )
         return {"blocked": True, "reason": guard.reason}
 
     prompt = build_news_sentiment_prompt(guard.sanitized_text)
-    result = llm_call(model, prompt)
+    result = llm_call(pinned_model, prompt)
     insert_llm_trace(
         conn,
         LLMTrace(
@@ -286,7 +288,7 @@ def run_news_sentiment_with_guard(
             latency_ms=_safe_int(result.get("latency_ms"), 0),
             confidence=_safe_float(result.get("confidence"), 0.0),
             decision_id=decision_id,
-            metadata={"stage": "news_sentiment"},
+            metadata={"stage": "news_sentiment", "pinned_model": pinned_model},
         ),
     )
     return result
@@ -301,7 +303,7 @@ def run_pm_debate(
     decision_id: str | None = None,
 ) -> Dict[str, Any]:
     prompt = build_debate_prompt(context)
-    result = llm_call(model, prompt)
+    result = llm_call(pinned_model, prompt)
     insert_llm_trace(
         conn,
         LLMTrace(
@@ -314,7 +316,7 @@ def run_pm_debate(
             latency_ms=_safe_int(result.get("latency_ms"), 0),
             confidence=_safe_float(result.get("confidence"), 0.0),
             decision_id=decision_id,
-            metadata={"stage": "bull_bear_debate"},
+            metadata={"stage": "bull_bear_debate", "pinned_model": pinned_model},
         ),
     )
     return result
