@@ -53,5 +53,29 @@
       "incident_log"
     ],
     "telegram_chat_id": "-1003772422881"
+  },
+  "tw_session_rules": {
+    "timezone": "Asia/Taipei",
+    "preopen_auction": {
+      "max_orders_per_min": 0.5,
+      "max_slippage_bps": 0.8,
+      "max_price_deviation_pct": 0.8,
+      "max_qty_to_1m_volume_ratio": 0.7,
+      "max_loss_per_trade_pct_nav": 0.7
+    },
+    "regular": {
+      "max_orders_per_min": 1.0,
+      "max_slippage_bps": 1.0,
+      "max_price_deviation_pct": 1.0,
+      "max_qty_to_1m_volume_ratio": 1.0,
+      "max_loss_per_trade_pct_nav": 1.0
+    },
+    "afterhours_auction": {
+      "max_orders_per_min": 0.6,
+      "max_slippage_bps": 0.7,
+      "max_price_deviation_pct": 0.8,
+      "max_qty_to_1m_volume_ratio": 0.5,
+      "max_loss_per_trade_pct_nav": 0.7
+    }
   }
 }
