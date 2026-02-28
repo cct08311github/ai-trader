@@ -1,3 +1,27 @@
+# Gap Matrix (v4 #1~#29)
+
+本文件將 v4 需求逐條對照目前代碼狀態，並給出 gap、風險等級、目標模組、重構動作與驗收/測試對應。
+
+
+
+欄位定義：
+
+- current_state：目前已落地的實作狀態
+
+- gap：尚未完成或需要補強之處
+
+- risk_level：對實盤/系統風險的影響程度
+
+- target_modules：涉及的檔案/模組
+
+- refactor_action：建議的修正/新增方向
+
+- acceptance_criteria：可驗收的完成條件
+
+- test_case_id：對應測試用例（無則標 N/A）
+
+
+
 | v4_id | requirement | current_state | gap | risk_level | target_modules | refactor_action | acceptance_criteria | test_case_id |
 |---:|---|---|---|---|---|---|---|---|
 | #1 | PM 否決延遲矛盾；即時阻斷歸還 Sentinel、PM 改事後稽核 | 已實作 | 無 | 高 | sentinel.py, risk_engine.py, decision_pipeline.py | 維護 | `sentinel_pre_trade_check()` 對 trading_locked/broker_disconnected/db_latency/drawdown/budget_halt 皆回傳 `hard_blocked=True` | tests/test_v4_01_sentinel.py::TestSentinelPreTradeCheck::test_trading_locked_hard_block |
