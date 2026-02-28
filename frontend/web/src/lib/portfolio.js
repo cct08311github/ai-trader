@@ -13,12 +13,24 @@ export const mockPositions = [
  */
 export async function fetchPortfolioPositions({ signal } = {}) {
   const res = await fetch(API_URL, { signal })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) throw new Error()
   const data = await res.json()
-  if (!Array.isArray(data)) throw new Error('Invalid API response: expected array')
+  // Backend returns { status: "ok", source, simulation, positions }
+  if (data.positions && Array.isArray(data.positions)) {
+    // Map backend fields to frontend expected fields
+    return data.positions.map(p => ({
+      symbol: p.symbol || '',
+      qty: p.qty || p.quantity || 0,
+      lastPrice: p.last_price || p.lastPrice || 0,
+      avgCost: p.avg_price || p.avgCost,
+      chipHealthScore: p.chip_health_score || p.chipHealthScore,
+      sector: p.sector
+    }))
+  }
+  // Fallback: assume array directly
+  if (!Array.isArray(data)) throw new Error('Invalid API response: expected array or object with positions')
   return data
 }
-
 export function calcPortfolioKpis(positions, { equitySeries } = {}) {
   const safe = positions ?? []
   const total = safe.reduce((acc, p) => acc + Number(p.qty || 0) * Number(p.lastPrice || 0), 0)
