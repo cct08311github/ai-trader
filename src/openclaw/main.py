@@ -15,6 +15,8 @@ from openclaw.order_store import insert_order_event, transition_with_event
 from openclaw.orders import summarize_fill_status
 from openclaw.risk_engine import Decision, MarketState, PortfolioState, SystemState, evaluate_and_build_order
 from openclaw.risk_store import LimitQuery, load_limits
+from openclaw.cash_mode_manager import CashModeManager
+from openclaw.market_regime import MarketRegime, MarketRegimeResult
 
 
 def utc_now_iso() -> str:
@@ -339,6 +341,24 @@ def main() -> None:
     elif dd_result.risk_mode == "reduce_only" or st_result.risk_mode == "reduce_only":
         system.reduce_only_mode = True
 
+    # Cash mode evaluation (v4 #20 active cash mechanism)
+    # In production, market regime result would come from market analysis
+    # For demo purposes, create a neutral market regime result
+    market_regime_result = MarketRegimeResult(
+        regime=MarketRegime.RANGE,
+        confidence=0.7,
+        features={"trend_strength": 0.01, "volatility": 0.02},
+        volatility_multiplier=1.0,
+        risk_multipliers=None
+    )
+    
+    # Evaluate cash mode
+    cash_mode_manager = CashModeManager(db_path=args.db)
+    cash_decision, system = cash_mode_manager.evaluate(market_regime_result, system)
+    
+    # Log cash mode status
+    print(f"Cash mode evaluation: rating={cash_decision.rating:.1f}, cash_mode={cash_decision.cash_mode}, reason={cash_decision.reason_code}")
+
     result = evaluate_and_build_order(decision, market, portfolio, limits, system)
 
     try:
@@ -357,6 +377,9 @@ def main() -> None:
                 "drawdown_reason": dd_result.reason_code,
                 "strategy_health_mode": st_result.risk_mode,
                 "strategy_health_reason": st_result.reason_code,
+                "cash_mode_rating": cash_decision.rating,
+                "cash_mode_active": cash_decision.cash_mode,
+                "cash_mode_reason": cash_decision.reason_code
             },
             auto_commit=False,
         )
