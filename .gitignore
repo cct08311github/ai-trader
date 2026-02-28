@@ -27,3 +27,15 @@ Gemini.md*
 
 # Virtualenv
 .venv/
+
+# Frontend
+frontend/web/node_modules/
+frontend/web/dist/
+
+# Backend (frontend)
+frontend/backend/.EMERGENCY_STOP
+frontend/backend/__pycache__/
+frontend/backend/.pytest_cache/
+
+# Repo-level emergency stop sentinel
+.EMERGENCY_STOP
