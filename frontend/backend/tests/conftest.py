@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import importlib
-import os
 import sqlite3
+import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+
+# Ensure `import app.*` works no matter where pytest rootdir is.
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 
 def _init_test_db(path: Path) -> None:
@@ -53,10 +58,13 @@ def client(tmp_path, monkeypatch):
 
     # Reload modules that read env at import-time
     import app.core.config as config
+
     importlib.reload(config)
     import app.db as db
+
     importlib.reload(db)
     import app.main as main
+
     importlib.reload(main)
 
     with TestClient(main.app) as c:
