@@ -20,6 +20,29 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
+      - name: 🛡️ Guardrails: block hardcoded local paths / secret-file references
+        run: |
+          set -euo pipefail
+
+          echo "Scanning for forbidden local/secret file references in tracked source files..."
+
+          # Only scan common source/config extensions to reduce false positives.
+          files=$(git ls-files \
+            '*.js' '*.jsx' '*.ts' '*.tsx' \
+            '*.py' '*.yml' '*.yaml' '*.json' '*.toml' \
+            '*.sh' '*.md')
+
+          # Fail if any hardcoded local path or PEM key/cert read is found.
+          # - /Users/... (macOS local)
+          # - .openclaw/ (local agent workspace)
+          # - readFileSync(...*.pem) (commonly used for cert/key)
+          if echo "$files" | xargs -r grep -nIE '(/Users/|\.openclaw/|readFileSync\([^)]*\.pem)'; then
+            echo "::error::Forbidden pattern found. Use relative paths or env vars; do not hardcode local cert/key paths."
+            exit 1
+          fi
+
+          echo "OK: guardrail scan passed."
+
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
