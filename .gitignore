@@ -14,7 +14,6 @@ data/
 # Reference / scratch materials (not part of CI)
 ref_doc/
 ref_package/
-docs/
 scripts/
 bin/
 database/__pycache__/
