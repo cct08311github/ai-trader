@@ -1,0 +1,24 @@
+{
+	# Optional: disable auto HTTPS because we provide cert/key
+	auto_https off
+}
+
+# IMPORTANT:
+# - Replace <TAILSCALE_IP> with `tailscale ip -4`
+# - This listener will bind ONLY to the Tailscale interface IP.
+# - Web/API are only on localhost; Caddy reverse-proxies them.
+
+https://<TAILSCALE_IP> {
+	# Use existing cert from agent-monitor-web
+	tls /Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/cert.pem /Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/key.pem
+
+	# Dashboard
+	reverse_proxy /* 127.0.0.1:3000
+
+	# API (example: route /api/* to backend)
+	@api path /api/*
+	handle @api {
+		rewrite * {path}
+		reverse_proxy 127.0.0.1:8080
+	}
+}
