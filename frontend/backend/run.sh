@@ -9,6 +9,16 @@ VENV_PYTHON="/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/py
 export PYTHONPATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/src:/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend"
 export DB_PATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db"
 
-# Run uvicorn via python
-# Security: bind backend to localhost only; expose via Tailscale reverse-proxy/serve.
-exec $VENV_PYTHON -m uvicorn app.main:app --host 127.0.0.1 --port 8080
+# SSL certificates from agent-monitor-web
+CERT_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/cert.pem"
+KEY_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/key.pem"
+
+if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
+    echo "Using SSL certificates for HTTPS"
+    # Bind to all interfaces for Tailscale access with HTTPS
+    exec $VENV_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --ssl-certfile "$CERT_PATH" --ssl-keyfile "$KEY_PATH"
+else
+    echo "SSL certificates not found, falling back to HTTP (localhost only)"
+    # Fallback: bind to localhost only for security
+    exec $VENV_PYTHON -m uvicorn app.main:app --host 127.0.0.1 --port 8080
+fi
