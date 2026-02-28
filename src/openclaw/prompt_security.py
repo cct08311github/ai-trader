@@ -36,6 +36,23 @@ class PromptGuardResult:
     matched_patterns: List[str] | None = None
 
 
+_TAG_STRIP_PATTERNS: Sequence[tuple[str, int]] = (
+    # Common bracketed wrappers that often carry meta-instructions.
+    (r"(?:(?<=\s)|^)\[[^\]]*(system|系統)\s*(prompt|指令)[^\]]*\](?=\s|$)", re.IGNORECASE),
+    (r"\[[^\]]*(developer|開發者)[^\]]*\]", re.IGNORECASE),
+    # XML-like wrappers.
+    (r"<(system|developer)[^>]*>", re.IGNORECASE),
+    (r"</(system|developer)>", re.IGNORECASE),
+)
+
+
+def _strip_instruction_like_wrappers(text: str) -> str:
+    out = text
+    for pat, flags in _TAG_STRIP_PATTERNS:
+        out = re.sub(pat, "", out, flags=flags)
+    return out.strip()
+
+
 def sanitize_external_text(
     raw_text: str,
     *,
@@ -45,12 +62,11 @@ def sanitize_external_text(
     """Basic prompt-injection defense for untrusted external text.
 
     Strategy (P1):
+    - strip obvious wrapper tags first (so harmless quoted tags don't hard-block)
     - hard-block common jailbreak / instruction patterns
-    - remove obvious instruction-like wrappers/tags
     - clamp length
 
-    This function is intentionally conservative; callers should treat blocked
-    results as "do not call LLM" and should log an observability trace.
+    Callers should treat blocked results as "do not call LLM".
     """
 
     text = (raw_text or "").strip()
@@ -60,8 +76,13 @@ def sanitize_external_text(
     if len(text) > max_chars:
         text = text[:max_chars]
 
+    # Strip wrapper tags BEFORE scanning.
+    sanitized = _strip_instruction_like_wrappers(text)
+    if not sanitized:
+        return PromptGuardResult(False, "", "EMPTY_AFTER_SANITIZE", [])
+
     patterns = list(block_patterns or _DEFAULT_BLOCK_PATTERNS)
-    lowered = text.lower()
+    lowered = sanitized.lower()
 
     hits: List[str] = []
     for p in patterns:
@@ -69,13 +90,7 @@ def sanitize_external_text(
             hits.append(p)
 
     if hits:
-        return PromptGuardResult(False, text, "PROMPT_INJECTION_SUSPECTED", hits)
-
-    # Strip instruction-like tags (best-effort)
-    sanitized = re.sub(r"\[[^\]]*(system|系統)\s*(prompt|指令)[^\]]*\]", "", text, flags=re.IGNORECASE)
-    sanitized = re.sub(r"<(system|developer)[^>]*>", "", sanitized, flags=re.IGNORECASE)
-    sanitized = re.sub(r"</(system|developer)>", "", sanitized, flags=re.IGNORECASE)
-    sanitized = sanitized.strip()
+        return PromptGuardResult(False, sanitized, "PROMPT_INJECTION_SUSPECTED", hits)
 
     return PromptGuardResult(True, sanitized, "OK", [])
 

@@ -1,7 +1,7 @@
 {
   "system_name": "OpenClaw Sentinel v1",
-  "version": "1.0.0",
-  "description": "Sentinel 硬熔斷與 PM 事後稽核策略配置",
+  "version": "1.1.0",
+  "description": "Sentinel 硬熔斷與 PM 事後稽核策略配置（含倉位上限）",
   "policy": {
     "trading_locked_enabled": true,
     "broker_disconnected_enabled": true,
@@ -25,9 +25,33 @@
       }
     }
   },
+  "position_limits": {
+    "description": "Level 0-3 倉位與單筆風險上限（PositionSizing 使用）。Level 代表系統授權層級/交易權限。",
+    "levels": {
+      "0": {
+        "max_risk_per_trade_pct_nav": 0.0,
+        "max_position_notional_pct_nav": 0.0
+      },
+      "1": {
+        "max_risk_per_trade_pct_nav": 0.001,
+        "max_position_notional_pct_nav": 0.01
+      },
+      "2": {
+        "max_risk_per_trade_pct_nav": 0.003,
+        "max_position_notional_pct_nav": 0.05
+      },
+      "3": {
+        "max_risk_per_trade_pct_nav": 0.005,
+        "max_position_notional_pct_nav": 0.1
+      }
+    }
+  },
   "monitoring": {
     "health_check_interval_seconds": 30,
-    "alert_channels": ["telegram", "incident_log"],
+    "alert_channels": [
+      "telegram",
+      "incident_log"
+    ],
     "telegram_chat_id": "-1003772422881"
   }
 }

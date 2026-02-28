@@ -302,6 +302,7 @@ def run_pm_debate(
     llm_call: LLMCaller,
     decision_id: str | None = None,
 ) -> Dict[str, Any]:
+    pinned_model = resolve_pinned_model_id(model)
     prompt = build_debate_prompt(context)
     result = llm_call(pinned_model, prompt)
     insert_llm_trace(

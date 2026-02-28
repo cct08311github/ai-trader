@@ -27,6 +27,16 @@ class StrategyRegistry:
         """Initialize with optional database path."""
         self.db_path = db_path or "data/sqlite/trades.db"
         
+        # Best-effort ensure schema exists for fresh DBs
+        try:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                self._ensure_table_exists(conn)
+            finally:
+                conn.close()
+        except Exception:
+            pass
+
     def _get_conn(self) -> sqlite3.Connection:
         """Get database connection."""
         return sqlite3.connect(self.db_path)

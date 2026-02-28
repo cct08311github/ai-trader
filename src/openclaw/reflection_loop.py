@@ -8,6 +8,14 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
 @dataclass
 class ReflectionOutput:
     stage1_diagnosis: Dict[str, Any]
@@ -80,6 +88,10 @@ def create_proposal_from_reflection(
         from openclaw.proposal_engine import create_proposal as create_proposal_func
     except ImportError:
         print('Warning: proposal_engine not available')
+        return None
+
+    # strategy_proposals table is optional in some unit tests
+    if not _table_exists(conn, 'strategy_proposals'):
         return None
     
     # 提取提案數據
@@ -196,7 +208,7 @@ def run_daily_reflection(conn: sqlite3.Connection, trade_date: str) -> Dict[str,
         'run_id': run_id,
         'episode_id': episode_id,
         'proposal_id': proposal_id,
-        'threshold_passed': proposal_id is not None
+        'threshold_passed': check_reflection_threshold(validated_result.stage2_abstraction)
     }
 
 
