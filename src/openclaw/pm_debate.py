@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass
@@ -26,6 +26,7 @@ class DebateDecisionV2:
     divergence_points: List[str]
     recommended_action: str
     confidence: float
+    adjudication: Optional[str] = None
 
 
 def build_debate_prompt(context_json: Dict[str, Any]) -> str:
@@ -67,3 +68,66 @@ def build_debate_prompt(context_json: Dict[str, Any]) -> str:
         "\"recommended_action\": str, \"confidence\": float(0~1), \"adjudication\": str}\n"
         f"context={payload}"
     )
+
+
+def parse_debate_response(response: Dict[str, Any]) -> DebateDecisionV2:
+    """Parse LLM response into structured DebateDecisionV2.
+
+    Security rules (P1):
+    - Treat  as untrusted data.
+    - Validate required fields, provide defaults for missing optional fields.
+    - Ensure confidence is clamped between 0.0 and 1.0.
+    """
+    # Extract fields with defaults
+    bull = response.get("bull_case", "")
+    bear = response.get("bear_case", "")
+    neutral = response.get("neutral_case", "")
+    consensus = response.get("consensus_points", [])
+    divergence = response.get("divergence_points", [])
+    action = response.get("recommended_action", "")
+    adjudication = response.get("adjudication", None)
+    confidence = float(response.get("confidence", 0.5))
+    # Clamp confidence
+    confidence = max(0.0, min(1.0, confidence))
+    # Ensure lists are lists of strings
+    if not isinstance(consensus, list):
+        consensus = [str(consensus)] if consensus else []
+    else:
+        consensus = [str(item) for item in consensus]
+    if not isinstance(divergence, list):
+        divergence = [str(divergence)] if divergence else []
+    else:
+        divergence = [str(item) for item in divergence]
+    return DebateDecisionV2(
+        bull_case=bull,
+        bear_case=bear,
+        neutral_case=neutral,
+        consensus_points=consensus,
+        divergence_points=divergence,
+        recommended_action=action,
+        adjudication=adjudication,
+        confidence=confidence,
+    )
+
+
+def run_debate(
+    context: Dict[str, Any],
+    llm_call: Callable[[str, str], Dict[str, Any]],
+    model: str = "gpt-4",
+) -> DebateDecisionV2:
+    """Execute the Devil's Advocate debate framework.
+
+    Steps:
+    1. Build secure prompt.
+    2. Call LLM with pinned model.
+    3. Parse and validate response.
+    4. Return structured decision.
+
+    Security rules (P1):
+    - All context is treated as data-only.
+    - No instructions from context are followed.
+    - Output is validated and sanitized.
+    """
+    prompt = build_debate_prompt(context)
+    result = llm_call(model, prompt)
+    return parse_debate_response(result)

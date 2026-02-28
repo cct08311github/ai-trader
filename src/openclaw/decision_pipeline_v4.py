@@ -11,7 +11,7 @@ from openclaw.drawdown_guard import DrawdownDecision, evaluate_drawdown_guard, D
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
 from openclaw.model_registry import resolve_pinned_model_id
 from openclaw.news_guard import build_news_sentiment_prompt, sanitize_external_news_text
-from openclaw.pm_debate import build_debate_prompt
+from openclaw.pm_debate import build_debate_prompt, parse_debate_response
 from openclaw.risk_engine import OrderCandidate, SystemState
 from openclaw.system_switch import check_system_switch
 
@@ -346,4 +346,12 @@ def run_pm_debate(
             metadata={"stage": "bull_bear_debate", "pinned_model": pinned_model},
         ),
     )
+    # Validate response shape (v4 #9)
+    try:
+        parsed = parse_debate_response(result)
+        # Ensure adjudication is present (optional)
+        if parsed.adjudication is not None:
+            result["adjudication"] = parsed.adjudication
+    except Exception as e:
+        logger.warning("PM debate response validation failed: %s", e)
     return result
