@@ -60,6 +60,7 @@ def test_get_current_level_default():
 def test_set_and_get_level():
     """Test setting and getting authority level."""
     from openclaw.authority import AuthorityEngine, AuthorityLevel
+    import sqlite3
     
     # Use temporary file
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
@@ -72,7 +73,32 @@ def test_set_and_get_level():
         level = engine.get_current_level()
         assert level == AuthorityLevel.LEVEL_2
         
-        # Set to LEVEL_3
+        # Insert a completed compliance item to allow LEVEL_3
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS compliance_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requirement_id TEXT UNIQUE NOT NULL,
+                description TEXT,
+                status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed')),
+                completed_date TEXT,
+                evidence_path TEXT,
+                responsible_person TEXT,
+                last_updated TEXT
+            )
+        """)
+        conn.execute(
+            """
+            INSERT INTO compliance_status 
+            (requirement_id, description, status, completed_date, last_updated)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("REQ_TEST", "Test requirement", "completed", "2025-01-01", "2025-01-01")
+        )
+        conn.commit()
+        conn.close()
+        
+        # Now set to LEVEL_3 should succeed
         success = engine.set_level(
             level=AuthorityLevel.LEVEL_3,
             changed_by="pm",
@@ -188,6 +214,7 @@ def test_check_proposal_authorization():
 def test_get_audit_log():
     """Test getting authority audit log."""
     from openclaw.authority import AuthorityEngine, AuthorityLevel
+    import sqlite3
     
     # Use temporary file
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
@@ -199,6 +226,31 @@ def test_get_audit_log():
         # Initially empty
         log = engine.get_audit_log()
         assert log == []
+        
+        # Insert a completed compliance item to allow LEVEL_3
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS compliance_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requirement_id TEXT UNIQUE NOT NULL,
+                description TEXT,
+                status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed')),
+                completed_date TEXT,
+                evidence_path TEXT,
+                responsible_person TEXT,
+                last_updated TEXT
+            )
+        """)
+        conn.execute(
+            """
+            INSERT INTO compliance_status 
+            (requirement_id, description, status, completed_date, last_updated)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("REQ_TEST", "Test requirement", "completed", "2025-01-01", "2025-01-01")
+        )
+        conn.commit()
+        conn.close()
         
         # Set level a few times
         engine.set_level(AuthorityLevel.LEVEL_3, "pm", "Upgrade for testing")

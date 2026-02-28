@@ -71,9 +71,18 @@ class AuthorityEngine:
                 return AuthorityLevel.LEVEL_2
         finally:
             conn.close()
-    
+
     def set_level(self, level: AuthorityLevel, changed_by: str, reason: str) -> bool:
+
         """Set authority level (requires audit log)."""
+        # Check compliance restriction: cannot raise to LEVEL_3 if compliance not complete
+        if level == AuthorityLevel.LEVEL_3 and not self.check_compliance_complete():
+            print(f"ERROR: Cannot raise authority to LEVEL_3 because compliance is not complete.")
+            # Log this attempt
+            import logging
+            logging.warning(f"Attempt to raise authority to LEVEL_3 blocked due to incomplete compliance. Changed by: {changed_by}, reason: {reason}")
+            return False
+        
         conn = self._get_conn()
         try:
             # Ensure table exists
@@ -209,6 +218,49 @@ class AuthorityEngine:
             ]
         finally:
             conn.close()
+
+    def check_compliance_complete(self) -> bool:
+        """
+        Check if all required compliance items are completed.
+        
+        Returns:
+            True if all required compliance items are completed, False otherwise.
+            If no compliance items are defined, returns True (no compliance requirements).
+        """
+        conn = self._get_conn()
+        try:
+            # Check if compliance_status table exists
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_status'"
+            )
+            if cursor.fetchone() is None:
+                # Table doesn't exist, assume compliance not complete
+                return False
+            
+            # Check if all required compliance items are completed
+            # Required items are those with requirement_id starting with 'REQ_'
+            rows = conn.execute(
+                """
+                SELECT COUNT(*) as total, 
+                       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed
+                FROM compliance_status
+                WHERE requirement_id LIKE 'REQ_%'
+                """
+            ).fetchone()
+            
+            total, completed = rows
+            if total == 0:
+                # No required compliance items defined, assume compliance requirements are satisfied
+                return True
+            
+            return completed == total
+        except Exception as e:
+            # Log error and assume compliance not complete
+            import logging
+            logging.error(f"Error checking compliance: {e}")
+            return False
+        finally:
+            conn.close()
     
     def _ensure_table_exists(self, conn: sqlite3.Connection) -> None:
         """Ensure authority tables exist."""
@@ -232,6 +284,33 @@ class AuthorityEngine:
                 new_level INTEGER NOT NULL,
                 changed_by TEXT NOT NULL,
                 reason TEXT NOT NULL,
+                changed_at TEXT NOT NULL
+            )
+        """)
+        
+        # Create compliance_status table for regulatory compliance tracking
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS compliance_status (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requirement_id TEXT UNIQUE NOT NULL,
+                description TEXT,
+                status TEXT CHECK(status IN ('not_started', 'in_progress', 'completed')),
+                completed_date TEXT,
+                evidence_path TEXT,
+                responsible_person TEXT,
+                last_updated TEXT
+            )
+        """)
+        
+        # Create compliance_audit_log table for tracking compliance changes
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS compliance_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                requirement_id TEXT NOT NULL,
+                old_status TEXT,
+                new_status TEXT,
+                changed_by TEXT NOT NULL,
+                reason TEXT,
                 changed_at TEXT NOT NULL
             )
         """)
