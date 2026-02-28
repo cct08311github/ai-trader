@@ -87,6 +87,72 @@ def _lin_slope(values: Sequence[float]) -> float:
     return num / den
 
 
+
+def _rsi(prices: Sequence[float], period: int = 14) -> float:
+    """Compute Relative Strength Index (RSI) for given prices."""
+    ps = _to_floats(prices)
+    if len(ps) < period + 1:
+        return 50.0  # Neutral
+    
+    gains = []
+    losses = []
+    for i in range(1, len(ps)):
+        change = ps[i] - ps[i-1]
+        if change > 0:
+            gains.append(change)
+            losses.append(0.0)
+        else:
+            gains.append(0.0)
+            losses.append(abs(change))
+    
+    # Use Wilder's smoothing (RSI typical)
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+def _momentum(prices: Sequence[float], lookback: int = 10) -> float:
+    """Price momentum over lookback periods."""
+    ps = _to_floats(prices)
+    if len(ps) < lookback + 1:
+        return 0.0
+    return (ps[-1] / ps[-lookback] - 1) * 100  # percentage
+
+
+def _price_channel(prices: Sequence[float], window: int = 20) -> tuple[float, float, float]:
+    """Compute high, low, and width of price channel."""
+    ps = _to_floats(prices)
+    if len(ps) < window:
+        window = len(ps)
+    if window == 0:
+        return 0.0, 0.0, 0.0
+    segment = ps[-window:]
+    high = max(segment)
+    low = min(segment)
+    width = (high - low) / low if low > 0 else 0.0
+    return high, low, width
+
+
+def _atr(prices: Sequence[float], period: int = 14) -> float:
+    """Average True Range (simplified using price ranges)."""
+    ps = _to_floats(prices)
+    if len(ps) < period + 1:
+        return 0.0
+    
+    trs = []
+    for i in range(1, len(ps)):
+        high_low = abs(ps[i] - ps[i-1])
+        # Simplified: we don't have high/low/close, so just use price differences
+        trs.append(high_low)
+    
+    if len(trs) < period:
+        return 0.0
+    return mean(trs[-period:]) / ps[-1] if ps[-1] > 0 else 0.0
 def compute_regime_features(
     prices: Sequence[float],
     volumes: Sequence[float] | None = None,
@@ -106,6 +172,10 @@ def compute_regime_features(
             "slope_pct": 0.0,
             "volatility": 0.0,
             "vol_ratio": 1.0,
+            "rsi": 50.0,
+            "momentum_pct": 0.0,
+            "channel_width": 0.0,
+            "atr": 0.0,
         }
 
     short_n = min(short_window, len(ps))
@@ -133,6 +203,12 @@ def compute_regime_features(
             if v_long > 0:
                 vol_ratio = v_short / v_long
 
+    # Additional technical indicators
+    rsi = _rsi(ps, period=14)
+    momentum = _momentum(ps, lookback=10)
+    _, _, channel_width = _price_channel(ps, window=20)
+    atr = _atr(ps, period=14)
+
     return {
         "n": float(len(ps)),
         "ma_short": float(ma_short),
@@ -141,8 +217,11 @@ def compute_regime_features(
         "slope_pct": float(slope),
         "volatility": float(volatility),
         "vol_ratio": float(vol_ratio),
+        "rsi": float(rsi),
+        "momentum_pct": float(momentum),
+        "channel_width": float(channel_width),
+        "atr": float(atr),
     }
-
 
 def classify_market_regime(
     prices: Sequence[float],
