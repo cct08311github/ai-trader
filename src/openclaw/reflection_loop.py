@@ -8,6 +8,19 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+
+
+def _column_exists(conn, table: str, column: str) -> bool:
+    """Return True if a column exists in a sqlite table."""
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    except Exception:
+        return False
+    for r in rows:
+        if len(r) >= 2 and str(r[1]) == column:
+            return True
+    return False
+
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
@@ -42,29 +55,56 @@ def validate_reflection_output(payload: Dict[str, Any]) -> ReflectionOutput:
     return ReflectionOutput(s1, s2, s3)
 
 
+
+
 def insert_reflection_run(conn: sqlite3.Connection, trade_date: str, result: ReflectionOutput) -> str:
     run_id = str(uuid.uuid4())
     sem_size = conn.execute("SELECT COUNT(*) FROM semantic_memory WHERE status='active'").fetchone()[0]
     candidate_count = 1 if result.stage3_refinement.get("decision") == "proposal" else 0
-    conn.execute(
-        """
-        INSERT INTO reflection_runs(
-          run_id, trade_date, stage1_diagnosis_json, stage2_abstraction_json, stage3_refinement_json,
-          candidate_semantic_rules, semantic_memory_size, created_at
+
+    if _column_exists(conn, 'reflection_runs', 'created_at'):
+        conn.execute(
+            """
+            INSERT INTO reflection_runs(
+              run_id, trade_date, stage1_diagnosis_json, stage2_abstraction_json, stage3_refinement_json,
+              candidate_semantic_rules, semantic_memory_size, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                run_id,
+                trade_date,
+                json.dumps(result.stage1_diagnosis, ensure_ascii=True),
+                json.dumps(result.stage2_abstraction, ensure_ascii=True),
+                json.dumps(result.stage3_refinement, ensure_ascii=True),
+                int(candidate_count),
+                int(sem_size),
+            ),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-        """,
-        (
-            run_id,
-            trade_date,
-            json.dumps(result.stage1_diagnosis, ensure_ascii=True),
-            json.dumps(result.stage2_abstraction, ensure_ascii=True),
-            json.dumps(result.stage3_refinement, ensure_ascii=True),
-            int(candidate_count),
-            int(sem_size),
-        ),
-    )
+    else:
+        conn.execute(
+            """
+            INSERT INTO reflection_runs(
+              run_id, trade_date, stage1_diagnosis_json, stage2_abstraction_json, stage3_refinement_json,
+              candidate_semantic_rules, semantic_memory_size
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                run_id,
+                trade_date,
+                json.dumps(result.stage1_diagnosis, ensure_ascii=True),
+                json.dumps(result.stage2_abstraction, ensure_ascii=True),
+                json.dumps(result.stage3_refinement, ensure_ascii=True),
+                int(candidate_count),
+                int(sem_size),
+            ),
+        )
+
     return run_id
+
+
+
 
 
 # ===== v4 #25 三段式反思機制擴充 =====
