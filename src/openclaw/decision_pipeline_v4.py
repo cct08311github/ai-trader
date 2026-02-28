@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from openclaw.drawdown_guard import DrawdownDecision, evaluate_drawdown_guard, DrawdownPolicy
@@ -18,6 +20,9 @@ from openclaw.token_budget import BudgetPolicy, evaluate_budget, load_budget_pol
 
 
 LLMCaller = Callable[[str, str], Dict[str, Any]]
+
+logger = logging.getLogger(__name__)
+
 
 
 def _safe_float(v: Any, default: float = 0.0) -> float:
@@ -129,8 +134,16 @@ def run_decision_with_sentinel(
 
     system_state_path = os.path.join(os.path.dirname(__file__), "../../config/system_state.json")
     allowed, reason = check_system_switch(system_state_path)
+    ts = datetime.now(timezone.utc).isoformat()
+    logger.warning(
+        "master_switch_check decision_id=%s ts=%s allowed=%s reason=%s",
+        decision_id,
+        ts,
+        allowed,
+        reason or "",
+    )
     if not allowed:
-        _insert_risk_check(conn, decision_id, "master_switch", False, reason)
+        _insert_risk_check(conn, decision_id, "master_switch", False, reason or "disabled")
         # No decision record needed as this is before any order candidate
         return False, "MASTER_SWITCH_OFF", None
     _insert_risk_check(conn, decision_id, "master_switch", True, "Auto-trading enabled")
