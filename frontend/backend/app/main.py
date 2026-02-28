@@ -10,6 +10,7 @@ from app.api.portfolio import router as portfolio_router
 from app.api.control import router as control_router
 from app.api.settings import router as settings_router
 from app.api.strategy import router as strategy_router
+from app.api.stream import router as stream_router
 
 def _parse_cors_origins() -> List[str]:
 
@@ -55,6 +56,7 @@ app.include_router(settings_router)
 
 app.include_router(strategy_router)
 app.include_router(portfolio_router)
+app.include_router(stream_router)
 
 
 if __name__ == "__main__":

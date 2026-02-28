@@ -1,5 +1,6 @@
 import React from 'react'
 import ControlPanel from '../components/ControlPanel'
+import LogTerminal from '../components/LogTerminal'
 
 export default function SystemPage() {
   return (
@@ -12,6 +13,8 @@ export default function SystemPage() {
       </div>
 
       <ControlPanel />
+
+      <LogTerminal />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 系統健康狀態 */}
