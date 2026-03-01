@@ -1,4 +1,5 @@
 const API_URL = 'http://localhost:8080/api/portfolio/trades'
+const TRADE_CAUSAL_API = 'http://localhost:8080/api/portfolio/trade-causal'
 
 export const mockTrades = [
   {
@@ -63,6 +64,19 @@ export async function fetchTrades(
   }
 
   return data
+}
+
+export async function fetchTradeCausalChain(tradeId) {
+  const url = `${TRADE_CAUSAL_API}/${tradeId}`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  
+  if (!data || data.status !== 'ok') {
+    throw new Error('Invalid API response')
+  }
+  
+  return data.data
 }
 
 function escapeCsvCell(value) {
