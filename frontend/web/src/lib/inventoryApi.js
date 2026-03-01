@@ -1,6 +1,10 @@
 // Inventory API for fetching inventory data
 import { formatCurrency } from './format'
 
+const DEFAULT_API_BASE = ''
+
+const API_BASE = (import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
+
 // Mock inventory data for development
 export const mockInventoryData = [
   {
@@ -99,7 +103,7 @@ export const mockInventoryData = [
 export async function fetchInventoryData() {
   try {
     // Try to fetch from the backend API
-    const response = await fetch('http://localhost:8080/api/inventory', {
+    const response = await fetch(`${API_BASE}/api/inventory`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'
@@ -111,7 +115,7 @@ export async function fetchInventoryData() {
     }
 
     const data = await response.json()
-    
+
     // Validate and format the data
     return Array.isArray(data) ? data.map(item => ({
       id: item.id || Math.random(),
@@ -120,14 +124,14 @@ export async function fetchInventoryData() {
       quantity: Number(item.quantity) || 0,
       unitCost: Number(item.unitCost) || 0,
       currentValue: Number(item.currentValue) || (Number(item.quantity) || 0) * (Number(item.unitCost) || 0),
-      status: item.status || (Number(item.quantity) === 0 ? '缺貨' : 
-              (Number(item.quantity) < 10 ? '低庫存' : '正常'))
+      status: item.status || (Number(item.quantity) === 0 ? '缺貨' :
+        (Number(item.quantity) < 10 ? '低庫存' : '正常'))
     })) : mockInventoryData
 
   } catch (error) {
-    console.warn('Failed to fetch inventory data from API, using mock data:', error.message)
-    // Fallback to mock data
-    return mockInventoryData
+    console.warn('Failed to fetch inventory data from API:', error.message)
+    // Return empty array - do NOT fallback to mock. Real data only.
+    return []
   }
 }
 

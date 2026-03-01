@@ -1,4 +1,7 @@
-const API_URL = 'http://localhost:8080/api/portfolio/positions'
+const DEFAULT_API_BASE = ''
+
+const API_BASE = (import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
+const API_URL = `${API_BASE}/api/portfolio/positions`
 
 export const mockPositions = [
   { symbol: 'AAPL', qty: 40, lastPrice: 182.34, avgCost: 165.1 },
@@ -33,7 +36,7 @@ export async function fetchPortfolioPositions({ signal } = {}) {
 }
 
 export async function fetchPositionDetail(symbol) {
-  const res = await fetch(`http://localhost:8080/api/portfolio/position-detail/${symbol}`)
+  const res = await fetch(`${API_BASE}/api/portfolio/position-detail/${symbol}`)
   if (!res.ok) throw new Error(`Failed to fetch position detail for ${symbol}`)
   const data = await res.json()
   if (data.status === 'ok' && data.data) {

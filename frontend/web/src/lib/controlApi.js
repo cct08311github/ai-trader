@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // Default backend: FastAPI command center (see frontend/backend)
 // Override via Vite env: VITE_API_BASE=http://localhost:8080
-const DEFAULT_API_BASE = 'http://localhost:8080'
+const DEFAULT_API_BASE = ''
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))

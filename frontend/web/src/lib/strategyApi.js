@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-const DEFAULT_API_BASE = 'http://localhost:8080'
+const DEFAULT_API_BASE = ''
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -155,7 +155,8 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       setError(null)
     } catch (err) {
       if (!mountedRef.current) return
-      setError(`無法取得策略提案: `)    } finally {
+      setError(`無法取得策略提案: `)
+    } finally {
       if (mountedRef.current) setLoading(p => ({ ...p, proposals: false }))
     }
   }, [client])
@@ -264,7 +265,7 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       }
     },
     [client, refreshProposals]
-)
+  )
   return {
     API_BASE,
     opsToken,

@@ -13,6 +13,8 @@ from app.api.portfolio import router as portfolio_router
 from app.api.settings import router as settings_router
 from app.api.strategy import router as strategy_router
 from app.api.stream import router as stream_router
+from app.api.system import router as system_router
+from app.api.system import inventory_router, capital_router
 from app.core.config import get_settings
 from app.core.errors import http_exception_handler, unhandled_exception_handler
 from app.core.logging import setup_logging
@@ -73,3 +75,6 @@ app.include_router(settings_router)
 app.include_router(strategy_router)
 app.include_router(portfolio_router)
 app.include_router(stream_router)
+app.include_router(system_router)
+app.include_router(inventory_router)
+app.include_router(capital_router)

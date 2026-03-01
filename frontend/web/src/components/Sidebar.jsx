@@ -1,13 +1,14 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { Briefcase, ArrowLeftRight, LineChart, Settings, Package } from 'lucide-react'
+import { Briefcase, ArrowLeftRight, LineChart, Settings, Package, SlidersHorizontal } from 'lucide-react'
 
 const nav = [
   { to: '/portfolio', label: 'Portfolio', icon: Briefcase },
   { to: '/trades', label: 'Trades', icon: ArrowLeftRight },
   { to: '/strategy', label: 'Strategy', icon: LineChart },
   { to: '/system', label: 'System', icon: Settings },
-  { to: '/inventory', label: 'Inventory', icon: Package }
+  { to: '/inventory', label: 'Inventory', icon: Package },
+  { to: '/settings', label: '資金設定', icon: SlidersHorizontal },
 ]
 
 export default function Sidebar() {
@@ -39,13 +40,6 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-8 rounded-2xl border border-slate-900 bg-slate-950 p-4 text-xs text-slate-400">
-        <div className="font-medium text-slate-300">Tips</div>
-        <ul className="mt-2 list-disc space-y-1 pl-4">
-          <li>先用 mock data</li>
-          <li>API 上線後切換 fetch 即可</li>
-        </ul>
-      </div>
     </aside>
   )
 }

@@ -5,17 +5,21 @@ from typing import Any, Dict, List, Literal, Optional
 from fastapi import APIRouter, Query
 
 from app.db import get_conn
-from app.services.shioaji_service import get_positions
+from app.services.shioaji_service import get_positions, _get_system_simulation_mode
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
 
 @router.get("/positions")
-def portfolio_positions(source: str = "mock", simulation: bool = True):
+def portfolio_positions(source: str = "shioaji", simulation: Optional[bool] = None):
     """Return portfolio positions.
 
-    source: mock|shioaji (default mock for speed)
+    source: mock|shioaji
+    simulation: None = read from system_state.json (mirrors System page toggle)
     """
+    # Resolve simulation from system_state.json if not explicitly specified
+    if simulation is None:
+        simulation = _get_system_simulation_mode()
 
     source = source.lower().strip()
     if source not in {"mock", "shioaji"}:
@@ -320,3 +324,23 @@ def get_trade_causal_chain(trade_id: str):
                 }
             }
         }
+@router.get("/inventory")
+def inventory_list(source: str = "shioaji", simulation: bool = True):
+    """Return inventory list. Uses the same data as /positions but formatted for inventory.
+    """
+    res = get_positions(source=source, simulation=simulation)
+    
+    # Map portfolio positions to inventory fields
+    inventory = []
+    positions = res.get("positions", [])
+    for p in positions:
+        inventory.append({
+            "id": p.get("symbol"),
+            "code": p.get("symbol"),
+            "name": p.get("name"),
+            "quantity": p.get("qty"),
+            "unitCost": p.get("avg_price"),
+            "currentValue": p.get("market_value") or (p.get("qty", 0) * (p.get("last_price") or p.get("avg_price", 0))),
+            "status": "正常"
+        })
+    return inventory

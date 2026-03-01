@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const DEFAULT_API_BASE = 'http://localhost:8080'
+const DEFAULT_API_BASE = ''
 
 async function fetchJson(url, { timeoutMs = 5000 } = {}) {
   const controller = new AbortController()
@@ -111,4 +111,47 @@ export function useSystemEvents({ pollMs = 15000 } = {}) {
   }, [pollMs])
 
   return { data, error }
+}
+
+export function useCapital() {
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const load = useCallback(async () => {
+    try {
+      const d = await fetchJson(`${getBase()}/api/capital`)
+      setData(d)
+      setError(null)
+    } catch (e) {
+      setError(e.message)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const save = useCallback(async (payload) => {
+    setSaving(true)
+    setSaved(false)
+    try {
+      const res = await fetch(`${getBase()}/api/capital`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const updated = await res.json()
+      setData(updated)
+      setError(null)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  return { data, error, saving, saved, save, refresh: load }
 }

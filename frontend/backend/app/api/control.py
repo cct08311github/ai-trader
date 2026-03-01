@@ -4,6 +4,14 @@ import json
 import os
 from datetime import datetime
 
+def _clear_shioaji_cache():
+    """Best-effort: clear Shioaji API cache so mode switch takes effect immediately."""
+    try:
+        from app.services.shioaji_service import _clear_api_cache
+        _clear_api_cache()
+    except Exception:
+        pass
+
 router = APIRouter(prefix="/api/control", tags=["Control"])
 
 SYSTEM_STATE_PATH = os.path.join(os.path.dirname(__file__), "../../../../config/system_state.json")
@@ -96,6 +104,7 @@ def switch_to_simulation():
         with open(SYSTEM_STATE_PATH, "w") as f:
             json.dump(data, f, indent=2)
             
+        _clear_shioaji_cache()  # ← clears cached Shioaji session so next call re-logins in simulation mode
         return {"status": "ok", "message": "Switched to simulation mode (模擬盤). No real money will be traded."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -118,7 +127,8 @@ def switch_to_live():
         
         with open(SYSTEM_STATE_PATH, "w") as f:
             json.dump(data, f, indent=2)
-            
+
+        _clear_shioaji_cache()  # ← clears cached simulation session so next call connects to live account
         return {
             "status": "ok", 
             "message": "Switched to LIVE trading mode (實際盤). WARNING: Real money at risk! Auto-trading has been disabled for safety.",

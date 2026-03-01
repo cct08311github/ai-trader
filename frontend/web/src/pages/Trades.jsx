@@ -14,9 +14,9 @@ function toIsoDateEnd(d) {
 }
 
 export default function TradesPage() {
-  const [items, setItems] = useState(mockTrades)
-  const [total, setTotal] = useState(mockTrades.length)
-  const [source, setSource] = useState('mock')
+  const [items, setItems] = useState([])
+  const [total, setTotal] = useState(0)
+  const [source, setSource] = useState('loading')
 
   const [symbol, setSymbol] = useState('')
   const [type, setType] = useState('')
@@ -57,7 +57,7 @@ export default function TradesPage() {
     setError(null)
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
+    const timeout = setTimeout(() => controller.abort(), 8000)
 
     try {
       const data = await fetchTrades({ ...query, signal: controller.signal })
@@ -65,9 +65,10 @@ export default function TradesPage() {
       setTotal(data.total)
       setSource('api')
     } catch (e) {
-      setItems(mockTrades)
-      setTotal(mockTrades.length)
-      setSource('mock')
+      // Do NOT fallback to mock — show real error so user knows data is unavailable
+      setItems([])
+      setTotal(0)
+      setSource('error')
       setError(String(e?.message || e))
     } finally {
       clearTimeout(timeout)
@@ -85,7 +86,7 @@ export default function TradesPage() {
     setSelected(trade)
     setActiveTab('details')
     setCausalData(null)
-    
+
     // 加载因果链数据
     if (trade.id) {
       setCausalLoading(true)
