@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { formatCurrency, formatNumber } from '../lib/format'
-import { downloadTextFile, fetchTrades, mockTrades, tradesToCsv, tradesToExcelXml } from '../lib/trades'
+import { downloadTextFile, fetchTrades, fetchTradeCausalChain, mockTrades, tradesToCsv, tradesToExcelXml } from '../lib/trades'
 
 function toIsoDate(d) {
   if (!d) return ''
@@ -33,6 +33,9 @@ export default function TradesPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [causalData, setCausalData] = useState(null)
+  const [causalLoading, setCausalLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('details') // 'details' or 'causal'
 
   const query = useMemo(
     () => ({
@@ -78,6 +81,26 @@ export default function TradesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  async function handleTradeSelect(trade) {
+    setSelected(trade)
+    setActiveTab('details')
+    setCausalData(null)
+    
+    // 加载因果链数据
+    if (trade.id) {
+      setCausalLoading(true)
+      try {
+        const data = await fetchTradeCausalChain(trade.id)
+        setCausalData(data)
+      } catch (e) {
+        console.error('Failed to load causal chain:', e)
+        setCausalData(null)
+      } finally {
+        setCausalLoading(false)
+      }
+    }
+  }
+
   function toggleSort(next) {
     if (sortBy === next) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -102,104 +125,98 @@ export default function TradesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold">交易明細 (Trades)</div>
-          <div className="mt-1 text-xs text-slate-400">
-            Data source:{' '}
-            <span
-              className={
-                source === 'api'
-                  ? 'rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-300 ring-1 ring-emerald-500/20'
-                  : 'rounded-md bg-slate-800/50 px-2 py-0.5 text-slate-200 ring-1 ring-slate-700'
-              }
-            >
-              {source.toUpperCase()}
-            </span>
-            {error ? <span className="ml-2 text-rose-300">(fallback: {error})</span> : null}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => load()}
-            disabled={loading}
-            className="rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-2 text-sm text-slate-200 shadow-panel transition hover:bg-slate-900 disabled:opacity-50"
-          >
-            {loading ? 'Loading…' : 'Search'}
-          </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-200 shadow-panel transition hover:bg-slate-900"
-          >
-            Export CSV
-          </button>
-          <button
-            type="button"
-            onClick={exportExcel}
-            className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-200 shadow-panel transition hover:bg-slate-900"
-          >
-            Export Excel
-          </button>
-        </div>
+    <div className="p-4 md:p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-slate-100">交易明细</h1>
+        <div className="mt-1 text-sm text-slate-400">查看历史交易记录与决策因果链</div>
       </div>
 
       {/* Filters */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-          <div className="md:col-span-2">
-            <div className="text-xs font-medium text-slate-400">Date start</div>
-            <input
-              type="date"
-              value={dateStart}
-              onChange={(e) => setDateStart(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <div className="text-xs font-medium text-slate-400">Date end</div>
-            <input
-              type="date"
-              value={dateEnd}
-              onChange={(e) => setDateEnd(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </div>
-          <div className="md:col-span-1">
-            <div className="text-xs font-medium text-slate-400">Symbol</div>
+      <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-400">Symbol</div>
             <input
               type="text"
-              placeholder="2330"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/40"
+              placeholder="e.g. 2330"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600"
             />
           </div>
-          <div className="md:col-span-1">
-            <div className="text-xs font-medium text-slate-400">Type</div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-400">Type</div>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/40"
+              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
             >
               <option value="">All</option>
               <option value="buy">Buy</option>
               <option value="sell">Sell</option>
             </select>
           </div>
-          <div className="md:col-span-1">
-            <div className="text-xs font-medium text-slate-400">Status</div>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 outline-none focus:ring-2 focus:ring-emerald-500/40"
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-400">Start date</div>
+            <input
+              type="date"
+              value={dateStart}
+              onChange={(e) => setDateStart(e.target.value)}
+              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-400">End date</div>
+            <input
+              type="date"
+              value={dateEnd}
+              onChange={(e) => setDateEnd(e.target.value)}
+              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => load()}
+              disabled={loading}
+              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900/30 disabled:opacity-50"
             >
-              <option value="">All</option>
-              <option value="filled">Filled</option>
-            </select>
+              {loading ? 'Loading...' : 'Apply filters'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSymbol('')
+                setType('')
+                setDateStart('')
+                setDateEnd('')
+                setStatus('')
+                setTimeout(() => load(), 0)
+              }}
+              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
+            >
+              Clear
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exportCsv}
+              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={exportExcel}
+              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
+            >
+              Excel
+            </button>
           </div>
         </div>
 
@@ -274,7 +291,7 @@ export default function TradesPage() {
                   <tr
                     key={t.id}
                     className="cursor-pointer hover:bg-slate-900/40"
-                    onClick={() => setSelected(t)}
+                    onClick={() => handleTradeSelect(t)}
                   >
                     <td className="px-4 py-3 font-medium text-slate-100">{t.timestamp}</td>
                     <td className="px-4 py-3 text-slate-200">{t.symbol}</td>
@@ -335,12 +352,12 @@ export default function TradesPage() {
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSelected(null)}>
           <div
-            className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-panel"
+            className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-panel"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold">Trade detail</div>
+                <div className="text-sm font-semibold">交易详情 - {selected.symbol}</div>
                 <div className="mt-1 text-xs text-slate-400">{selected.id}</div>
               </div>
               <button
@@ -352,19 +369,130 @@ export default function TradesPage() {
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <Field label="Timestamp" value={selected.timestamp} />
-              <Field label="Symbol" value={selected.symbol} />
-              <Field label="Side" value={String(selected.action).toUpperCase()} />
-              <Field label="Quantity" value={formatNumber(Number(selected.quantity || 0))} />
-              <Field label="Price" value={formatCurrency(Number(selected.price || 0))} />
-              <Field label="Amount" value={formatCurrency(Number(selected.amount ?? 0))} />
-              <Field label="PnL" value={formatCurrency(Number(selected.pnl || 0))} />
-              <Field label="Fee" value={formatCurrency(Number(selected.fee || 0))} />
-              <Field label="Tax" value={formatCurrency(Number(selected.tax || 0))} />
-              <Field label="Status" value={selected.status || 'filled'} />
-              <Field label="Agent" value={selected.agent_id || '-'} />
-              <Field label="Decision" value={selected.decision_id || '-'} />
+            {/* Tabs */}
+            <div className="mt-4 flex border-b border-slate-800">
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium ${activeTab === 'details' ? 'border-b-2 border-emerald-500 text-emerald-300' : 'text-slate-400 hover:text-slate-200'}`}
+                onClick={() => setActiveTab('details')}
+              >
+                交易详情
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium ${activeTab === 'causal' ? 'border-b-2 border-emerald-500 text-emerald-300' : 'text-slate-400 hover:text-slate-200'}`}
+                onClick={() => setActiveTab('causal')}
+              >
+                决策因果链
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="mt-4">
+              {activeTab === 'details' ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <Field label="Timestamp" value={selected.timestamp} />
+                  <Field label="Symbol" value={selected.symbol} />
+                  <Field label="Side" value={String(selected.action).toUpperCase()} />
+                  <Field label="Quantity" value={formatNumber(Number(selected.quantity || 0))} />
+                  <Field label="Price" value={formatCurrency(Number(selected.price || 0))} />
+                  <Field label="Amount" value={formatCurrency(Number(selected.amount ?? 0))} />
+                  <Field label="PnL" value={formatCurrency(Number(selected.pnl || 0))} />
+                  <Field label="Fee" value={formatCurrency(Number(selected.fee || 0))} />
+                  <Field label="Tax" value={formatCurrency(Number(selected.tax || 0))} />
+                  <Field label="Status" value={selected.status || 'filled'} />
+                  <Field label="Agent" value={selected.agent_id || '-'} />
+                  <Field label="Decision" value={selected.decision_id || '-'} />
+                </div>
+              ) : (
+                <div>
+                  {causalLoading ? (
+                    <div className="py-8 text-center text-slate-400">加载决策因果链中...</div>
+                  ) : causalData ? (
+                    <div className="space-y-4">
+                      {/* 决策信息 */}
+                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                        <div className="text-xs font-medium text-slate-400">决策信息</div>
+                        <div className="mt-2 space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm text-slate-300">决策ID:</span>
+                            <span className="text-sm text-slate-200">{causalData.decision.decision_id}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm text-slate-300">信号方向:</span>
+                            <span className={`text-sm font-medium ${causalData.decision.signal_side === 'buy' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                              {causalData.decision.signal_side.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 风控检查 */}
+                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                        <div className="text-xs font-medium text-slate-400">风控检查</div>
+                        <div className="mt-2">
+                          <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${causalData.risk_check.passed ? 'bg-emerald-900/30 text-emerald-300' : 'bg-rose-900/30 text-rose-300'}`}>
+                            {causalData.risk_check.passed ? '✓ 通过' : '✗ 拒绝'}
+                          </div>
+                          {causalData.risk_check.reject_code && (
+                            <div className="mt-2 text-sm text-slate-300">拒绝代码: {causalData.risk_check.reject_code}</div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* LLM Traces */}
+                      {causalData.llm_traces && causalData.llm_traces.length > 0 ? (
+                        <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                          <div className="text-xs font-medium text-slate-400">LLM 决策轨迹</div>
+                          <div className="mt-2 space-y-3">
+                            {causalData.llm_traces.map((trace, index) => (
+                              <div key={index} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-slate-200">{trace.agent}</span>
+                                  {trace.created_at && (
+                                    <span className="text-xs text-slate-500">{new Date(trace.created_at * 1000).toLocaleString()}</span>
+                                  )}
+                                </div>
+                                <div className="mt-2">
+                                  <div className="text-xs text-slate-400">Prompt:</div>
+                                  <div className="mt-1 text-sm text-slate-300 overflow-auto max-h-20">{trace.prompt_text}</div>
+                                </div>
+                                <div className="mt-2">
+                                  <div className="text-xs text-slate-400">Response:</div>
+                                  <div className="mt-1 text-sm text-slate-300 overflow-auto max-h-20">{trace.response_text}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                          <div className="text-center text-sm text-slate-400">无 LLM 决策轨迹记录</div>
+                        </div>
+                      )}
+
+                      {/* 成交信息 */}
+                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
+                        <div className="text-xs font-medium text-slate-400">成交信息</div>
+                        <div className="mt-2 space-y-2">
+                          {causalData.fills.map((fill, index) => (
+                            <div key={index} className="flex justify-between">
+                              <span className="text-sm text-slate-300">成交 #{index + 1}:</span>
+                              <span className="text-sm text-slate-200">
+                                {fill.qty} @ {formatCurrency(fill.price)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-8 text-center text-slate-400">
+                      无法加载决策因果链数据
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

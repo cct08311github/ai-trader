@@ -25,6 +25,7 @@ function Panel({ title, right, children }) {
 
 export default function PortfolioPage() {
   const [positions, setPositions] = useState(mockPositions)
+  const [selectedSymbol, setSelectedSymbol] = useState(null)
   const [source, setSource] = useState('mock')
   const [preferApi, setPreferApi] = useState(true)
   const [error, setError] = useState(null)
@@ -159,6 +160,7 @@ export default function PortfolioPage() {
                 <th className="px-4 py-3">數量</th>
                 <th className="px-4 py-3">未實現損益</th>
                 <th className="px-4 py-3">持倉比例</th>
+                <th className="px-4 py-3">籌碼健康度</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgb(var(--border))]">
@@ -178,14 +180,34 @@ export default function PortfolioPage() {
                       : 'text-rose-600 dark:text-rose-300'
 
                 return (
-                  <tr key={p.symbol} className="hover:bg-[rgb(var(--surface))/0.35]">
+                  <tr key={p.symbol} className="hover:bg-[rgb(var(--surface))/0.35] cursor-pointer" onClick={() => setSelectedSymbol(p.symbol)}>
                     <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">{p.symbol}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
                     <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">                      {p.chipHealthScore ? p.chipHealthScore : "-"}                    </td>                  </tr>
+                    <td className="px-4 py-3">
+                      {p.chipHealthScore != null ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-16 rounded-full bg-gray-800">
+                            <div
+                              className={`h-full rounded-full ${
+                                p.chipHealthScore <= 3 ? 'bg-red-500' : p.chipHealthScore <= 6 ? 'bg-yellow-500' : 'bg-green-500'
+                              }`}
+                              style={{width: `${p.chipHealthScore * 10}%`}}
+                            />
+                          </div>
+                          <span className={`text-xs ${
+                                p.chipHealthScore <= 3 ? 'text-red-400' : p.chipHealthScore <= 6 ? 'text-yellow-400' : 'text-green-400'
+                          }`}>
+                            {p.chipHealthScore}
+                          </span>
+                        </div>
+                      ) : (
+                        '-'
+                      )}
+                    </td>                  </tr>
                 )
               })}
 
@@ -211,3 +233,4 @@ export default function PortfolioPage() {
     </div>
   )
 }
+
