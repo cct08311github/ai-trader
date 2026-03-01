@@ -38,12 +38,12 @@ function RatingCard({ rating, basis }) {
 
   return (
     <div className={`rounded-2xl border ${theme.border} ${theme.bg} p-6 shadow-panel`}>
-      <div className="text-sm font-semibold">今日市場評級</div>
+      <div className="text-sm font-semibold"></div>
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className={`text-6xl font-black tracking-tight ${theme.text}`}>{r || '-'}</div>
-        <div className="text-right text-[11px] text-slate-500">資料源：llm_traces（PM / 今日最新）</div>
+        <div className="text-right text-[11px] text-slate-500">llm_tracesPM / </div>
       </div>
-      <div className={`mt-4 whitespace-pre-wrap break-words text-xs leading-relaxed ${theme.sub}`}>{basis || '(尚無評級依據)'}</div>
+      <div className={`mt-4 whitespace-pre-wrap break-words text-xs leading-relaxed ${theme.sub}`}>{basis || '()'}</div>
     </div>
   )
 }
@@ -59,40 +59,13 @@ function JsonBox({ value }) {
     return JSON.stringify(value, null, 2)
   }, [value])
 
-  if (!text) return <div className="text-xs text-slate-500">(無內容)</div>
+  if (!text) return <div className="text-xs text-slate-500">()</div>
 
   return (
     <pre className="max-h-[55vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200">
       {text}
     </pre>
   )
-}
-
-function EpisodeLinks({ value }) {
-  if (!value) return <div className="text-[11px] text-slate-500">(無 source episodes)</div>
-  if (Array.isArray(value)) {
-    return (
-      <div className="space-y-1">
-        {value.map((ep, idx) => {
-          const o = typeof ep === 'string' ? { title: ep, url: '' } : ep || {}
-          const title = o.title || o.name || o.id || `episode_${idx + 1}`
-          const url = o.url || o.link || o.href || ''
-          return (
-            <div key={idx} className="text-xs">
-              {url ? (
-                <a className="text-sky-300 hover:text-sky-200 underline underline-offset-2" href={url} target="_blank" rel="noreferrer">
-                  {title}
-                </a>
-              ) : (
-                <span className="text-slate-300">{title}</span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    )
-  }
-  return <JsonBox value={value} />
 }
 
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
@@ -105,35 +78,23 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
       <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold">策略提案詳情</div>
+            <div className="text-sm font-semibold"></div>
             <div className="mt-1 text-xs text-slate-400">
               ID: <code className="text-slate-200">{proposal?.proposal_id || '-'}</code>
-              <span className="mx-2">·</span>
+              <span className="mx-2"></span>
               {formatUnixSec(proposal?.created_at) || '-'}
-              <span className="mx-2">·</span>
+              <span className="mx-2"></span>
               <StatusTag status={proposal?.status} />
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
-            >
-              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
-            </button>
-          </div>
-          <div className="mt-4">
-            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}2 text-xs font-medium text-slate-200 hover:bg-slate-700">
-            關閉
+          <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">
+            
           </button>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-200">摘要</div>
+            <div className="text-xs font-semibold text-slate-200"></div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-3 text-xs text-slate-300">
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-slate-500">generated_by</div>
@@ -155,25 +116,53 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
                 onClick={onApprove}
                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-emerald-500"
               >
-                批准 (Approve)
+                 (Approve)
               </button>
               <button
                 disabled={busy || String(proposal?.status || '').toLowerCase() !== 'pending'}
                 onClick={onReject}
                 className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-rose-500"
               >
-                拒絕 (Reject)
+                 (Reject)
               </button>
-              <div className="text-[11px] text-slate-500">狀態非 pending 時，禁止操作。</div>
+              <div className="text-[11px] text-slate-500"> pending </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-200">proposal_json（決策 / 推理 / 風險評估等）</div>
+            <div className="text-xs font-semibold text-slate-200">proposal_json /  / </div>
             <JsonBox value={payload || proposal?.proposal_json} />
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function SemanticMemoryTable({ data, order }) {
+  if (!data || data.length === 0) return <div className="text-xs text-slate-500"></div>
+  return (
+    <div className="overflow-auto rounded-xl border border-slate-800">
+      <table className="w-full text-left text-[11px]">
+        <thead className="bg-slate-950/40 text-slate-400">
+          <tr>
+            <th className="px-3 py-2"></th>
+            <th className="px-3 py-2">Rule ID</th>
+            <th className="px-3 py-2"></th>
+            <th className="px-3 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800">
+          {data.map((m, idx) => (
+            <tr key={m.rule_id || idx} className="hover:bg-slate-950/30">
+              <td className="px-3 py-2 text-slate-300">{(m.confidence * 100).toFixed(0)}%</td>
+              <td className="px-3 py-2 text-slate-200 font-mono">{m.rule_id}</td>
+              <td className="px-3 py-2 text-slate-400 break-words">{m.content_summary || m.content?.slice(0, 100)}</td>
+              <td className="px-3 py-2 text-slate-500">{formatUnixSec(m.updated_at)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -186,7 +175,6 @@ export default function StrategyPage() {
   const [modalOpen, setModalOpen] = useState(false)
 
   const [memOrder, setMemOrder] = useState('desc')
-  const [expandedRuleId, setExpandedRuleId] = useState(null)
 
   // SSE integration: when new llm_traces logs arrive, refresh proposals (debounced).
   useEffect(() => {
@@ -213,7 +201,9 @@ export default function StrategyPage() {
   }, [STREAM_BASE, refreshProposals])
 
   useEffect(() => {
-    refreshSemanticMemory({ sort: 'confidence', order: memOrder, limit: 50 })
+    if (refreshSemanticMemory) {
+      refreshSemanticMemory({ sort: 'confidence', order: memOrder, limit: 50 })
+    }
   }, [memOrder, refreshSemanticMemory])
 
   const rows = useMemo(() => {
@@ -241,7 +231,7 @@ export default function StrategyPage() {
 
   const doApprove = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定要批准 proposal ${p.proposal_id}？`)
+    const ok = window.confirm(` proposal ${p.proposal_id}`)
     if (!ok) return
     await act('approve', p.proposal_id, { actor: 'operator', reason: 'manual approve via UI' })
     setModalOpen(false)
@@ -249,7 +239,7 @@ export default function StrategyPage() {
 
   const doReject = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定要拒絕 proposal ${p.proposal_id}？`)
+    const ok = window.confirm(` proposal ${p.proposal_id}`)
     if (!ok) return
     await act('reject', p.proposal_id, { actor: 'operator', reason: 'manual reject via UI' })
     setModalOpen(false)
@@ -260,36 +250,24 @@ export default function StrategyPage() {
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div className="text-sm font-semibold">策略執行模組</div>
-            <div className="mt-1 text-xs text-slate-400">策略提案（pending/approved/rejected/executed）+ 詳細決策內容（proposal_json）+ SSE 即時刷新。</div>
+            <div className="text-sm font-semibold"></div>
+            <div className="mt-1 text-xs text-slate-400">pending/approved/rejected/executed+ proposal_json+ SSE </div>
           </div>
 
           <div className="flex flex-col items-start gap-2">
-            <div className="text-[11px] text-slate-500">操作驗證：後端需設定 STRATEGY_OPS_TOKEN；前端以 X-OPS-TOKEN 呼叫 approve/reject。</div>
+            <div className="text-[11px] text-slate-500"> STRATEGY_OPS_TOKEN X-OPS-TOKEN  approve/reject</div>
             <div className="flex items-center gap-2">
               <input
                 value={opsToken}
                 onChange={e => saveOpsToken(e.target.value)}
-                placeholder="輸入 ops token（儲存在 localStorage）"
+                placeholder=" ops token localStorage"
                 className="w-72 max-w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500"
               />
               <button
                 onClick={() => saveOpsToken('')}
-                className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
-            >
-              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
-            </button>
-          </div>
-          <div className="mt-4">
-            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}2 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
               >
-                清除
+                
               </button>
             </div>
           </div>
@@ -301,20 +279,20 @@ export default function StrategyPage() {
           <table className="min-w-[980px] w-full text-left text-xs">
             <thead className="bg-slate-950/40 text-slate-400">
               <tr>
-                <th className="px-4 py-3">時間</th>
+                <th className="px-4 py-3"></th>
                 <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">股票</th>
-                <th className="px-4 py-3">方向</th>
-                <th className="px-4 py-3">信心</th>
-                <th className="px-4 py-3">狀態</th>
-                <th className="px-4 py-3">操作</th>
+                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {rows.length === 0 ? (
                 <tr>
                   <td className="px-4 py-5 text-slate-500" colSpan={7}>
-                    {loading.proposals ? '載入中...' : '目前沒有策略提案'}
+                    {loading.proposals ? '...' : ''}
                   </td>
                 </tr>
               ) : (
@@ -361,7 +339,7 @@ export default function StrategyPage() {
           </table>
         </div>
 
-        <div className="mt-3 text-[11px] text-slate-500">提示：點擊提案 ID 可查看 proposal_json；SSE 監聽到新決策日誌（llm_traces）會自動刷新提案列表。</div>
+        <div className="mt-3 text-[11px] text-slate-500"> ID  proposal_jsonSSE llm_traces</div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -370,21 +348,30 @@ export default function StrategyPage() {
         <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel lg:col-span-2">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold">語義記憶庫（semantic_memory）</div>
-              <div className="mt-1 text-xs text-slate-400">點擊列可展開 source episodes。預設依 confidence 排序。</div>
+              <div className="text-sm font-semibold">semantic_memory</div>
+              <div className="mt-1 text-xs text-slate-400"> source episodes confidence </div>
             </div>
             <button
               onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
               className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
             >
-              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
+              {memOrder === "desc" ? " " : " "}
             </button>
           </div>
           <div className="mt-4">
-            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
+            <SemanticMemoryTable data={semanticMemory} order={memOrder} />
           </div>
         </div>
       </div>
+
+      <ProposalModal
+        open={modalOpen}
+        onClose={closeDetail}
+        proposal={selected}
+        busy={loading.act}
+        onApprove={() => doApprove(selected)}
+        onReject={() => doReject(selected)}
+      />
     </div>
-  );
+  )
 }
