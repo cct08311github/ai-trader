@@ -96,6 +96,29 @@ export function createStrategyClient(API_BASE, { opsToken } = {}) {
         { method: 'POST', headers, body: JSON.stringify({ actor, reason }) },
         { retries: 0, timeoutMs: 8000 }
       )
+    },
+    async marketRating({ timeoutMs = 5000 } = {}) {
+      return await callApiWithRetry(
+        `${API_BASE}/market-rating`,
+        { method: 'GET' },
+        { retries: 1, timeoutMs }
+      )
+    },
+    async semanticMemory({ sort = 'confidence', order = 'desc', limit = 50, timeoutMs = 5000 } = {}) {
+      const qs = new URLSearchParams({ sort: String(sort), order: String(order), limit: String(limit) })
+      return await callApiWithRetry(
+        `${API_BASE}/semantic-memory?${qs.toString()}`,
+        { method: 'GET' },
+        { retries: 1, timeoutMs }
+      )
+    },
+    async debates({ date = 'today', timeoutMs = 5000 } = {}) {
+      const qs = new URLSearchParams({ date: String(date) })
+      return await callApiWithRetry(
+        `${API_BASE}/debates?${qs.toString()}`,
+        { method: 'GET' },
+        { retries: 1, timeoutMs }
+      )
     }
   }
 }
@@ -116,7 +139,10 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
   const [proposals, setProposals] = useState([])
   const [logs, setLogs] = useState([])
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState({ proposals: false, logs: false, act: false })
+  const [loading, setLoading] = useState({ proposals: false, logs: false, act: false, marketRating: false, semanticMemory: false, debates: false })
+  const [marketRating, setMarketRating] = useState(null)
+  const [semanticMemory, setSemanticMemory] = useState([])
+  const [debates, setDebates] = useState([])
 
   const mountedRef = useRef(false)
 
@@ -147,12 +173,61 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
     } finally {
       if (mountedRef.current) setLoading(p => ({ ...p, logs: false }))
     }
+  }
+
+  const refreshMarketRating = useCallback(async () => {
+    setLoading(p => ({ ...p, marketRating: true }))
+    try {
+      const res = await client.marketRating()
+      if (!mountedRef.current) return
+      setMarketRating(res?.data || null)
+      setError(null)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(`無法取得市場評級: ${err.message}`)
+    } finally {
+      if (mountedRef.current) setLoading(p => ({ ...p, marketRating: false }))
+    }
   }, [client])
+
+  const refreshSemanticMemory = useCallback(async ({ sort = 'confidence', order = 'desc', limit = 50 } = {}) => {
+    setLoading(p => ({ ...p, semanticMemory: true }))
+    try {
+      const res = await client.semanticMemory({ sort, order, limit })
+      if (!mountedRef.current) return
+      setSemanticMemory(res?.data || [])
+      setError(null)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(`無法取得語義記憶: ${err.message}`)
+    } finally {
+      if (mountedRef.current) setLoading(p => ({ ...p, semanticMemory: false }))
+    }
+  }, [client])
+
+  const refreshDebates = useCallback(async ({ date = 'today' } = {}) => {
+    setLoading(p => ({ ...p, debates: true }))
+    try {
+      const res = await client.debates({ date })
+      if (!mountedRef.current) return
+      setDebates(res?.data || [])
+      setError(null)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setError(`無法取得辯論記錄: ${err.message}`)
+    } finally {
+      if (mountedRef.current) setLoading(p => ({ ...p, debates: false }))
+    }
+  }, [client])
+, [client])
 
   useEffect(() => {
     mountedRef.current = true
     refreshProposals()
     refreshLogs()
+    refreshMarketRating()
+    refreshSemanticMemory()
+    refreshDebates()
     const t = setInterval(() => {
       refreshProposals()
     }, pollMs)
@@ -160,7 +235,7 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       mountedRef.current = false
       clearInterval(t)
     }
-  }, [refreshProposals, refreshLogs, pollMs])
+  }, [refreshProposals, refreshLogs, refreshMarketRating, refreshSemanticMemory, refreshDebates, pollMs])
 
   const saveOpsToken = useCallback(next => {
     const v = String(next || '').trim()
@@ -190,18 +265,22 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       }
     },
     [client, refreshProposals]
-  )
-
-  return {
+  )  return {
     API_BASE,
     opsToken,
     saveOpsToken,
     proposals,
     logs,
+    marketRating,
+    semanticMemory,
+    debates,
     error,
     loading,
     refreshProposals,
     refreshLogs,
+    refreshMarketRating,
+    refreshSemanticMemory,
+    refreshDebates,
     act
   }
 }

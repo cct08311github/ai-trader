@@ -121,3 +121,64 @@ def list_trades(
         items.append(d)
 
     return {"status": "ok", "items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/position-detail/{symbol}")
+def get_position_detail(symbol: str):
+    """
+    获取持倉詳情：進場理由、止損/止盈設定、PM 授權原文、籌碼趨勢歷史。
+    """
+    # 模拟数据
+    return {
+        "status": "ok",
+        "data": {
+            "symbol": symbol,
+            "entry_reason": "基于技术分析和市场情绪入场",
+            "stop_loss": 550.0,
+            "take_profit": 620.0,
+            "pm_authorization": "PM 授权原文：...",
+            "chip_trend": [
+                {"date": "2026-02-25", "institution_buy": 1200, "institution_sell": 800, "score": 7},
+                {"date": "2026-02-26", "institution_buy": 1500, "institution_sell": 600, "score": 8},
+                {"date": "2026-02-27", "institution_buy": 1800, "institution_sell": 900, "score": 6},
+                {"date": "2026-02-28", "institution_buy": 2000, "institution_sell": 1200, "score": 5},
+            ]
+        }
+    }
+
+
+@router.get("/monthly-summary")
+def get_monthly_summary(month: str = "2026-02"):
+    """
+    月度統計摘要：本月成交金額、手續費+稅金淨成本、勝率、平均持倉天數、最大單筆獲利/虧損。
+    """
+    # 模拟数据
+    return {
+        "status": "ok",
+        "data": {
+            "month": month,
+            "total_amount": 1250000.0,
+            "total_fee_tax": 1250.0,
+            "win_rate": 0.65,
+            "avg_holding_days": 5.2,
+            "max_profit": 50000.0,
+            "max_loss": -20000.0
+        }
+    }
+
+
+@router.get("/trade-causal/{trade_id}")
+def get_trade_causal_chain(trade_id: str):
+    """
+    決策因果鏈展開：PM 決策 → Trader 執行 → 成交回報。
+    """
+    # 模拟数据
+    return {
+        "status": "ok",
+        "data": {
+            "decision": {"decision_id": f"dec_{trade_id}", "signal_side": "buy", "reason_json": "{}"},
+            "risk_check": {"passed": True, "reject_code": None},
+            "llm_traces": [{"agent": "PM", "prompt_text": "...", "response_text": "..."}],
+            "fills": [{"fill_id": f"fill_{trade_id}", "qty": 1000, "price": 580.0}]
+        }
+    }

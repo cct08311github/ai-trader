@@ -19,6 +19,7 @@ def _mock_positions() -> List[Dict[str, Any]]:
             "market_value": 62000.0,
             "unrealized_pnl": 2000.0,
             "currency": "TWD",
+            "chip_health_score": 8,  # 0-10 score for chip health
         },
         {
             "account": "SIMULATION",
@@ -30,6 +31,7 @@ def _mock_positions() -> List[Dict[str, Any]]:
             "market_value": 1420.0,
             "unrealized_pnl": 20.0,
             "currency": "TWD",
+            "chip_health_score": 5,
         },
     ]
 
