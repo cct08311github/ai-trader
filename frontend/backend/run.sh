@@ -6,6 +6,13 @@ VENV_PYTHON="/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/py
 # Ensure requirements are met (optional on every start, but safe)
 # $VENV_PYTHON -m pip install -r requirements.txt > /dev/null 2>&1
 
+# Load shared API keys from openclaw root .env (GEMINI_API_KEY etc.)
+if [ -f /Users/openclaw/.openclaw/.env ]; then
+    set -a
+    source /Users/openclaw/.openclaw/.env
+    set +a
+fi
+
 export PYTHONPATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/src:/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend"
 export DB_PATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db"
 
