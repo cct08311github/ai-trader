@@ -281,6 +281,15 @@ export default function StrategyPage() {
   const [modalOpen, setModalOpen] = useState(false)
 
   const [memOrder, setMemOrder] = useState('desc')
+  const [tokenSaved, setTokenSaved] = useState(false)
+
+  function handleSaveToken(v) {
+    saveOpsToken(v)
+    if (v.trim()) {
+      setTokenSaved(true)
+      setTimeout(() => setTokenSaved(false), 2000)
+    }
+  }
 
   // SSE integration: when new llm_traces logs arrive, refresh proposals (debounced).
   useEffect(() => {
@@ -362,19 +371,25 @@ export default function StrategyPage() {
           </div>
 
           <div className="flex flex-col items-start gap-2">
-            <div className="text-[11px] text-slate-500"> STRATEGY_OPS_TOKEN X-OPS-TOKEN  approve/reject</div>
+            <div className="flex items-center gap-2">
+              <div className="text-[11px] text-slate-500">OPS TOKEN（approve/reject 需要）</div>
+              {tokenSaved && <span className="text-[11px] text-emerald-400">✓ 已儲存</span>}
+              {opsToken && !tokenSaved && <span className="text-[11px] text-slate-500">● 已設定</span>}
+            </div>
             <div className="flex items-center gap-2">
               <input
                 value={opsToken}
-                onChange={e => saveOpsToken(e.target.value)}
-                placeholder=" ops token localStorage"
-                className="w-72 max-w-full rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500"
+                onChange={e => handleSaveToken(e.target.value)}
+                placeholder="貼上 STRATEGY_OPS_TOKEN"
+                className={`w-72 max-w-full rounded-lg border px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 bg-slate-950/40 transition-colors ${
+                  tokenSaved ? 'border-emerald-600' : opsToken ? 'border-slate-600' : 'border-slate-800'
+                }`}
               />
               <button
-                onClick={() => saveOpsToken('')}
+                onClick={() => { saveOpsToken(''); setTokenSaved(false) }}
                 className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
               >
-
+                清除
               </button>
             </div>
           </div>
