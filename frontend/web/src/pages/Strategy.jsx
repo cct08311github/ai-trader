@@ -65,21 +65,21 @@ function DebatePanel() {
       .catch(() => setLoading(false))
   }, [date])
 
-  // Parse debate content from episodic memory entries
+  // Parse debate content from episodic_memory (content_json field)
   const parsed = useMemo(() => {
     return debates.map(d => {
-      const content = String(d.content || '')
-      // Try to extract bull/bear/pm sections
-      const bullMatch = content.match(/bull[_\s]?case[:\s]+([^\n]+(?:\n(?!bear|pm)[^\n]+)*)/i)
-      const bearMatch = content.match(/bear[_\s]?case[:\s]+([^\n]+(?:\n(?!bull|pm)[^\n]+)*)/i)
-      const pmMatch = content.match(/pm[_\s]?(?:decision|final|判斷)[:\s]+([^\n]+(?:\n[^\n]+)*)/i)
+      const cj = safeJsonParse(d.content_json || '{}') || {}
+      const approved = cj.approved
       return {
-        id: d.id,
+        id: d.episode_id || d.id,
         timestamp: d.created_at,
-        bull: bullMatch?.[1]?.trim() || null,
-        bear: bearMatch?.[1]?.trim() || null,
-        pm: pmMatch?.[1]?.trim() || null,
-        raw: content
+        bull: cj.bull_case || null,
+        bear: cj.bear_case || null,
+        neutral: cj.neutral_case || null,
+        pm: cj.recommended_action
+          ? `${cj.recommended_action}（信心 ${((cj.confidence || 0) * 100).toFixed(0)}%，${approved ? '✅ 授權' : '🚫 封鎖'}）`
+          : null,
+        summary: d.summary || null,
       }
     })
   }, [debates])
@@ -91,7 +91,7 @@ function DebatePanel() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-slate-200">多空辯論記錄</div>
-          <div className="text-xs text-slate-500 mt-0.5">設計書 §4.3 — 多方 vs 空方 vs PM 最終判斷</div>
+          <div className="text-xs text-slate-500 mt-0.5">每日 PM 審核辯論記錄（來源：Gemini AI）</div>
         </div>
         <input
           type="date"
@@ -104,11 +104,17 @@ function DebatePanel() {
       {loading ? (
         <div className="text-xs text-slate-500 py-6 text-center">載入中…</div>
       ) : parsed.length === 0 ? (
-        <div className="text-xs text-slate-500 py-8 text-center">今日無辯論記錄 (來源：episodic_memory 表 type=debate)</div>
+        <div className="text-xs text-slate-500 py-8 text-center">當日無辯論記錄（按 Portfolio 頁面的「AI 審核」觸發）</div>
       ) : (
         <div className="space-y-4">
           {parsed.map((d, i) => (
             <div key={d.id || i} className="rounded-xl border border-slate-800 overflow-hidden">
+              {d.summary && (
+                <div className="px-4 py-2 bg-slate-950/50 text-[11px] text-slate-400 border-b border-slate-800">
+                  {new Date((d.timestamp || 0) * 1000).toLocaleString('zh-TW', { hour12: false })}
+                  {' — '}{d.summary}
+                </div>
+              )}
               <div className="grid grid-cols-1 divide-y divide-slate-800 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
                 {/* Bull case */}
                 <div className="p-4">
@@ -117,7 +123,7 @@ function DebatePanel() {
                     <span className="text-xs font-semibold text-emerald-300">多方觀點</span>
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    {d.bull || <span className="text-slate-600">（未解析到多方資料）</span>}
+                    {d.bull || <span className="text-slate-600">（無資料）</span>}
                   </p>
                 </div>
                 {/* Bear case */}
@@ -127,7 +133,7 @@ function DebatePanel() {
                     <span className="text-xs font-semibold text-rose-300">空方觀點</span>
                   </div>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    {d.bear || <span className="text-slate-600">（未解析到空方資料）</span>}
+                    {d.bear || <span className="text-slate-600">（無資料）</span>}
                   </p>
                 </div>
                 {/* PM decision */}
@@ -137,13 +143,11 @@ function DebatePanel() {
                     <span className="text-xs font-semibold text-cyan-300">PM 最終判斷</span>
                   </div>
                   <p className="text-xs text-slate-200 leading-relaxed font-medium">
-                    {d.pm || (
-                      <details className="cursor-pointer">
-                        <summary className="text-slate-500">展開原始內容</summary>
-                        <p className="mt-2 whitespace-pre-wrap text-slate-400">{d.raw.slice(0, 300)}</p>
-                      </details>
-                    )}
+                    {d.pm || <span className="text-slate-600">（無資料）</span>}
                   </p>
+                  {d.neutral && (
+                    <p className="mt-2 text-[11px] text-slate-500 leading-relaxed">{d.neutral}</p>
+                  )}
                 </div>
               </div>
             </div>

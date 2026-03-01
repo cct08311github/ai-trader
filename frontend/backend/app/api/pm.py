@@ -62,6 +62,43 @@ def _get_llm_call():
     return None
 
 
+def _write_debate_to_db(state: dict) -> None:
+    """Write PM review result to episodic_memory so Strategy page can display it."""
+    import json, time, uuid
+    if state.get("source") not in ("llm", "manual"):
+        return
+    try:
+        from app.db import get_conn_rw
+        with get_conn_rw() as conn:
+            episode_id = f"pm_review_{state.get('date', 'unknown')}_{uuid.uuid4().hex[:6]}"
+            now = int(time.time())
+            content = {
+                "bull_case":   state.get("bull_case", ""),
+                "bear_case":   state.get("bear_case", ""),
+                "neutral_case": state.get("neutral_case", ""),
+                "consensus_points":  state.get("consensus_points", []),
+                "divergence_points": state.get("divergence_points", []),
+                "recommended_action": state.get("recommended_action", ""),
+                "confidence":  state.get("confidence", 0),
+                "approved":    state.get("approved", False),
+                "source":      state.get("source", ""),
+            }
+            conn.execute(
+                """INSERT OR REPLACE INTO episodic_memory
+                   (episode_id, episode_type, summary, content_json, decay_score,
+                    is_archived, created_at, updated_at)
+                   VALUES (?, 'pm_review', ?, ?, 1.0, 0, ?, ?)""",
+                (
+                    episode_id,
+                    state.get("reason", "")[:500],
+                    json.dumps(content, ensure_ascii=False),
+                    now, now,
+                )
+            )
+    except Exception:
+        pass  # Never fail the API response over logging
+
+
 @router.post("/review")
 def pm_review():
     """Trigger LLM-based daily review via Gemini.
@@ -80,4 +117,8 @@ def pm_review():
     model = os.environ.get("PM_LLM_MODEL", "gemini-3.1-pro-preview")
     llm_call = _get_llm_call()
     state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)
+
+    # Persist to episodic_memory so Strategy page debate section shows history
+    _write_debate_to_db(state)
+
     return {"status": "ok", "data": state}

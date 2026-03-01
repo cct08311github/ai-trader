@@ -291,22 +291,27 @@ def get_debates(
     date: str = "today",
     conn: sqlite3.Connection = Depends(conn_dep),
 ):
-    """Return AI debate records from episodic_memory."""
+    """Return AI debate records from episodic_memory (episode_type='pm_review')."""
     try:
+        from datetime import date as _date, datetime, timezone
         if date == "today":
-            from datetime import date as _date
             date_str = _date.today().isoformat()
         else:
             date_str = date
 
+        # created_at is Unix integer — compute day range
+        day_start = int(datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc).timestamp())
+        day_end = day_start + 86400
+
         rows = conn.execute(
             """
-            SELECT * FROM episodic_memory
-            WHERE (content LIKE '%debate%' OR content LIKE '%辯論%' OR content LIKE '%bull%' OR content LIKE '%bear%')
-              AND created_at LIKE ?
+            SELECT episode_id, episode_type, summary, content_json, created_at
+            FROM episodic_memory
+            WHERE episode_type = 'pm_review'
+              AND created_at >= ? AND created_at < ?
             ORDER BY created_at DESC LIMIT 50
             """,
-            (f"{date_str}%",)
+            (day_start, day_end)
         ).fetchall()
         data = [dict(r) for r in rows]
         return {"status": "ok", "data": data, "date": date_str, "total": len(data)}
