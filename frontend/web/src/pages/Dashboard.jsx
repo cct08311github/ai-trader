@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import KpiCard from '../components/KpiCard'
+import PmStatusCard from '../components/PmStatusCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import {
   buildAllocationData,
@@ -75,6 +76,9 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Daily PM approval status — must be checked every morning before market open */}
+      <PmStatusCard />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm font-semibold">儀表板總覽 (Dashboard)</div>

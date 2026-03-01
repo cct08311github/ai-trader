@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.auth import router as auth_router
 from app.api.control import router as control_router
+from app.api.pm import router as pm_router
 from app.api.portfolio import router as portfolio_router
 from app.api.settings import router as settings_router
 from app.api.strategy import router as strategy_router
@@ -79,6 +80,7 @@ def health_check():
 # Routers
 app.include_router(auth_router)
 app.include_router(control_router)
+app.include_router(pm_router)
 app.include_router(settings_router)
 app.include_router(strategy_router)
 app.include_router(portfolio_router)

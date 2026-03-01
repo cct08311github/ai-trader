@@ -20,6 +20,20 @@ def _is_symbol_locked(symbol: str) -> bool:
         return False
 
 
+_DAILY_PM_PATH = os.path.join(os.path.dirname(__file__), "../../config/daily_pm_state.json")
+
+
+def _get_daily_pm_approval() -> bool:
+    """Check today's PM approval. Fails safe: returns False (blocked) on error."""
+    try:
+        from datetime import date
+        with open(_DAILY_PM_PATH, "r") as f:
+            state = json.load(f)
+        return state.get("date") == date.today().isoformat() and bool(state.get("approved", False))
+    except Exception:
+        return False
+
+
 @dataclass
 class Decision:
     decision_id: str
@@ -196,11 +210,14 @@ def evaluate_and_build_order(
 
     base_metrics = _metrics(decision, market, portfolio, system_state)
 
-    # LOCK PROTECTION — must be the first check after base_metrics.
-    # Hard-blocks any sell order on a locked symbol.
-    # This runs in every execution path, regardless of which pipeline is used.
+    # LOCK PROTECTION — hard-blocks sell on locked symbols.
     if decision.signal_side == "sell" and _is_symbol_locked(decision.symbol):
         return EvaluationResult(False, "RISK_SYMBOL_LOCKED", metrics=base_metrics)
+
+    # DAILY PM APPROVAL — blocks all trading if today's review not approved.
+    # Bypass with limits["pm_review_required"] = 0 (e.g. simulation / backtest).
+    if int(limits.get("pm_review_required", 1)) and not _get_daily_pm_approval():
+        return EvaluationResult(False, "RISK_PM_NOT_APPROVED", metrics=base_metrics)
 
     # Apply Taiwan session‑based risk multipliers
     limits = apply_tw_session_risk_adjustments(
