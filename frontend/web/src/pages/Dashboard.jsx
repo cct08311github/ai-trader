@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
-import PnlLineChart from '../components/charts/PnlLineChart'
 import {
   buildAllocationData,
   buildMockEquitySeries,
@@ -23,7 +23,7 @@ function Panel({ title, right, children }) {
   )
 }
 
-export default function PortfolioPage() {
+export default function DashboardPage() {
   const [positions, setPositions] = useState(mockPositions)
   const [source, setSource] = useState('mock')
   const [preferApi, setPreferApi] = useState(true)
@@ -77,7 +77,7 @@ export default function PortfolioPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-sm font-semibold">庫存總覽 (Portfolio)</div>
+          <div className="text-sm font-semibold">儀表板總覽 (Dashboard)</div>
           <div className="mt-1 text-xs text-[rgb(var(--muted))]">
             Data source:{' '}
             <span
@@ -127,86 +127,84 @@ export default function PortfolioPage() {
           subtext="(mock) annualized"
           tone={kpis.sharpe != null && kpis.sharpe >= 1 ? 'good' : 'neutral'}
         />
+        <KpiCard title="風險評級" value="B+" subtext="Medium risk" />
+        <KpiCard title="API 配額" value="87%" subtext="87/100 requests" />
+        <KpiCard title="持倉數" value={positions.length} subtext="active positions" />
+        <KpiCard title="總槓桿" value="1.2x" subtext="Low leverage" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="資產分配" right={allocation.length ? `${allocation.length} symbols` : 'No data'}>
+        <Panel title="持倉總覽" right={`${positions.length} positions`}>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="text-xs uppercase tracking-wider text-[rgb(var(--muted))]">
+                <tr>
+                  <th className="px-4 py-3">代碼</th>
+                  <th className="px-4 py-3">成本</th>
+                  <th className="px-4 py-3">現價</th>
+                  <th className="px-4 py-3">數量</th>
+                  <th className="px-4 py-3">未實現損益</th>
+                  <th className="px-4 py-3">持倉比例</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgb(var(--border))]">
+                {positions.slice(0, 5).map((p) => {
+                  const qty = Number(p.qty || 0)
+                  const last = Number(p.lastPrice || 0)
+                  const avg = Number(p.avgCost)
+                  const mv = qty * last
+                  const weight = total > 0 ? mv / total : 0
+                  const unreal = Number.isFinite(avg) ? (last - avg) * qty : null
+
+                  const pnlTone =
+                    unreal == null
+                      ? 'text-[rgb(var(--muted))]'
+                      : unreal >= 0
+                        ? 'text-emerald-600 dark:text-emerald-300'
+                        : 'text-rose-600 dark:text-rose-300'
+
+                  return (
+                    <tr key={p.symbol} className="hover:bg-[rgb(var(--surface))/0.35]">
+                      <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">{p.symbol}</td>
+                      <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
+                      <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
+                      <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
+                      <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
+                      <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
+                    </tr>
+                  )
+                })}
+
+                {positions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
+                      No positions.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          {positions.length > 5 && (
+            <div className="mt-4 text-center">
+              <Link to="/portfolio" className="text-xs text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]">
+                View all {positions.length} positions →
+              </Link>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="板塊分佈" right={allocation.length ? `${allocation.length} symbols` : 'No data'}>
           {allocation.length ? (
             <AllocationDonut data={allocation} />
           ) : (
             <div className="py-16 text-center text-sm text-[rgb(var(--muted))]">No allocation data.</div>
           )}
         </Panel>
-
-        <Panel title="損益趨勢" right="Equity curve (mock)">
-          <PnlLineChart data={equitySeries} />
-        </Panel>
       </div>
 
-      <section className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.2] shadow-panel">
-        <div className="flex items-center justify-between border-b border-[rgb(var(--border))] px-4 py-3">
-          <div className="text-sm font-semibold">持倉列表</div>
-          <div className="text-xs text-[rgb(var(--muted))]">{positions.length} positions</div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-[rgb(var(--muted))]">
-              <tr>
-                <th className="px-4 py-3">代碼</th>
-                <th className="px-4 py-3">成本</th>
-                <th className="px-4 py-3">現價</th>
-                <th className="px-4 py-3">數量</th>
-                <th className="px-4 py-3">未實現損益</th>
-                <th className="px-4 py-3">持倉比例</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[rgb(var(--border))]">
-              {positions.map((p) => {
-                const qty = Number(p.qty || 0)
-                const last = Number(p.lastPrice || 0)
-                const avg = Number(p.avgCost)
-                const mv = qty * last
-                const weight = total > 0 ? mv / total : 0
-                const unreal = Number.isFinite(avg) ? (last - avg) * qty : null
-
-                const pnlTone =
-                  unreal == null
-                    ? 'text-[rgb(var(--muted))]'
-                    : unreal >= 0
-                      ? 'text-emerald-600 dark:text-emerald-300'
-                      : 'text-rose-600 dark:text-rose-300'
-
-                return (
-                  <tr key={p.symbol} className="hover:bg-[rgb(var(--surface))/0.35]">
-                    <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">{p.symbol}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
-                    <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">                      {p.chipHealthScore ? p.chipHealthScore : "-"}                    </td>                  </tr>
-                )
-              })}
-
-              {positions.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
-                    No positions.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border-t border-[rgb(var(--border))] px-4 py-3 text-xs text-[rgb(var(--muted))]">
-          Notes: 未實現損益需提供 avgCost；此頁面包含 mock equity curve（之後可替換為真實 PnL API）。
-        </div>
-      </section>
-
       <div className="sr-only" aria-live="polite">
-        {loading ? 'Loading portfolio data' : `Portfolio data loaded from ${source}`}
+        {loading ? 'Loading dashboard data' : `Dashboard data loaded from ${source}`}
       </div>
     </div>
   )

@@ -1,0 +1,350 @@
+from __future__ import annotations
+
+from openclaw.take_profit import (
+    TakeProfitPolicy, 
+    TakeProfitState, 
+    evaluate_take_profit,
+    MarketMetrics,
+    ExitReason
+)
+
+
+def test_basic_target_price_partial_exit():
+    """Test basic target price partial exit functionality."""
+    policy = TakeProfitPolicy(
+        base_target_rr=2.0,
+        base_exit_fraction=0.5,
+        base_trailing_stop_pct=0.10,
+        base_max_hold_ms=999999
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+
+    # Target price: entry + (100-95)*2 = 110
+    d1 = evaluate_take_profit(
+        state=state, 
+        last_price=111.0, 
+        now_ms=10, 
+        policy=policy
+    )
+    
+    assert d1.action == "exit"
+    assert d1.reason == ExitReason.TARGET_PRICE
+    assert d1.qty_to_exit == 5  # 10 * 0.5 = 5
+    assert state.remaining_qty == 5
+    assert state.target_taken == True
+
+
+def test_trailing_stop_exit_after_target():
+    """Test trailing stop exit after target price has been hit."""
+    policy = TakeProfitPolicy(
+        base_target_rr=2.0,
+        base_exit_fraction=0.5,
+        base_trailing_stop_pct=0.10,
+        base_max_hold_ms=999999
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+
+    # First, hit target price
+    d1 = evaluate_take_profit(
+        state=state, 
+        last_price=111.0, 
+        now_ms=10, 
+        policy=policy
+    )
+    assert d1.action == "exit"
+    assert d1.reason == ExitReason.TARGET_PRICE
+    assert state.remaining_qty == 5
+
+    # Price keeps rising -> update peak to 120
+    d_hold = evaluate_take_profit(
+        state=state, 
+        last_price=120.0, 
+        now_ms=20, 
+        policy=policy
+    )
+    assert d_hold.action == "hold"
+    assert state.peak_price == 120.0
+
+    # Trailing stop for peak=120, pct=10% => 108
+    d2 = evaluate_take_profit(
+        state=state, 
+        last_price=107.0, 
+        now_ms=30, 
+        policy=policy
+    )
+    assert d2.action == "exit"
+    assert d2.reason == ExitReason.TRAILING_STOP
+    assert d2.qty_to_exit == 5
+    assert state.remaining_qty == 0
+
+
+def test_time_decay_exit():
+    """Test time decay exit when held too long."""
+    policy = TakeProfitPolicy(
+        base_target_rr=10.0,
+        base_trailing_stop_pct=0.50,
+        base_max_hold_ms=1000,
+        time_decay_profit_floor_pct=0.0
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=3,
+        initial_stop_price=90.0,
+    )
+
+    d = evaluate_take_profit(
+        state=state, 
+        last_price=100.0, 
+        now_ms=1500, 
+        policy=policy
+    )
+    
+    assert d.action == "exit"
+    assert d.reason == ExitReason.TIME_DECAY
+    assert d.qty_to_exit == 3
+    assert state.remaining_qty == 0
+
+
+def test_dynamic_parameters_with_market_metrics():
+    """Test dynamic parameter adjustment with market metrics."""
+    policy = TakeProfitPolicy(
+        base_target_rr=2.0,
+        base_exit_fraction=0.5,
+        base_trailing_stop_pct=0.01,
+        volatility_adjustment_factor=1.0
+    )
+    
+    # High volatility metrics
+    metrics = MarketMetrics(
+        atr=2.0,
+        atr_percent=0.02,  # 2%
+        rsi=60.0,
+        volume_ratio=1.5,
+        volume_trend="increasing",
+        volatility_regime="high"
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+    
+    # Calculate dynamic parameters
+    dynamic_params = policy.calculate_dynamic_parameters(
+        metrics, state.side, portfolio_drawdown=0.0
+    )
+    
+    # In high volatility, target RR should increase
+    assert dynamic_params["target_rr"] > policy.base_target_rr
+    # Trailing stop should be wider
+    assert dynamic_params["trailing_stop_pct"] > policy.base_trailing_stop_pct
+    # Max hold time should be shorter
+    assert dynamic_params["max_hold_ms"] < policy.base_max_hold_ms
+
+
+def test_rsi_extreme_exit():
+    """Test exit due to RSI extreme."""
+    policy = TakeProfitPolicy(
+        rsi_extreme_threshold=80.0
+    )
+    
+    # Overbought RSI
+    metrics = MarketMetrics(
+        rsi=85.0,
+        bb_width=0.1
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+    
+    d = evaluate_take_profit(
+        state=state,
+        last_price=105.0,
+        now_ms=100,
+        policy=policy,
+        market_metrics=metrics
+    )
+    
+    assert d.action == "exit"
+    assert d.reason == ExitReason.RSI_EXTREME
+    assert d.qty_to_exit == 10
+
+
+def test_bollinger_band_exit():
+    """Test exit when price reaches Bollinger Band threshold."""
+    policy = TakeProfitPolicy(
+        bb_exit_threshold=0.85
+    )
+    
+    metrics = MarketMetrics(
+        rsi=50.0,
+        bb_width=0.15  # 15% width
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+    
+    # Price moved 13% (85% of 15% BB width = 12.75%)
+    d = evaluate_take_profit(
+        state=state,
+        last_price=113.0,  # 13% move
+        now_ms=100,
+        policy=policy,
+        market_metrics=metrics
+    )
+    
+    assert d.action == "exit"
+    assert d.reason == ExitReason.BOLLINGER_BAND
+    assert d.qty_to_exit == 10
+
+
+def test_momentum_decay_exit():
+    """Test exit due to momentum decay."""
+    policy = TakeProfitPolicy(
+        momentum_decay_threshold=0.3
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+    
+    # First, price goes up to 110 (10% profit)
+    state.update_extremes(110.0)
+    assert state.max_profit_pct == 0.10
+    
+    # Then price drops to 107 (7% profit, 30% decay from peak)
+    d = evaluate_take_profit(
+        state=state,
+        last_price=107.0,  # 7% profit
+        now_ms=100,
+        policy=policy
+    )
+    
+    # Decay = (10% - 7%) / 10% = 30%
+    assert d.action == "exit"
+    assert d.reason == ExitReason.VOLATILITY_BREAKOUT
+    assert d.qty_to_exit == 10
+
+
+def test_drawdown_protection():
+    """Test tighter stops during portfolio drawdown."""
+    policy = TakeProfitPolicy(
+        base_trailing_stop_pct=0.01,
+        drawdown_protection=True
+    )
+    
+    metrics = MarketMetrics(
+        rsi=50.0,
+        volatility_regime="normal"
+    )
+    
+    state = TakeProfitState(
+        entry_ts_ms=0,
+        entry_price=100.0,
+        side="long",
+        qty=10,
+        initial_stop_price=95.0,
+    )
+    
+    # With 5% portfolio drawdown
+    dynamic_params = policy.calculate_dynamic_parameters(
+        metrics, state.side, portfolio_drawdown=0.05
+    )
+    
+    # Trailing stop should be tighter during drawdown
+    assert dynamic_params["trailing_stop_pct"] > policy.base_trailing_stop_pct
+    assert dynamic_params["drawdown_factor"] == 1.3
+
+
+def test_integration_with_risk_engine():
+    """Test integration with risk engine."""
+    from openclaw.take_profit import integrate_with_risk_engine
+    
+    # Create a take profit decision
+    decision = TakeProfitDecision(
+        action="exit",
+        qty_to_exit=5,
+        reason=ExitReason.TARGET_PRICE,
+        target_price=110.0,
+        trailing_stop=108.0
+    )
+    
+    # Simulate risk engine state with drawdown
+    risk_state = {
+        "drawdown_active": True,
+        "high_correlation": False,
+        "current_drawdown": 0.03
+    }
+    
+    integration = integrate_with_risk_engine(decision, risk_state)
+    
+    assert integration["combined_action"] == "exit"
+    assert integration["take_profit_decision"]["action"] == "exit"
+    assert integration["risk_adjustment"]["tightened_stops"] == True
+    assert integration["risk_adjustment"]["reason"] == "portfolio_drawdown"
+
+
+if __name__ == "__main__":
+    # Run all tests
+    test_basic_target_price_partial_exit()
+    print("✓ test_basic_target_price_partial_exit passed")
+    
+    test_trailing_stop_exit_after_target()
+    print("✓ test_trailing_stop_exit_after_target passed")
+    
+    test_time_decay_exit()
+    print("✓ test_time_decay_exit passed")
+    
+    test_dynamic_parameters_with_market_metrics()
+    print("✓ test_dynamic_parameters_with_market_metrics passed")
+    
+    test_rsi_extreme_exit()
+    print("✓ test_rsi_extreme_exit passed")
+    
+    test_bollinger_band_exit()
+    print("✓ test_bollinger_band_exit passed")
+    
+    test_momentum_decay_exit()
+    print("✓ test_momentum_decay_exit passed")
+    
+    test_drawdown_protection()
+    print("✓ test_drawdown_protection passed")
+    
+    test_integration_with_risk_engine()
+    print("✓ test_integration_with_risk_engine passed")
+    
+    print("\n✅ All tests passed!")

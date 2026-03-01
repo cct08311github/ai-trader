@@ -114,7 +114,19 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
               <StatusTag status={proposal?.status} />
             </div>
           </div>
-          <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">
+          <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
+            >
+              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
+            </button>
+          </div>
+          <div className="mt-4">
+            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}2 text-xs font-medium text-slate-200 hover:bg-slate-700">
             關閉
           </button>
         </div>
@@ -263,7 +275,19 @@ export default function StrategyPage() {
               />
               <button
                 onClick={() => saveOpsToken('')}
-                className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
+            >
+              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
+            </button>
+          </div>
+          <div className="mt-4">
+            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}2 text-xs font-medium text-slate-200 hover:bg-slate-700"
               >
                 清除
               </button>
@@ -351,4 +375,16 @@ export default function StrategyPage() {
             </div>
             <button
               onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
-              className="rounded-lg bg-slate-800 px-3 py-
+              className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
+            >
+              {memOrder === "desc" ? "↑ 高信心優先" : "↓ 低信心優先"}
+            </button>
+          </div>
+          <div className="mt-4">
+            <SemanticMemoryTable data={semanticMemories} order={memOrder} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

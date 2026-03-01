@@ -1,0 +1,313 @@
+import React, { useState, useEffect } from 'react'
+import ControlPanel from '../components/ControlPanel'
+import LogTerminal from '../components/LogTerminal'
+
+export default function SystemPage() {
+  const [healthData, setHealthData] = useState(null)
+  const [quotaData, setQuotaData] = useState(null)
+  const [riskData, setRiskData] = useState(null)
+  const [eventsData, setEventsData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [lastUpdate, setLastUpdate] = useState(null)
+
+  const fetchSystemData = async () => {
+    try {
+      const [healthRes, quotaRes, riskRes, eventsRes] = await Promise.all([
+        fetch('/api/system/health'),
+        fetch('/api/system/quota'),
+        fetch('/api/system/risk'),
+        fetch('/api/system/events')
+      ])
+
+      if (healthRes.ok) setHealthData(await healthRes.json())
+      if (quotaRes.ok) setQuotaData(await quotaRes.json())
+      if (riskRes.ok) setRiskData(await riskRes.json())
+      if (eventsRes.ok) setEventsData(await eventsRes.json())
+      
+      setLastUpdate(new Date())
+    } catch (error) {
+      console.error('Failed to fetch system data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchSystemData()
+    const interval = setInterval(fetchSystemData, 10000) // Update every 10 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'online': return 'bg-emerald-400'
+      case 'healthy': return 'bg-emerald-400'
+      case 'simulation': return 'bg-amber-400'
+      case 'offline': return 'bg-red-400'
+      case 'unhealthy': return 'bg-red-400'
+      default: return 'bg-slate-400'
+    }
+  }
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'online': return '在線'
+      case 'healthy': return '正常'
+      case 'simulation': return '模擬模式'
+      case 'offline': return '離線'
+      case 'unhealthy': return '異常'
+      default: return '未知'
+    }
+  }
+
+  const getQuotaColor = (percent) => {
+    if (percent > 80) return 'bg-red-500'
+    if (percent > 60) return 'bg-amber-500'
+    return 'bg-emerald-500'
+  }
+
+  const getResourceColor = (percent) => {
+    if (percent > 80) return 'bg-red-500'
+    if (percent > 60) return 'bg-amber-500'
+    return 'bg-emerald-500'
+  }
+
+  const getRiskColor = (remainingPercent) => {
+    if (remainingPercent < 20) return 'bg-red-500'
+    if (remainingPercent < 40) return 'bg-amber-500'
+    return 'bg-emerald-500'
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-sm font-semibold">系統監控與控制</div>
+        <div className="mt-1 text-xs text-slate-400">
+          主開關、緊急停止、模擬/實際盤切換。風險控制是第一優先。
+          {lastUpdate && (
+            <span className="ml-2">最後更新: {lastUpdate.toLocaleTimeString()}</span>
+          )}
+        </div>
+      </div>
+
+      <ControlPanel />
+
+      <LogTerminal />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 系統健康狀態 */}
+        <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+          <div className="text-sm font-semibold">系統健康狀態</div>
+          <div className="mt-4 space-y-4">
+            {loading ? (
+              <div className="text-sm text-slate-400">載入中...</div>
+            ) : healthData ? (
+              <>
+                {/* Service Status */}
+                {healthData.services && Object.entries(healthData.services).map(([service, data]) => (
+                  <div key={service} className="flex items-center justify-between">
+                    <div className="text-sm text-slate-300 capitalize">{service}</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block h-2 w-2 rounded-full ${getStatusColor(data.status)}`}></span>
+                      <span className="text-xs">{getStatusText(data.status)}</span>
+                      {data.latency_ms && (
+                        <span className="text-xs text-slate-500">{data.latency_ms}ms</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* System Resources */}
+                {healthData.resources && (
+                  <div className="mt-6 space-y-3">
+                    <div className="text-sm font-medium text-slate-300">系統資源</div>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between text-xs text-slate-400 mb-1">
+                          <span>CPU 使用率</span>
+                          <span>{healthData.resources.cpu_percent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${getResourceColor(healthData.resources.cpu_percent)}`}
+                            style={{ width: `${Math.min(healthData.resources.cpu_percent, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-slate-400 mb-1">
+                          <span>記憶體使用率</span>
+                          <span>{healthData.resources.memory_percent}%</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${getResourceColor(healthData.resources.memory_percent)}`}
+                            style={{ width: `${Math.min(healthData.resources.memory_percent, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex justify-between text-xs text-slate-400 mb-1">
+                          <span>磁碟使用</span>
+                          <span>{healthData.resources.disk_used_gb} / {healthData.resources.disk_total_gb} GB</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${getResourceColor((healthData.resources.disk_used_gb / healthData.resources.disk_total_gb) * 100)}`}
+                            style={{ width: `${Math.min((healthData.resources.disk_used_gb / healthData.resources.disk_total_gb) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-red-400">無法載入健康狀態數據</div>
+            )}
+          </div>
+        </div>
+
+        {/* API 配額與風控 */}
+        <div className="space-y-6">
+          {/* API 配額 */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+            <div className="text-sm font-semibold">API 配額使用</div>
+            <div className="mt-4">
+              {loading ? (
+                <div className="text-sm text-slate-400">載入中...</div>
+              ) : quotaData ? (
+                <>
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="text-xs text-slate-400">{quotaData.month}</div>
+                    <div className="text-xs font-medium">{quotaData.used_percent}%</div>
+                  </div>
+                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden mb-2">
+                    <div 
+                      className={`h-full ${getQuotaColor(quotaData.used_percent)}`}
+                      style={{ width: `${Math.min(quotaData.used_percent, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-400">
+                    <span>{quotaData.used_twd.toFixed(1)} TWD</span>
+                    <span>{quotaData.budget_twd.toFixed(1)} TWD</span>
+                  </div>
+                  <div className={`mt-2 text-xs ${quotaData.used_percent > 80 ? 'text-red-400' : quotaData.used_percent > 60 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {quotaData.status === 'ok' ? '狀態正常' : '需要關注'}
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-red-400">無法載入配額數據</div>
+              )}
+            </div>
+          </div>
+
+          {/* 風控狀態 */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+            <div className="text-sm font-semibold">風控狀態</div>
+            <div className="mt-4">
+              {loading ? (
+                <div className="text-sm text-slate-400">載入中...</div>
+              ) : riskData ? (
+                <>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>本月回撤空間</span>
+                        <span>{(riskData.drawdown_remaining_pct * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${getRiskColor(riskData.drawdown_remaining_pct * 100)}`}
+                          style={{ width: `${Math.min(riskData.drawdown_remaining_pct * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        限制: {(riskData.monthly_drawdown_limit_pct * 100).toFixed(1)}% | 已用: {(riskData.monthly_drawdown_pct * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <div className="text-slate-400">今日損益</div>
+                        <div className={riskData.today_realized_pnl >= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                          {riskData.today_realized_pnl >= 0 ? '+' : ''}{riskData.today_realized_pnl} TWD
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-slate-400">連虧天數</div>
+                        <div className="text-slate-300">{riskData.losing_streak_days} 天</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      風控模式: <span className="text-slate-300">{riskData.risk_mode}</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-red-400">無法載入風控數據</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 事件時間軸 */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+        <div className="text-sm font-semibold">系統事件時間軸</div>
+        <div className="mt-4">
+          {loading ? (
+            <div className="text-sm text-slate-400">載入中...</div>
+          ) : eventsData && eventsData.events && eventsData.events.length > 0 ? (
+            <div className="space-y-3">
+              {eventsData.events.map((event, index) => (
+                <div key={index} className="flex items-start gap-3">
+                  <div className={`h-2 w-2 rounded-full mt-1.5 ${
+                    event.severity === 'error' ? 'bg-red-400' :
+                    event.severity === 'warning' ? 'bg-amber-400' :
+                    'bg-emerald-400'
+                  }`}></div>
+                  <div className="flex-1">
+                    <div className="flex justify-between">
+                      <div className="text-sm text-slate-300">{event.code}</div>
+                      <div className="text-xs text-slate-500">
+                        {new Date(event.ts).toLocaleTimeString()}
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {event.source} • {event.detail}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400">暫無系統事件</div>
+          )}
+        </div>
+      </div>
+
+      {/* 版本資訊 */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+        <div className="text-sm font-semibold">系統版本資訊</div>
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          <div className="space-y-1">
+            <div className="text-slate-400">前端版本</div>
+            <div className="text-slate-300">v1.0.0 (Sprint 1)</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-slate-400">後端版本</div>
+            <div className="text-slate-300">v4.0.0</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-slate-400">最後部署</div>
+            <div className="text-slate-300">2026-02-28 19:15</div>
+          </div>
+          <div className="space-y-1">
+            <div className="text-slate-400">開發模式</div>
+            <div className="text-slate-300">24/7 極限開發</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

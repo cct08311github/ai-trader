@@ -1,0 +1,11 @@
+
+> ai-trader-dashboard@0.0.0 dev
+> vite --port 3002 --host
+
+
+  VITE v4.5.14  ready in 98 ms
+
+  ➜  Local:   http://localhost:3002/
+  ➜  Network: http://192.168.0.198:3002/
+  ➜  Network: http://100.109.189.69:3002/
+  ➜  Network: http://192.168.64.1:3002/

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trader - Inventory Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            color: #38bdf8;
+            margin-bottom: 10px;
+        }
+        .screenshot {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #334155;
+        }
+        .screenshot h2 {
+            color: #cbd5e1;
+            margin-top: 0;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #334155;
+        }
+        .card h3 {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-top: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .card .value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .card.good .value { color: #4ade80; }
+        .card.warning .value { color: #fbbf24; }
+        .card.bad .value { color: #f87171; }
+        .card .subtext {
+            color: #64748b;
+            font-size: 12px;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .table th {
+            text-align: left;
+            padding: 12px;
+            background: #334155;
+            color: #cbd5e1;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid #334155;
+        }
+        .table tr:hover {
+            background: #2d3748;
+        }
+        .status-normal { color: #4ade80; }
+        .status-low { color: #fbbf24; }
+        .status-out { color: #f87171; }
+        .chart-bar {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .chart-label {
+            width: 100px;
+            font-size: 14px;
+        }
+        .chart-bar-inner {
+            flex: 1;
+            height: 20px;
+            background: #334155;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .chart-bar-fill {
+            height: 100%;
+            background: #38bdf8;
+            border-radius: 4px;
+        }
+        .note {
+            background: #1e293b;
+            border-left: 4px solid #38bdf8;
+            padding: 15px;
+            margin-top: 30px;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>AI Trader - Inventory Dashboard</h1>
+            <p>React + Vite 儀表板骨架與庫存總覽 UI</p>
+        </div>
+
+        <div class="screenshot">
+            <h2>庫存總覽 Dashboard</h2>
+            
+            <div class="grid">
+                <div class="card">
+                    <h3>總庫存項目</h3>
+                    <div class="value">10</div>
+                    <div class="subtext">Total inventory items</div>
+                </div>
+                <div class="card">
+                    <h3>總庫存價值</h3>
+                    <div class="value">$304,875.00</div>
+                    <div class="subtext">Total inventory value</div>
+                </div>
+                <div class="card warning">
+                    <h3>低庫存項目</h3>
+                    <div class="value">2</div>
+                    <div class="subtext">Items with low stock</div>
+                </div>
+                <div class="card bad">
+                    <h3>缺貨項目</h3>
+                    <div class="value">1</div>
+                    <div class="subtext">Out of stock items</div>
+                </div>
+            </div>
+
+            <h3>庫存價值分布</h3>
+            <div class="chart-bar">
+                <div class="chart-label">Microsoft Corp.</div>
+                <div class="chart-bar-inner">
+                    <div class="chart-bar-fill" style="width: 27%"></div>
+                </div>
+                <div style="width: 80px; text-align: right;">$83,040.00</div>
+            </div>
+            <div class="chart-bar">
+                <div class="chart-label">NVIDIA Corp.</div>
+                <div class="chart-bar-inner">
+                    <div class="chart-bar-fill" style="width: 16%"></div>
+                </div>
+                <div style="width: 80px; text-align: right;">$47,540.00</div>
+            </div>
+            <div class="chart-bar">
+                <div class="chart-label">Visa Inc.</div>
+                <div class="chart-bar-inner">
+                    <div class="chart-bar-fill" style="width: 16%"></div>
+                </div>
+                <div style="width: 80px; text-align: right;">$49,608.00</div>
+            </div>
+
+            <h3>詳細庫存列表</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>商品代碼</th>
+                        <th>商品名稱</th>
+                        <th>庫存數量</th>
+                        <th>單位成本</th>
+                        <th>當前價值</th>
+                        <th>狀態</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>AAPL</td>
+                        <td>Apple Inc.</td>
+                        <td>150</td>
+                        <td>$175.50</td>
+                        <td>$26,325.00</td>
+                        <td class="status-normal">正常</td>
+                    </tr>
+                    <tr>
+                        <td>TSLA</td>
+                        <td>Tesla Inc.</td>
+                        <td>80</td>
+                        <td>$210.75</td>
+                        <td>$16,860.00</td>
+                        <td class="status-normal">正常</td>
+                    </tr>
+                    <tr>
+                        <td>MSFT</td>
+                        <td>Microsoft Corp.</td>
+                        <td>200</td>
+                        <td>$415.20</td>
+                        <td>$83,040.00</td>
+                        <td class="status-normal">正常</td>
+                    </tr>
+                    <tr>
+                        <td>NVDA</td>
+                        <td>NVIDIA Corp.</td>
+                        <td>50</td>
+                        <td>$950.80</td>
+                        <td>$47,540.00</td>
+                        <td class="status-low">低庫存</td>
+                    </tr>
+                    <tr>
+                        <td>META</td>
+                        <td>Meta Platforms Inc.</td>
+                        <td>0</td>
+                        <td>$485.25</td>
+                        <td>$0.00</td>
+                        <td class="status-out">缺貨</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="note">
+            <strong>實現功能：</strong><br>
+            1. React + Vite 項目結構完整<br>
+            2. 儀表板佈局和導航組件<br>
+            3. 庫存總覽 UI 組件（KPI卡片、圖表、表格）<br>
+            4. 與後端 API 集成（支持 mock 數據和真實 API）<br>
+            5. 響應式設計和基本樣式<br>
+            6. 完整的路由配置和導航
+        </div>
+
+        <div class="note">
+            <strong>技術特點：</strong><br>
+            • 使用 React Hooks (useState, useEffect)<br>
+            • 響應式設計 (Tailwind CSS)<br>
+            • API 集成與錯誤處理<br>
+            • 模塊化組件結構<br>
+            • 支持明暗主題
+        </div>
+    </div>
+</body>
+</html>
