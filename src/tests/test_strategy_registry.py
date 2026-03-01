@@ -4,7 +4,7 @@ import pytest
 import tempfile
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def test_version_status_enum():
@@ -204,7 +204,7 @@ def test_generate_monthly_report():
         registry.activate_version(v1["version_id"], "admin", "Start")
         
         # Generate report for current month
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         report = registry.generate_monthly_report(now.year, now.month)
         
         assert report["year"] == now.year

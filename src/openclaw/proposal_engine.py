@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from enum import Enum
 
@@ -67,7 +67,7 @@ class StrategyProposal:
     
     # Timestamps
     expires_at: Optional[int] = None
-    created_at: int = field(default_factory=lambda: int(datetime.utcnow().timestamp() * 1000))
+    created_at: int = field(default_factory=lambda: int(datetime.now(timezone.utc).timestamp() * 1000))
     decided_at: Optional[int] = None
     
     # Metadata
@@ -95,7 +95,7 @@ def create_proposal(
     proposal_id = f"prop_{uuid.uuid4().hex[:12]}"
     
     # Calculate expiration (default 7 days)
-    expires_at = int((datetime.utcnow() + timedelta(days=expires_days)).timestamp() * 1000)
+    expires_at = int((datetime.now(timezone.utc) + timedelta(days=expires_days)).timestamp() * 1000)
     
     # Determine if human approval required
     requires_human = not _check_auto_approve_eligibility(
@@ -219,12 +219,12 @@ def approve_proposal(
         return {"success": False, "reason": f"INVALID_STATUS_{proposal['status']}"}
     
     # Check expiration
-    if proposal["expires_at"] and proposal["expires_at"] < int(datetime.utcnow().timestamp() * 1000):
+    if proposal["expires_at"] and proposal["expires_at"] < int(datetime.now(timezone.utc).timestamp() * 1000):
         _expire_proposal(conn, proposal_id)
         return {"success": False, "reason": "PROPOSAL_EXPIRED"}
     
     # Update status
-    now = int(datetime.utcnow().timestamp() * 1000)
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
     conn.execute(
         """
         UPDATE strategy_proposals 
@@ -252,7 +252,7 @@ def reject_proposal(
     if proposal["status"] != "pending":
         return {"success": False, "reason": f"INVALID_STATUS_{proposal['status']}"}
     
-    now = int(datetime.utcnow().timestamp() * 1000)
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
     conn.execute(
         """
         UPDATE strategy_proposals 
@@ -268,7 +268,7 @@ def reject_proposal(
 
 def _expire_proposal(conn: sqlite3.Connection, proposal_id: str) -> None:
     """Expire a proposal (internal)."""
-    now = int(datetime.utcnow().timestamp() * 1000)
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
     conn.execute(
         """
         UPDATE strategy_proposals 
@@ -282,7 +282,7 @@ def _expire_proposal(conn: sqlite3.Connection, proposal_id: str) -> None:
 
 def expire_old_proposals(conn: sqlite3.Connection) -> int:
     """Expire all pending proposals past their expiration time."""
-    now = int(datetime.utcnow().timestamp() * 1000)
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
     cursor = conn.execute(
         """
         UPDATE strategy_proposals 
@@ -353,7 +353,7 @@ def insert_strategy_proposal(conn: sqlite3.Connection, p: Any) -> None:
     
     proposal_id = getattr(p, 'proposal_id', f'prop_{uuid.uuid4().hex[:12]}')
     # expires_at as YYYY-MM-DD string (legacy schema expects TEXT)
-    expires_at = (datetime.utcnow() + timedelta(days=7)).strftime('%Y-%m-%d')
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).strftime('%Y-%m-%d')
     
     # Determine auto_approve eligibility
     auto_approve = getattr(p, 'auto_approve_eligible', False)
@@ -454,7 +454,7 @@ def apply_authority_decision(conn: sqlite3.Connection, proposal_id: str) -> Dict
         return {"allowed": False, "reason_code": "AUTH_NOT_PENDING"}
     if category in LEVEL3_FORBIDDEN_CATEGORIES:
         return {"allowed": False, "reason_code": "AUTH_LEVEL3_FORBIDDEN"}
-    if expires_at < datetime.utcnow().strftime("%Y-%m-%d"):
+    if expires_at < datetime.now(timezone.utc).strftime("%Y-%m-%d"):
         conn.execute("UPDATE strategy_proposals SET status='expired' WHERE proposal_id = ?", (proposal_id,))
         return {"allowed": False, "reason_code": "AUTH_PROPOSAL_EXPIRED"}
 

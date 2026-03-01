@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from enum import IntEnum
 
@@ -89,7 +89,7 @@ class AuthorityEngine:
             self._ensure_table_exists(conn)
             
             # Update level
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 """
                 INSERT OR REPLACE INTO authority_policy (id, level, changed_by, reason, effective_from, updated_at)
