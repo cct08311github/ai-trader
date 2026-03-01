@@ -111,11 +111,14 @@ def get_position_limits_for_level(policy: Mapping[str, Any], level: int) -> Posi
 
     lvl = int(level)
     defaults = _DEFAULT_LEVEL_LIMITS.get(lvl, _DEFAULT_LEVEL_LIMITS[2])
-    levels = (
-        (policy.get("position_limits") or {}).get("levels")
-        if isinstance(policy, Mapping)
-        else None
-    )
+    if not isinstance(policy, Mapping):
+        return defaults
+    
+    position_limits = policy.get("position_limits")
+    if not isinstance(position_limits, Mapping):
+        return defaults
+    
+    levels = position_limits.get("levels")
     if not isinstance(levels, Mapping):
         return defaults
 
