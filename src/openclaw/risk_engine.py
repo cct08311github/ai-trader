@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from openclaw.position_sizing import calculate_position_qty
 from openclaw.tw_session_rules import apply_tw_session_risk_adjustments
+
+_LOCKED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), "../../config/locked_symbols.json")
+
+
+def _is_symbol_locked(symbol: str) -> bool:
+    """Check if a symbol is locked (sell-forbidden). Fails safe: returns False on error."""
+    try:
+        with open(_LOCKED_SYMBOLS_PATH, "r") as f:
+            return symbol.upper() in {s.upper() for s in json.load(f).get("locked", [])}
+    except Exception:
+        return False
 
 
 @dataclass
@@ -182,6 +195,13 @@ def evaluate_and_build_order(
     """
 
     base_metrics = _metrics(decision, market, portfolio, system_state)
+
+    # LOCK PROTECTION — must be the first check after base_metrics.
+    # Hard-blocks any sell order on a locked symbol.
+    # This runs in every execution path, regardless of which pipeline is used.
+    if decision.signal_side == "sell" and _is_symbol_locked(decision.symbol):
+        return EvaluationResult(False, "RISK_SYMBOL_LOCKED", metrics=base_metrics)
+
     # Apply Taiwan session‑based risk multipliers
     limits = apply_tw_session_risk_adjustments(
         limits,
