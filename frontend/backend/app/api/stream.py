@@ -199,3 +199,105 @@ async def stream_logs(request: Request):
             _client_sema.release()
 
     return EventSourceResponse(event_gen())
+
+
+# ─── SSE /api/stream/health ─────────────────────────────────────────────────
+# Design doc §3.3: "SSE /api/stream/health — 即時推送系統健康狀態變化"
+
+HEALTH_POLL_SEC = max(3, _env_int("HEALTH_POLL_SEC", 5))
+
+
+def _fetch_health_snapshot() -> Dict[str, Any]:
+    """Build a lightweight health snapshot (mirrors /api/system/health)."""
+    import psutil
+
+    services: Dict[str, Any] = {
+        "fastapi": {"status": "online", "latency_ms": None},
+        "shioaji": {"status": "simulation", "latency_ms": None},
+    }
+
+    try:
+        import time as _t
+        conn = connect_readonly(DB_PATH)
+        t0 = _t.monotonic()
+        conn.execute("SELECT 1").fetchone()
+        latency_ms = round((_t.monotonic() - t0) * 1000, 2)
+        conn.close()
+        services["sqlite"] = {"status": "online", "latency_ms": latency_ms}
+    except Exception as e:
+        services["sqlite"] = {"status": "offline", "latency_ms": None, "error": str(e)}
+
+    resources: Dict[str, Any] = {}
+    try:
+        resources["cpu_percent"] = psutil.cpu_percent(interval=0.05)
+        mem = psutil.virtual_memory()
+        resources["memory_percent"] = mem.percent
+        dsk = psutil.disk_usage("/")
+        resources["disk_used_gb"] = round(dsk.used / (1024 ** 3), 1)
+        resources["disk_total_gb"] = round(dsk.total / (1024 ** 3), 1)
+    except Exception:
+        resources = {"cpu_percent": 0, "memory_percent": 0, "disk_used_gb": 0, "disk_total_gb": 0}
+
+    has_offline = any(
+        v.get("status") == "offline" for v in services.values() if isinstance(v, dict)
+    )
+    cpu_high = resources.get("cpu_percent", 0) > 80
+    overall = "critical" if has_offline else ("warning" if cpu_high else "ok")
+
+    return {
+        "services": services,
+        "resources": resources,
+        "overall": overall,
+        "ts": int(time.time() * 1000),
+    }
+
+
+@router.get("/health")
+async def stream_health(request: Request):
+    """GET /api/stream/health — SSE, design doc §3.3.
+
+    Pushes a `health` event every HEALTH_POLL_SEC seconds containing
+    the full system health snapshot.  Frontend can use this instead of
+    polling /api/system/health for real-time status indicators.
+    """
+    try:
+        await asyncio.wait_for(_client_sema.acquire(), timeout=0.1)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=429, detail="SSE capacity reached")
+
+    async def health_gen() -> AsyncGenerator[Dict[str, str], None]:
+        last_heartbeat = 0.0
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                now = time.time()
+                if now - last_heartbeat >= SSE_HEARTBEAT_SEC:
+                    last_heartbeat = now
+                    yield {
+                        "event": "heartbeat",
+                        "data": json.dumps({"ts": int(now * 1000), "type": "heartbeat"}, ensure_ascii=False),
+                    }
+
+                try:
+                    snapshot = await asyncio.to_thread(_fetch_health_snapshot)
+                    yield {
+                        "event": "health",
+                        "data": json.dumps(snapshot, ensure_ascii=False),
+                    }
+                except Exception as e:
+                    yield {
+                        "event": "health",
+                        "data": json.dumps(
+                            {"overall": "error", "error": str(e), "ts": int(time.time() * 1000)},
+                            ensure_ascii=False,
+                        ),
+                    }
+
+                await asyncio.sleep(HEALTH_POLL_SEC)
+        finally:
+            _client_sema.release()
+
+    return EventSourceResponse(health_gen())
+

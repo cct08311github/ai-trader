@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, LogOut } from 'lucide-react'
 import Sidebar from '../components/Sidebar'
 import GlobalControlBar from '../components/GlobalControlBar'
 import Breadcrumbs from '../components/Breadcrumbs'
 import ThemeToggle from '../components/ThemeToggle'
+import { logout } from '../lib/auth'
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -56,6 +57,20 @@ export default function DashboardLayout() {
               <div className="flex flex-col gap-2 lg:items-end">
                 <div className="flex items-center justify-between gap-2 lg:justify-end">
                   <ThemeToggle />
+                  {/* Top-right logout — always accessible */}
+                  <button
+                    id="header-logout-btn"
+                    type="button"
+                    onClick={logout}
+                    title="登出系統"
+                    className="flex items-center gap-1.5 rounded-lg border border-rose-500/25 bg-rose-500/8
+                               px-3 py-1.5 text-xs text-rose-400 transition-all
+                               hover:bg-rose-500/15 hover:border-rose-500/45 hover:text-rose-300
+                               active:scale-[0.97]"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline font-medium">登出</span>
+                  </button>
                 </div>
 
                 {/* Global control bar: visible on all pages */}
@@ -69,8 +84,10 @@ export default function DashboardLayout() {
           <Outlet />
 
           <footer className="mt-10 border-t border-[rgb(var(--border))] pt-6 text-xs text-[rgb(var(--muted))]">
-            Sprint 1 · Mock data enabled · API:{' '}
-            <code className="text-[rgb(var(--text))]">http://localhost:8080/api/portfolio/positions</code>
+            Sprint 1 · API:{' '}
+            <code className="text-[rgb(var(--text))]">
+              {(import.meta?.env?.VITE_API_BASE || 'http://localhost:8080').replace(/\/$/, '')}/api/portfolio/positions
+            </code>
           </footer>
         </main>
       </div>

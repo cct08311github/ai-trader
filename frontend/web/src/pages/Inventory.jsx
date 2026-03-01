@@ -6,8 +6,8 @@ import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 function InventoryTable({ data, loading }) {
   if (loading) {
     return (
-      <div className="py-16 text-center text-sm text-[rgb(var(--muted))]">
-        Loading inventory data...
+      <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.3] p-8 text-center text-[rgb(var(--muted))]">
+        讀取庫存資料中...
       </div>
     )
   }
@@ -40,8 +40,8 @@ function InventoryTable({ data, loading }) {
           {data.map((item) => {
             const weight = totalValue > 0 ? (item.currentValue || 0) / totalValue : 0
             const statusColor = item.status === '正常' ? 'text-emerald-600 dark:text-emerald-300' :
-                              item.status === '低庫存' ? 'text-amber-600 dark:text-amber-300' :
-                              item.status === '缺貨' ? 'text-rose-600 dark:text-rose-300' : 'text-[rgb(var(--muted))]'
+              item.status === '低庫存' ? 'text-amber-600 dark:text-amber-300' :
+                item.status === '缺貨' ? 'text-rose-600 dark:text-rose-300' : 'text-[rgb(var(--muted))]'
 
             return (
               <tr key={item.id} className="hover:bg-[rgb(var(--surface))/0.35]">
@@ -72,7 +72,7 @@ function InventoryChart({ data }) {
 
   // Simple bar chart visualization
   const maxValue = Math.max(...data.map(item => item.currentValue || 0))
-  
+
   return (
     <div className="space-y-2">
       {data.map((item) => {
@@ -82,7 +82,7 @@ function InventoryChart({ data }) {
             <div className="w-24 truncate text-sm">{item.name}</div>
             <div className="flex-1">
               <div className="h-6 rounded bg-[rgb(var(--surface))/0.5] overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-emerald-500/30 transition-all duration-300"
                   style={{ width: `${percentage}%` }}
                 />
@@ -105,7 +105,7 @@ export default function InventoryPage() {
   const loadData = async (useMockData = false) => {
     setLoading(true)
     setError(null)
-    
+
     try {
       if (useMockData) {
         setInventoryData(mockInventoryData)
@@ -173,30 +173,30 @@ export default function InventoryPage() {
           disabled={loading}
           className="w-full sm:w-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.35] px-4 py-2 text-sm text-[rgb(var(--text))] shadow-panel transition hover:bg-[rgb(var(--surface))/0.5] disabled:opacity-50"
         >
-          {loading ? 'Loading…' : 'Refresh Data'}
+          {loading ? '讀取中…' : '重新整理'}
         </button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard 
-          title="總庫存項目" 
-          value={totalItems} 
+        <KpiCard
+          title="總庫存項目"
+          value={totalItems}
           subtext="Total inventory items"
         />
-        <KpiCard 
-          title="總庫存價值" 
-          value={formatCurrency(totalValue)} 
+        <KpiCard
+          title="總庫存價值"
+          value={formatCurrency(totalValue)}
           subtext="Total inventory value"
         />
-        <KpiCard 
-          title="低庫存項目" 
-          value={lowStockCount} 
+        <KpiCard
+          title="低庫存項目"
+          value={lowStockCount}
           subtext="Items with low stock"
           tone={lowStockCount > 0 ? 'warning' : 'good'}
         />
-        <KpiCard 
-          title="缺貨項目" 
-          value={outOfStockCount} 
+        <KpiCard
+          title="缺貨項目"
+          value={outOfStockCount}
           subtext="Out of stock items"
           tone={outOfStockCount > 0 ? 'bad' : 'good'}
         />
@@ -260,8 +260,8 @@ export default function InventoryPage() {
         </div>
       </section>
 
-      <div className="sr-only" aria-live="polite">
-        {loading ? 'Loading inventory data' : `Inventory data loaded ${useMock ? 'from mock data' : 'from API'}`}
+      <div className="text-right text-xs text-[rgb(var(--muted))]">
+        {loading ? '讀取庫存資料中...' : `庫存資料來源：${useMock ? '模擬資料' : 'API'}`}
       </div>
     </div>
   )

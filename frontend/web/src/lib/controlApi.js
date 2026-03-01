@@ -2,10 +2,7 @@
 // Used by both System page ControlPanel and GlobalControlBar
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-// Default backend: FastAPI command center (see frontend/backend)
-// Override via Vite env: VITE_API_BASE=http://localhost:8080
-const DEFAULT_API_BASE = ''
+import { getToken, getApiBase } from './auth'
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -20,6 +17,7 @@ async function fetchJsonWithTimeout(url, options = {}, { timeoutMs = 5000 } = {}
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         ...(options.headers || {})
       }
     })
@@ -65,10 +63,7 @@ async function callApiWithRetry(url, options, { retries = 1, backoffMs = 400, ti
 }
 
 export function useControlApiBase() {
-  return useMemo(() => {
-    const base = import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE
-    return `${String(base).replace(/\/$/, '')}/api/control`
-  }, [])
+  return useMemo(() => `${getApiBase()}/api/control`, [])
 }
 
 export function createControlClient(API_BASE) {

@@ -17,7 +17,8 @@ from openclaw.risk_engine import Decision, MarketState, PortfolioState, SystemSt
 from openclaw.risk_store import LimitQuery, load_limits
 from openclaw.cash_mode_manager import CashModeManager
 from openclaw.market_regime import MarketRegime, MarketRegimeResult
-
+from openclaw.db_router import get_connection, init_execution_tables
+from openclaw.resume_protocol import system_self_check, run_resume_flow, ResumeProtocolTracker
 
 def utc_now_iso() -> str:
     return dt.datetime.now(tz=dt.timezone.utc).isoformat()
@@ -305,10 +306,27 @@ def _apply_broker_status(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="OpenClaw v1.1 risk gate demo.")
-    parser.add_argument("--db", default="trades.db", help="Path to trades.db")
+    parser.add_argument("--db", default="trades.db", help="(Deprecated) Handled by db_router")
+    parser.add_argument("--resume", action="store_true", help="Execute /RESUME crash recovery flow")
     args = parser.parse_args()
 
-    conn = sqlite3.connect(args.db)
+    # Gap #7: Initialize execution tables specifically in the trades database
+    init_execution_tables()
+    
+    if args.resume:
+        success = run_resume_flow()
+        print(f"Resume flow completed: {'Success' if success else 'Nothing to resume/Failed'}")
+        return
+
+    # Gap #6: Perform self check on boot
+    check_result = system_self_check()
+    if check_result["status"] == "needs_resume":
+        print("WARNING: System was halted or crashed mid-trade.")
+        print("Please run with --resume to cleanly restore system state.")
+        return
+
+    # Use db_router to get connection safely enforcing WAL mode
+    conn = get_connection("trades")
     broker: BrokerAdapter = SimBrokerAdapter()
 
     decision = Decision(
@@ -447,6 +465,19 @@ def main() -> None:
         )
         print(f"FAILED: {exc}")
 
+    # Gap #6: Periodic position snapshot
+    try:
+        tracker = ResumeProtocolTracker()
+        # Mocking positions list and cash for the snapshot based on current logic
+        mock_positions = [{"symbol": portfolio.nav, "qty": 1}] # Simplification for demo
+        tracker.snapshot(
+            system_state_dict={"mode": "ok", "locked": system.trading_locked},
+            positions_list=mock_positions,
+            available_cash=portfolio.cash,
+            reason="periodic"
+        )
+    except Exception as e:
+        print(f"Failed to record snapshot: {e}")
 
 if __name__ == "__main__":
     main()

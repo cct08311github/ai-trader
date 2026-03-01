@@ -1,5 +1,6 @@
 import React from 'react'
 import { useControlStatus } from '../lib/controlApi'
+import { useToast } from './ToastProvider'
 
 function Pill({ tone = 'slate', dotClassName = '', className = '', children, title }) {
   const base = 'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs whitespace-nowrap'
@@ -8,9 +9,8 @@ function Pill({ tone = 'slate', dotClassName = '', className = '', children, tit
     emerald: 'bg-emerald-900/25 text-emerald-200 border border-emerald-900/40',
     rose: 'bg-rose-900/25 text-rose-200 border border-rose-900/40',
     blue: 'bg-blue-900/25 text-blue-200 border border-blue-900/40',
-    amber: 'bg-amber-900/20 text-amber-200 border border-amber-900/40'
+    amber: 'bg-amber-900/20 text-amber-200 border border-amber-900/40',
   }
-
   return (
     <div className={[base, toneMap[tone] || toneMap.slate, className].join(' ')} title={title}>
       <span className={['h-2 w-2 rounded-full', dotClassName].join(' ')} />
@@ -19,12 +19,31 @@ function Pill({ tone = 'slate', dotClassName = '', className = '', children, tit
   )
 }
 
+const ACT_LABELS = {
+  '/enable': '✅ 自動交易已啟用',
+  '/disable': '⏸️ 自動交易已停用',
+  '/stop': '🚨 緊急停止已執行',
+  '/resume': '▶️ 緊急停止已解除',
+  '/simulation': '🔵 已切換至模擬盤',
+  '/live': '🔴 已切換至實際盤',
+}
+
 export default function GlobalControlBar() {
   const { status, error, loading, lastAction, act } = useControlStatus({ pollMs: 5000 })
+  const toast = useToast()
 
   const isEmergency = Boolean(status?.emergency_stop)
   const isAutoTradingEnabled = Boolean(status?.auto_trading_enabled)
-  const isSimulation = status?.simulation_mode !== false // treat null as simulation/safe-ish
+  const isSimulation = status?.simulation_mode !== false
+
+  async function runAct(endpoint, opts) {
+    try {
+      await act(endpoint, opts)
+      toast.success(ACT_LABELS[endpoint] || '指令已執行')
+    } catch (e) {
+      toast.error(`指令失敗：${e?.message || e}`)
+    }
+  }
 
   const handleEnable = () => {
     if (status?.simulation_mode === false) {
@@ -33,26 +52,25 @@ export default function GlobalControlBar() {
       )
       if (!ok) return
     }
-    act('/enable')
+    runAct('/enable')
   }
 
-  const handleDisable = () => act('/disable')
-
-  const handleSwitchToSimulation = () => act('/simulation')
+  const handleDisable = () => runAct('/disable')
+  const handleSwitchToSimulation = () => runAct('/simulation')
 
   const handleSwitchToLive = () => {
     const ok = window.confirm(
       '🚨 極度危險警告 🚨\n\n您即將切換到實際盤模式，所有交易將使用真實資金。\n\n確定要切換到實際盤嗎？'
     )
-    if (ok) act('/live')
+    if (ok) runAct('/live')
   }
 
   const handleEmergencyStop = () => {
     const reason = prompt('請輸入緊急停止原因（可選）:', '手動緊急停止')
-    act('/stop', { method: 'POST', body: { reason: reason || 'User initiated manual stop' } })
+    runAct('/stop', { method: 'POST', body: { reason: reason || 'User initiated manual stop' } })
   }
 
-  const handleResume = () => act('/resume')
+  const handleResume = () => runAct('/resume')
 
   return (
     <div className="flex w-full flex-col gap-2">
@@ -173,27 +191,11 @@ export default function GlobalControlBar() {
         </div>
       </div>
 
-      {/* lightweight feedback area */}
-      {(error || lastAction) && (
+      {/* Lightweight feedback area — shows API error if toast isn't available yet */}
+      {error && (
         <div className="flex justify-end">
-          <div
-            className={[
-              'max-w-[720px] rounded-lg px-3 py-2 text-xs border',
-              error
-                ? 'bg-rose-900/20 text-rose-200 border-rose-900/50'
-                : lastAction?.warning
-                  ? 'bg-amber-900/20 text-amber-200 border-amber-900/50'
-                  : 'bg-emerald-900/15 text-emerald-200 border-emerald-900/40'
-            ].join(' ')}
-          >
-            {error ? (
-              <span>{error}</span>
-            ) : (
-              <span>
-                {lastAction?.warning ? `警告：${lastAction.message}` : `成功：${lastAction?.message}`}
-                {lastAction?.warning ? `（${lastAction.warning}）` : ''}
-              </span>
-            )}
+          <div className="max-w-[720px] rounded-lg px-3 py-2 text-xs border bg-rose-900/20 text-rose-200 border-rose-900/50">
+            {error}
           </div>
         </div>
       )}

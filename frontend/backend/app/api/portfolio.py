@@ -130,26 +130,160 @@ def list_trades(
 @router.get("/position-detail/{symbol}")
 def get_position_detail(symbol: str):
     """
-    获取持倉詳情：進場理由、止損/止盈設定、PM 授權原文、籌碼趨勢歷史。
+    P1-5: 持倉詳情 — 查詢真實 DB，設計書 §4.1。
+
+    資料來源（按優先級）:
+    - entry_reason: llm_traces 表中 PM agent 的 response
+    - stop_loss / take_profit: position_params 表（若存在），否則基於 avg_price 推算
+    - chip_trend: chip_trend 表（若存在），否則回傳空陣列
+    - pm_authorization: llm_traces PM agent 原始 response
     """
-    # 模拟数据
+    symbol = symbol.strip().upper()
+
+    with get_conn() as conn:
+        # 1. 取最近的 PM 決策（從 trades 找到買入時間再找 llm_traces）
+        entry_reason = "暫無進場資料（請確認 llm_traces 表是否有對應筆數）"
+        pm_authorization = None
+        avg_price = None
+
+        trade_row = conn.execute(
+            "SELECT timestamp, price FROM trades WHERE UPPER(symbol)=? AND LOWER(action)='buy' ORDER BY timestamp DESC LIMIT 1",
+            (symbol,)
+        ).fetchone()
+
+        if trade_row:
+            avg_price = trade_row["price"]
+            trade_ts = trade_row["timestamp"]
+            try:
+                import datetime as _dt
+                dt = _dt.datetime.fromisoformat(str(trade_ts).replace("Z", "+00:00"))
+                ts_unix = int(dt.timestamp())
+                pm_row = conn.execute(
+                    """SELECT response FROM llm_traces
+                       WHERE LOWER(agent) LIKE '%pm%'
+                         AND created_at <= ? AND created_at >= ?
+                       ORDER BY created_at DESC LIMIT 1""",
+                    (ts_unix + 300, ts_unix - 300)
+                ).fetchone()
+                if pm_row and pm_row["response"]:
+                    pm_authorization = pm_row["response"]
+                    entry_reason = pm_row["response"][:500]
+            except Exception:
+                pass
+
+        # 2. 止損/止盈 — 嘗試讀 position_params 表，否則基於 avg_price 推算
+        stop_loss = None
+        take_profit = None
+        try:
+            pp = conn.execute(
+                "SELECT stop_loss, take_profit FROM position_params WHERE UPPER(symbol)=? LIMIT 1",
+                (symbol,)
+            ).fetchone()
+            if pp:
+                stop_loss = pp["stop_loss"]
+                take_profit = pp["take_profit"]
+        except Exception:
+            pass  # 表可能不存在
+
+        if avg_price and (stop_loss is None or take_profit is None):
+            p = float(avg_price)
+            if stop_loss is None:
+                stop_loss = round(p * 0.95, 2)
+            if take_profit is None:
+                take_profit = round(p * 1.10, 2)
+
+        # 3. 籌碼趨勢 — 嘗試讀 chip_trend 表
+        chip_trend = []
+        try:
+            rows = conn.execute(
+                """SELECT date, institution_buy, institution_sell, score
+                   FROM chip_trend WHERE UPPER(symbol)=?
+                   ORDER BY date DESC LIMIT 7""",
+                (symbol,)
+            ).fetchall()
+            chip_trend = [
+                {"date": r["date"], "institution_buy": r["institution_buy"],
+                 "institution_sell": r["institution_sell"], "score": r["score"]}
+                for r in rows
+            ]
+        except Exception:
+            pass  # 表可能不存在
+
     return {
         "status": "ok",
         "data": {
             "symbol": symbol,
-            "entry_reason": "基于技术分析和市场情绪入场",
-            "stop_loss": 550.0,
-            "take_profit": 620.0,
-            "pm_authorization": "PM 授权原文：...",
-            "chip_trend": [
-                {"date": "2026-02-25", "institution_buy": 1200, "institution_sell": 800, "score": 7},
-                {"date": "2026-02-26", "institution_buy": 1500, "institution_sell": 600, "score": 8},
-                {"date": "2026-02-27", "institution_buy": 1800, "institution_sell": 900, "score": 6},
-                {"date": "2026-02-28", "institution_buy": 2000, "institution_sell": 1200, "score": 5},
-            ]
+            "entry_reason": entry_reason,
+            "stop_loss": stop_loss,
+            "take_profit": take_profit,
+            "pm_authorization": pm_authorization or "暫無 PM 授權資料",
+            "chip_trend": chip_trend
         }
     }
 
+
+@router.get("/kpis")
+def get_portfolio_kpis():
+    """
+    P1-5: KPI 卡片補齊缺失指標: 可用現金、今日成交筆數、整體勝率。
+    """
+    import datetime
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+
+    available_cash = 700000.0  # mock/default cash for now
+    today_trades_count = 0
+    overall_win_rate = 0.0
+
+    try:
+        with get_conn() as conn:
+            # Check today's trades
+            today_count_row = conn.execute(
+                "SELECT COUNT(1) as cnt FROM trades WHERE DATE(timestamp) = ?",
+                (today,)
+            ).fetchone()
+            if today_count_row:
+                today_trades_count = today_count_row["cnt"]
+
+            # Calculate overall win rate based on realized PnL
+            # A completed trade with pnl > 0 is a win, pnl < 0 is a loss. 
+            # We ignore pnl = 0 or NULL for this simple calculation.
+            win_loss_row = conn.execute(
+                """
+                SELECT 
+                    SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN pnl < 0 THEN 1 ELSE 0 END) as losses
+                FROM trades
+                WHERE pnl IS NOT NULL AND pnl != 0
+                """
+            ).fetchone()
+            
+            if win_loss_row:
+                wins = int(win_loss_row["wins"] or 0)
+                losses = int(win_loss_row["losses"] or 0)
+                total = wins + losses
+                if total > 0:
+                    overall_win_rate = wins / total
+                    
+            # Try to get latest cash from position snapshots if available
+            try:
+                snapshot_row = conn.execute(
+                    "SELECT available_cash FROM position_snapshots ORDER BY timestamp DESC LIMIT 1"
+                ).fetchone()
+                if snapshot_row and snapshot_row["available_cash"] is not None:
+                    available_cash = snapshot_row["available_cash"]
+            except Exception:
+                pass
+    except Exception as e:
+        pass # fallback to defaults
+
+    return {
+        "status": "ok",
+        "data": {
+            "available_cash": available_cash,
+            "today_trades_count": today_trades_count,
+            "overall_win_rate": overall_win_rate
+        }
+    }
 
 @router.get("/monthly-summary")
 def get_monthly_summary(month: str = "2026-02"):
@@ -202,12 +336,43 @@ def get_monthly_summary(month: str = "2026-02"):
             winning_trades = result['winning_trades'] or 0
             max_profit = result['max_profit'] or 0.0
             max_loss = result['max_loss'] or 0.0
-            
+
             win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
-            
-            # 平均持仓天数 - 由于trades表没有持仓天数字段，暂时使用默认值
-            avg_holding_days = 5.2  # 默认值，实际需要从其他表获取
-            
+
+            # P1-7: 計算平均持倉天數 — 配對同一標的買/賣交易
+            avg_holding_days = 0.0
+            try:
+                import datetime as _dt
+                buys = conn.execute(
+                    "SELECT symbol, timestamp FROM trades WHERE LOWER(action)='buy' AND timestamp>=? AND timestamp<?",
+                    (start_date, end_date)
+                ).fetchall()
+                sells = conn.execute(
+                    "SELECT symbol, timestamp FROM trades WHERE LOWER(action)='sell' AND timestamp>=? AND timestamp<?",
+                    (start_date, end_date)
+                ).fetchall()
+                buy_map: dict = {}
+                for b in buys:
+                    sym = b["symbol"]
+                    buy_map.setdefault(sym, [])
+                    buy_map[sym].append(b["timestamp"])
+                holding_days_list = []
+                for s in sells:
+                    sym = s["symbol"]
+                    if sym in buy_map and buy_map[sym]:
+                        buy_ts = buy_map[sym].pop(0)
+                        try:
+                            buy_dt = _dt.datetime.fromisoformat(str(buy_ts).replace("Z", "+00:00"))
+                            sell_dt = _dt.datetime.fromisoformat(str(s["timestamp"]).replace("Z", "+00:00"))
+                            days = abs((sell_dt - buy_dt).total_seconds()) / 86400
+                            holding_days_list.append(days)
+                        except Exception:
+                            pass
+                if holding_days_list:
+                    avg_holding_days = sum(holding_days_list) / len(holding_days_list)
+            except Exception:
+                avg_holding_days = 0.0
+
             return {
                 "status": "ok",
                 "data": {
@@ -215,7 +380,7 @@ def get_monthly_summary(month: str = "2026-02"):
                     "total_amount": float(total_amount),
                     "total_fee_tax": float(total_fee_tax),
                     "win_rate": float(win_rate),
-                    "avg_holding_days": float(avg_holding_days),
+                    "avg_holding_days": round(float(avg_holding_days), 1),
                     "max_profit": float(max_profit),
                     "max_loss": float(max_loss)
                 }
@@ -234,6 +399,46 @@ def get_monthly_summary(month: str = "2026-02"):
                     "max_loss": 0.0
                 }
             }
+
+
+@router.get("/equity-curve")
+def get_equity_curve(days: int = 60, start_equity: float = 100000.0):
+    """
+    P1-6: 損益曲線 — 從 trades 表計算每日累積已實現 PnL。
+
+    回傳格式: [{ date: "YYYY-MM-DD", equity: float }]
+    若 DB 無資料，回傳空陣列（前端可 fallback 到 mock）。
+    """
+    import datetime as _dt
+    cutoff_dt = _dt.datetime.utcnow() - _dt.timedelta(days=days)
+    cutoff_str = cutoff_dt.strftime("%Y-%m-%d")
+
+    with get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+              DATE(timestamp) AS trade_date,
+              SUM(pnl) AS daily_pnl
+            FROM trades
+            WHERE pnl IS NOT NULL
+              AND timestamp >= ?
+            GROUP BY trade_date
+            ORDER BY trade_date ASC
+            """,
+            (cutoff_str,)
+        ).fetchall()
+
+    if not rows:
+        return {"status": "ok", "data": [], "source": "no_data"}
+
+    # 累積計算
+    series = []
+    equity = start_equity
+    for r in rows:
+        equity += float(r["daily_pnl"] or 0)
+        series.append({"date": r["trade_date"], "equity": round(equity, 2)})
+
+    return {"status": "ok", "data": series, "source": "db"}
 
 
 @router.get("/trade-causal/{trade_id}")

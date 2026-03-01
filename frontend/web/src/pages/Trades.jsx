@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { formatCurrency, formatNumber } from '../lib/format'
+import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import { downloadTextFile, fetchTrades, fetchTradeCausalChain, mockTrades, tradesToCsv, tradesToExcelXml } from '../lib/trades'
+import { authFetch, getApiBase } from '../lib/auth'
 
 function toIsoDate(d) {
   if (!d) return ''
@@ -11,6 +12,63 @@ function toIsoDate(d) {
 function toIsoDateEnd(d) {
   if (!d) return ''
   return `${d}T23:59:59Z`
+}
+
+/** Monthly Stats Summary — design doc §4.2 */
+function MonthlySummaryPanel() {
+  const now = new Date()
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [month, setMonth] = useState(defaultMonth)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    const base = getApiBase()
+    authFetch(`${base}/api/portfolio/monthly-summary?month=${month}`)
+      .then(r => r.json())
+      .then(d => { setData(d?.data || d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [month])
+
+  const stats = [
+    { label: '本月成交金額', value: data ? formatCurrency(data.total_amount) : '-' },
+    { label: '手續費+稅金', value: data ? formatCurrency(data.total_fee_tax) : '-' },
+    { label: '勝率', value: data ? formatPercent(data.win_rate) : '-', good: data?.win_rate >= 0.5 },
+    { label: '平均持倉天數', value: data ? `${Number(data.avg_holding_days).toFixed(1)} 天` : '-' },
+    { label: '最大單筆獲利', value: data ? formatCurrency(data.max_profit) : '-', good: true },
+    { label: '最大單筆虧損', value: data ? formatCurrency(data.max_loss) : '-', bad: true },
+  ]
+
+  return (
+    <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-200">月度統計摘要</div>
+          <div className="text-xs text-slate-500 mt-0.5">設計書 §4.2 — 成交金額、費用、勝率、持倉天數</div>
+        </div>
+        <input
+          type="month"
+          value={month}
+          onChange={e => setMonth(e.target.value)}
+          className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-sm text-slate-200 focus:border-emerald-500/50 focus:outline-none"
+        />
+      </div>
+      {loading ? (
+        <div className="text-xs text-slate-500 py-2">載入中…</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {stats.map(s => (
+            <div key={s.label} className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+              <div className="text-[11px] text-slate-400 mb-1">{s.label}</div>
+              <div className={`text-sm font-bold ${s.good ? 'text-emerald-300' : s.bad ? 'text-rose-300' : 'text-slate-100'
+                }`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function TradesPage() {
@@ -128,9 +186,12 @@ export default function TradesPage() {
   return (
     <div className="p-4 md:p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-100">交易明细</h1>
-        <div className="mt-1 text-sm text-slate-400">查看历史交易记录与决策因果链</div>
+        <h1 className="text-2xl font-semibold text-slate-100">交易明細</h1>
+        <div className="mt-1 text-sm text-slate-400">查看歷史交易記錄與決策因果鏈</div>
       </div>
+
+      {/* Monthly Summary — design doc §4.2 */}
+      <MonthlySummaryPanel />
 
       {/* Filters */}
       <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
@@ -185,7 +246,7 @@ export default function TradesPage() {
               disabled={loading}
               className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900/30 disabled:opacity-50"
             >
-              {loading ? 'Loading...' : 'Apply filters'}
+              {loading ? '讀取中...' : '套用篩選'}
             </button>
             <button
               type="button"

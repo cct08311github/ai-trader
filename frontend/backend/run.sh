@@ -14,9 +14,9 @@ CERT_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/cert
 KEY_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/key.pem"
 
 if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
-    echo "Using SSL certificates for HTTPS"
-    # Bind to all interfaces for Tailscale access with HTTPS
-    exec $VENV_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --ssl-certfile "$CERT_PATH" --ssl-keyfile "$KEY_PATH"
+    echo "Using SSL certificates for HTTPS (Localhost only)"
+    # IMPORTANT: Listen on 127.0.0.1 only to allow Tailscale to handle the public interface on 8080
+    exec $VENV_PYTHON -m uvicorn app.main:app --host 127.0.0.1 --port 8080 --ssl-certfile "$CERT_PATH" --ssl-keyfile "$KEY_PATH"
 else
     echo "SSL certificates not found, falling back to HTTP (localhost only)"
     # Fallback: bind to localhost only for security

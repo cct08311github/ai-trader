@@ -1,7 +1,6 @@
-const DEFAULT_API_BASE = ''
+import { authFetch, getApiBase } from './auth'
 
-const API_BASE = (import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
-const API_URL = `${API_BASE}/api/portfolio/positions`
+const API_URL = () => `${getApiBase()}/api/portfolio/positions`
 
 export const mockPositions = [
   { symbol: 'AAPL', qty: 40, lastPrice: 182.34, avgCost: 165.1 },
@@ -15,7 +14,7 @@ export const mockPositions = [
  * [{ symbol: string, qty: number, lastPrice: number, avgCost?: number }]
  */
 export async function fetchPortfolioPositions({ signal } = {}) {
-  const res = await fetch(API_URL, { signal })
+  const res = await authFetch(API_URL(), { signal })
   if (!res.ok) throw new Error()
   const data = await res.json()
   // Backend returns { status: "ok", source, simulation, positions }
@@ -23,10 +22,11 @@ export async function fetchPortfolioPositions({ signal } = {}) {
     // Map backend fields to frontend expected fields
     return data.positions.map(p => ({
       symbol: p.symbol || '',
+      name: p.name || '',
       qty: p.qty || p.quantity || 0,
       lastPrice: p.last_price || p.lastPrice || 0,
       avgCost: p.avg_price || p.avgCost,
-      chipHealthScore: p.chip_health_score || p.chipHealthScore,
+      chip_score: p.chip_health_score || p.chip_score || p.chipHealthScore,
       sector: p.sector
     }))
   }
@@ -36,7 +36,8 @@ export async function fetchPortfolioPositions({ signal } = {}) {
 }
 
 export async function fetchPositionDetail(symbol) {
-  const res = await fetch(`${API_BASE}/api/portfolio/position-detail/${symbol}`)
+  const base = getApiBase()
+  const res = await authFetch(`${base}/api/portfolio/position-detail/${symbol}`)
   if (!res.ok) throw new Error(`Failed to fetch position detail for ${symbol}`)
   const data = await res.json()
   if (data.status === 'ok' && data.data) {
@@ -44,6 +45,39 @@ export async function fetchPositionDetail(symbol) {
   }
   throw new Error('Invalid API response format')
 }
+
+/**
+ * P1-6: Fetch real equity curve from backend (cumulative PnL from trades table).
+ * Falls back to an empty array — caller should use buildMockEquitySeries as fallback.
+ */
+export async function fetchEquityCurve({ days = 60, startEquity = 100000 } = {}) {
+  const base = getApiBase()
+  try {
+    const res = await authFetch(`${base}/api/portfolio/equity-curve?days=${days}&start_equity=${startEquity}`)
+    if (!res.ok) return []
+    const data = await res.json()
+    if (data.status === 'ok' && Array.isArray(data.data) && data.data.length > 0) {
+      return data.data  // [{ date, equity }]
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
+export async function fetchPortfolioKpis(options = {}) {
+  try {
+    const res = await authFetch(`${getApiBase()}/api/portfolio/kpis`, options)
+    if (res.ok) {
+      const data = await res.json()
+      return data.data || {}
+    }
+  } catch {
+    // ignore
+  }
+  return { available_cash: 0, today_trades_count: 0, overall_win_rate: 0 }
+}
+
 
 export function calcPortfolioKpis(positions, { equitySeries } = {}) {
   const safe = positions ?? []
@@ -73,6 +107,7 @@ export function buildAllocationData(positions) {
       const value = Number(p.qty || 0) * Number(p.lastPrice || 0)
       return {
         name: p.symbol,
+        label: p.sector ? `${p.sector}` : p.symbol,  // sector label for legend; falls back to symbol
         value,
         weight: value / total
       }

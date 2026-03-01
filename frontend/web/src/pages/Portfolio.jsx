@@ -2,13 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import PnlLineChart from '../components/charts/PnlLineChart'
-import {
-  buildAllocationData,
-  buildMockEquitySeries,
-  calcPortfolioKpis,
-  fetchPortfolioPositions,
-  mockPositions
-} from '../lib/portfolio'
+import PositionDetailDrawer from '../components/PositionDetailDrawer'
+import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 
 function Panel({ title, right, children }) {
@@ -23,14 +18,68 @@ function Panel({ title, right, children }) {
   )
 }
 
+/** Chip health score bar — design doc §4.1 visual spec */
+function ChipScoreBar({ score }) {
+  if (score == null) return <span className="text-[rgb(var(--muted))]">-</span>
+  const pct = Math.min(100, Math.max(0, (score / 10) * 100))
+  let barColor = 'bg-rose-500'
+  let textColor = 'text-rose-400'
+  if (score >= 7) { barColor = 'bg-emerald-500'; textColor = 'text-emerald-400' }
+  else if (score >= 4) { barColor = 'bg-amber-500'; textColor = 'text-amber-400' }
+  return (
+    <span className="flex items-center gap-2">
+      <span className="relative h-1.5 w-14 rounded-full bg-slate-700 overflow-hidden">
+        <span className={`absolute inset-y-0 left-0 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </span>
+      <span className={`text-xs font-medium ${textColor}`}>{score}</span>
+    </span>
+  )
+}
+
+/** Sector concentration donut with 40% warning — design doc §4.1 */
+function AllocationWithWarning({ data }) {
+  const warnings = data.filter(d => d.value > 40)
+  return (
+    <div>
+      <AllocationDonut data={data} warnThreshold={40} />
+      {warnings.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {warnings.map(d => (
+            <span key={d.label} className="flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300">
+              ⚠️ {d.label} {d.value.toFixed(1)}% 超過 40% 集中度上限
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function PortfolioPage() {
   const [positions, setPositions] = useState(mockPositions)
   const [source, setSource] = useState('mock')
   const [preferApi, setPreferApi] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  // Drawer state — design doc §4.1
+  const [drawerSymbol, setDrawerSymbol] = useState(null)
+  const [drawerPosition, setDrawerPosition] = useState(null)
 
-  const equitySeries = useMemo(() => buildMockEquitySeries({ days: 30, startEquity: 100000 }), [])
+  const [equitySeries, setEquitySeries] = useState([])
+  const [equitySource, setEquitySource] = useState('讀取中...')
+  const [backendKpis, setBackendKpis] = useState({ available_cash: 0, today_trades_count: 0, overall_win_rate: 0 })
+
+  // P1-6: Fetch real equity curve on mount; fallback to mock if no DB data
+  useEffect(() => {
+    fetchEquityCurve({ days: 60, startEquity: 100000 }).then(data => {
+      if (data.length > 0) {
+        setEquitySeries(data)
+        setEquitySource('DB')
+      } else {
+        setEquitySource('mock (no trades)')
+      }
+    })
+  }, [])
 
   async function load(nextPreferApi = preferApi) {
     setLoading(true)
@@ -47,8 +96,12 @@ export default function PortfolioPage() {
     const timeout = setTimeout(() => controller.abort(), 1500)
 
     try {
-      const data = await fetchPortfolioPositions({ signal: controller.signal })
+      const [data, kpisData] = await Promise.all([
+        fetchPortfolioPositions({ signal: controller.signal }),
+        fetchPortfolioKpis({ signal: controller.signal })
+      ])
       setPositions(data)
+      setBackendKpis(kpisData)
       setSource('api')
     } catch (e) {
       setPositions(mockPositions)
@@ -70,11 +123,11 @@ export default function PortfolioPage() {
 
   const dailyTone = kpis.dailyPnl >= 0 ? 'good' : 'bad'
   const cumulativeTone = kpis.cumulativePnl >= 0 ? 'good' : 'bad'
-
   const total = kpis.total
 
   return (
     <div className="space-y-6">
+      {/* Header / controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm font-semibold">庫存總覽 (Portfolio)</div>
@@ -113,40 +166,55 @@ export default function PortfolioPage() {
           disabled={loading}
           className="w-full sm:w-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.35] px-4 py-2 text-sm text-[rgb(var(--text))] shadow-panel transition hover:bg-[rgb(var(--surface))/0.5] disabled:opacity-50"
         >
-          {loading ? 'Loading…' : 'Reload'}
+          {loading ? '讀取中…' : '重新整理'}
         </button>
       </div>
 
+      {/* KPIs — design doc §4.1: 當日損益、總資產 */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard title="總資產" value={formatCurrency(kpis.total)} subtext="Σ (qty × lastPrice)" />
-        <KpiCard title="日損益" value={formatCurrency(kpis.dailyPnl)} subtext="Mock equity curve" tone={dailyTone} />
-        <KpiCard title="累計損益" value={formatCurrency(kpis.cumulativePnl)} subtext="Mock equity curve" tone={cumulativeTone} />
+        <KpiCard title="可用現金" value={formatCurrency(backendKpis.available_cash)} subtext="DB Snapshot" tone="neutral" />
+        <KpiCard title="日損益" value={formatCurrency(kpis.dailyPnl)} subtext={`Equity (${equitySource})`} tone={dailyTone} />
+        <KpiCard title="累計損益" value={formatCurrency(kpis.cumulativePnl)} subtext={`Equity (${equitySource})`} tone={cumulativeTone} />
+
+        <KpiCard title="今日成交筆數" value={formatNumber(backendKpis.today_trades_count)} subtext="Trades DB" tone="neutral" />
+        <KpiCard
+          title="整體勝率"
+          value={`${formatNumber(backendKpis.overall_win_rate * 100, { maximumFractionDigits: 1 })}%`}
+          subtext="Winning / Closed Trades"
+          tone={backendKpis.overall_win_rate >= 0.5 ? 'good' : (backendKpis.overall_win_rate === 0 ? 'neutral' : 'bad')}
+        />
         <KpiCard
           title="夏普比率"
           value={kpis.sharpe == null ? '-' : formatNumber(kpis.sharpe, { maximumFractionDigits: 2 })}
-          subtext="(mock) annualized"
+          subtext={`(${equitySource}) annualized`}
           tone={kpis.sharpe != null && kpis.sharpe >= 1 ? 'good' : 'neutral'}
         />
       </div>
 
+      {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="資產分配" right={allocation.length ? `${allocation.length} symbols` : 'No data'}>
+        <Panel title="板塊集中度" right={allocation.length ? `${allocation.length} symbols` : 'No data'}>
           {allocation.length ? (
-            <AllocationDonut data={allocation} />
+            <AllocationWithWarning data={allocation} />
           ) : (
             <div className="py-16 text-center text-sm text-[rgb(var(--muted))]">No allocation data.</div>
           )}
         </Panel>
 
-        <Panel title="損益趨勢" right="Equity curve (mock)">
+        <Panel title="損益趨勢" right={`Equity curve (${equitySource})`}>
           <PnlLineChart data={equitySeries} />
         </Panel>
       </div>
 
+      {/* Positions table — click row to open drawer */}
       <section className="rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.2] shadow-panel">
         <div className="flex items-center justify-between border-b border-[rgb(var(--border))] px-4 py-3">
           <div className="text-sm font-semibold">持倉列表</div>
-          <div className="text-xs text-[rgb(var(--muted))]">{positions.length} positions</div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-[rgb(var(--muted))]">{positions.length} positions</span>
+            <span className="text-xs text-emerald-400/70 hidden sm:block">← 點擊任一行查看詳情</span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -159,17 +227,17 @@ export default function PortfolioPage() {
                 <th className="px-4 py-3">數量</th>
                 <th className="px-4 py-3">未實現損益</th>
                 <th className="px-4 py-3">持倉比例</th>
+                <th className="px-4 py-3">籌碼評分</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgb(var(--border))]">
               {positions.map((p) => {
                 const qty = Number(p.qty || 0)
-                const last = Number(p.lastPrice || 0)
-                const avg = Number(p.avgCost)
+                const last = Number(p.lastPrice || p.last_price || 0)
+                const avg = Number(p.avgCost || p.avg_price)
                 const mv = qty * last
                 const weight = total > 0 ? mv / total : 0
                 const unreal = Number.isFinite(avg) ? (last - avg) * qty : null
-
                 const pnlTone =
                   unreal == null
                     ? 'text-[rgb(var(--muted))]'
@@ -178,20 +246,31 @@ export default function PortfolioPage() {
                       : 'text-rose-600 dark:text-rose-300'
 
                 return (
-                  <tr key={p.symbol} className="hover:bg-[rgb(var(--surface))/0.35]">
-                    <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">{p.symbol}</td>
+                  <tr
+                    key={p.symbol}
+                    className="cursor-pointer hover:bg-emerald-500/5 hover:ring-1 hover:ring-inset hover:ring-emerald-500/20 transition-colors"
+                    onClick={() => { setDrawerSymbol(p.symbol); setDrawerPosition(p) }}
+                    title={`點擊查看 ${p.symbol} 詳情`}
+                  >
+                    <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">
+                      {p.symbol}
+                      {p.name && <div className="text-xs text-[rgb(var(--muted))]">{p.name}</div>}
+                    </td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
                     <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
+                    <td className="px-4 py-3">
+                      <ChipScoreBar score={p.chip_score ?? p.chip_health_score ?? null} />
+                    </td>
                   </tr>
                 )
               })}
 
               {positions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
                     No positions.
                   </td>
                 </tr>
@@ -201,9 +280,18 @@ export default function PortfolioPage() {
         </div>
 
         <div className="border-t border-[rgb(var(--border))] px-4 py-3 text-xs text-[rgb(var(--muted))]">
-          Notes: 未實現損益需提供 avgCost；此頁面包含 mock equity curve（之後可替換為真實 PnL API）。
+          點擊持倉行查看進場理由、止損止盈、PM 授權及籌碼趨勢。損益曲線目前為 mock 數據，待接入 daily_pnl 表。
         </div>
       </section>
+
+      {/* Position Detail Drawer — design doc §4.1 */}
+      {drawerSymbol && (
+        <PositionDetailDrawer
+          symbol={drawerSymbol}
+          position={drawerPosition}
+          onClose={() => { setDrawerSymbol(null); setDrawerPosition(null) }}
+        />
+      )}
 
       <div className="sr-only" aria-live="polite">
         {loading ? 'Loading portfolio data' : `Portfolio data loaded from ${source}`}

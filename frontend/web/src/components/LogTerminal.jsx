@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
-const DEFAULT_API_BASE = 'http://localhost:8080'
+const DEFAULT_API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('tail'))
+  ? `https://${window.location.hostname}:8080`
+  : 'http://localhost:8080'
+
+import { getToken } from '../lib/auth'
 
 function formatTs(ts) {
   const n = Number(ts)
@@ -21,6 +25,7 @@ export default function LogTerminal() {
     const base = import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE
     return String(base).replace(/\/$/, '')
   }, [])
+  const token = getToken()
 
   const [connected, setConnected] = useState(false)
   const [paused, setPaused] = useState(false)
@@ -52,7 +57,7 @@ export default function LogTerminal() {
   useEffect(() => {
     if (paused) return
 
-    const url = `${apiBase}/api/stream/logs`
+    const url = `${apiBase}/api/stream/logs${token ? `?token=${token}` : ''}`
     const es = new EventSource(url)
 
     const onOpen = () => {
@@ -134,9 +139,8 @@ export default function LogTerminal() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPaused(p => !p)}
-            className={`rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-              paused ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-            }`}
+            className={`rounded-lg px-3 py-2 text-xs font-medium transition-all ${paused ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+              }`}
           >
             {paused ? '▶ 繼續' : '⏸ 暫停'}
           </button>

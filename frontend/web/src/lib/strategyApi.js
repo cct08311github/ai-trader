@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-
-const DEFAULT_API_BASE = ''
+import { getApiBase, getToken } from './auth'
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -15,6 +14,7 @@ async function fetchJsonWithTimeout(url, options = {}, { timeoutMs = 5000 } = {}
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         ...(options.headers || {})
       }
     })
@@ -56,17 +56,11 @@ async function callApiWithRetry(url, options, { retries = 1, backoffMs = 400, ti
 }
 
 export function useStrategyApiBase() {
-  return useMemo(() => {
-    const base = import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE
-    return `${String(base).replace(/\/$/, '')}/api/strategy`
-  }, [])
+  return useMemo(() => `${getApiBase()}/api/strategy`, [])
 }
 
 export function useStreamApiBase() {
-  return useMemo(() => {
-    const base = import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE
-    return `${String(base).replace(/\/$/, '')}/api/stream`
-  }, [])
+  return useMemo(() => `${getApiBase()}/api/stream`, [])
 }
 
 export function createStrategyClient(API_BASE, { opsToken } = {}) {

@@ -11,16 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: CI
+  # ── Job 1：安全掃描（先跑，其餘 job 等它通過）─────────────────────
+  guardrails:
+    name: 🛡️ Guardrails
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 5
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: "🛡️ Guardrails: block hardcoded local paths / secret-file references"
+      - name: Block hardcoded local paths / secret-file references
         run: |
           set -euo pipefail
 
@@ -31,33 +31,57 @@ jobs:
             | grep -vE '^(docs/|frontend/web/README\.md$|ecosystem\.config\.js$|frontend/backend/run\.sh$|\.github/workflows/ci\.yml$)')
 
           # Fail if any hardcoded local path or PEM key/cert read is found.
-          # - macOS local absolute paths (example: /Users/...)
-          # - .openclaw/ (local agent workspace)
-          # - readFileSync(...*.pem) (commonly used for cert/key)
           if echo "$files" | xargs -r grep -nIE '(/Users/|\.openclaw/|readFileSync\([^)]*\.pem)'; then
             echo "::error::Forbidden pattern found. Use relative paths or env vars; do not hardcode local cert/key paths."
             exit 1
           fi
           echo "OK: guardrail scan passed."
 
+  # ── Job 2：Python 後端測試（與 frontend 並行）─────────────────────
+  backend:
+    name: 🐍 Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: guardrails
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: frontend/backend/requirements.txt
 
       - name: 📦 Install backend deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r frontend/backend/requirements.txt
+        run: pip install -r frontend/backend/requirements.txt
 
-      - name: 🧪 Run backend tests (pytest)
-        run: |
-          pytest
+      - name: 🧪 Run core engine tests (pytest)
+        run: pytest -q
+
+      - name: 🧪 Run FastAPI backend tests (pytest)
+        working-directory: frontend/backend
+        run: pytest -q tests/
+
+  # ── Job 3：Frontend 測試 + Build（與 backend 並行）────────────────
+  frontend:
+    name: 🟢 Frontend Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: guardrails
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/web/package-lock.json
 
       - name: 📦 Install frontend deps
         working-directory: frontend/web
@@ -73,7 +97,7 @@ jobs:
         env:
           CI: true
           NODE_ENV: test
-        run: npm test
+        run: npm test -- --run
 
       - name: 🏗️ Build frontend
         working-directory: frontend/web

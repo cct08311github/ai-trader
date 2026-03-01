@@ -20,10 +20,18 @@ database/__pycache__/
 
 # Temp
 *.backup
+*.bak
+*.bak2
 Gemini.md*
 *.db
 *.sqlite
 *.sqlite3
+
+# macOS
+.DS_Store
+
+# Python packaging artifacts
+*.egg-info/
 
 # Virtualenv
 .venv/

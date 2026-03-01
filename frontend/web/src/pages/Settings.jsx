@@ -4,13 +4,11 @@ import {
     Save, RefreshCw, Lock, Bell, Layers, ChevronDown, ChevronUp
 } from 'lucide-react'
 import { formatComma } from '../lib/format'
+import { authFetch, getApiBase } from '../lib/auth'
 
-/* ── API base ─────────────────────────────────────────────── */
-// Empty string = same origin → Vite proxy routes /api/* to 127.0.0.1:8080 locally
-const API = (import.meta?.env?.VITE_API_BASE || '').replace(/\/$/, '')
-
+/* ── API base ───────────────────────────────────────────────── */
 async function apiFetch(path, opts = {}) {
-    const res = await fetch(`${API}${path}`, {
+    const res = await authFetch(`${getApiBase()}${path}`, {
         headers: { 'Content-Type': 'application/json' },
         ...opts,
     })

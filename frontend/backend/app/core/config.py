@@ -43,6 +43,11 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3000",
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "http://localhost:3012",
+            "http://127.0.0.1:3012",
+            "https://mac-mini.tailde842d.ts.net:3012",
+            "https://mac-mini.tailde842d.ts.net:3011",
+            "https://mac-mini.tailde842d.ts.net",
         ]
 
 

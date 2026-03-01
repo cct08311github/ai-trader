@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState, Fragment } from 'react'
 import { useStreamApiBase, useStrategyData } from '../lib/strategyApi'
+import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu } from 'lucide-react'
+import { authFetch, getApiBase, getToken } from '../lib/auth'
 
 function formatUnixSec(sec) {
   const n = Number(sec)
@@ -38,12 +40,116 @@ function RatingCard({ rating, basis }) {
 
   return (
     <div className={`rounded-2xl border ${theme.border} ${theme.bg} p-6 shadow-panel`}>
-      <div className="text-sm font-semibold"></div>
+      <div className="text-sm font-semibold text-slate-300">今日市場評級</div>
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className={`text-6xl font-black tracking-tight ${theme.text}`}>{r || '-'}</div>
-        <div className="text-right text-[11px] text-slate-500">llm_tracesPM / </div>
+        <div className="text-right text-[11px] text-slate-500">來源：llm_traces PM</div>
       </div>
-      <div className={`mt-4 whitespace-pre-wrap break-words text-xs leading-relaxed ${theme.sub}`}>{basis || '()'}</div>
+      <div className={`mt-4 whitespace-pre-wrap break-words text-xs leading-relaxed ${theme.sub}`}>{basis || '(暫無評級依據)'}</div>
+    </div>
+  )
+}
+
+/** Bull vs Bear Debate Panel — design doc §4.3 */
+function DebatePanel() {
+  const [debates, setDebates] = useState([])
+  const [date, setDate] = useState('today')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    const base = getApiBase()
+    authFetch(`${base}/api/strategy/debates?date=${date}`)
+      .then(r => r.json())
+      .then(d => { setDebates(d?.data || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [date])
+
+  // Parse debate content from episodic memory entries
+  const parsed = useMemo(() => {
+    return debates.map(d => {
+      const content = String(d.content || '')
+      // Try to extract bull/bear/pm sections
+      const bullMatch = content.match(/bull[_\s]?case[:\s]+([^\n]+(?:\n(?!bear|pm)[^\n]+)*)/i)
+      const bearMatch = content.match(/bear[_\s]?case[:\s]+([^\n]+(?:\n(?!bull|pm)[^\n]+)*)/i)
+      const pmMatch = content.match(/pm[_\s]?(?:decision|final|判斷)[:\s]+([^\n]+(?:\n[^\n]+)*)/i)
+      return {
+        id: d.id,
+        timestamp: d.created_at,
+        bull: bullMatch?.[1]?.trim() || null,
+        bear: bearMatch?.[1]?.trim() || null,
+        pm: pmMatch?.[1]?.trim() || null,
+        raw: content
+      }
+    })
+  }, [debates])
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-5 shadow-panel">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-200">多空辯論記錄</div>
+          <div className="text-xs text-slate-500 mt-0.5">設計書 §4.3 — 多方 vs 空方 vs PM 最終判斷</div>
+        </div>
+        <input
+          type="date"
+          value={date === 'today' ? today : date}
+          onChange={e => setDate(e.target.value)}
+          className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-sm text-slate-200 focus:border-emerald-500/50 focus:outline-none"
+        />
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-slate-500 py-6 text-center">載入中…</div>
+      ) : parsed.length === 0 ? (
+        <div className="text-xs text-slate-500 py-8 text-center">今日無辯論記錄 (來源：episodic_memory 表 type=debate)</div>
+      ) : (
+        <div className="space-y-4">
+          {parsed.map((d, i) => (
+            <div key={d.id || i} className="rounded-xl border border-slate-800 overflow-hidden">
+              <div className="grid grid-cols-1 divide-y divide-slate-800 lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+                {/* Bull case */}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs font-semibold text-emerald-300">多方觀點</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {d.bull || <span className="text-slate-600">（未解析到多方資料）</span>}
+                  </p>
+                </div>
+                {/* Bear case */}
+                <div className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-rose-400" />
+                    <span className="text-xs font-semibold text-rose-300">空方觀點</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {d.bear || <span className="text-slate-600">（未解析到空方資料）</span>}
+                  </p>
+                </div>
+                {/* PM decision */}
+                <div className="p-4 bg-slate-900/40">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="inline-block h-2 w-2 rounded-full bg-cyan-400" />
+                    <span className="text-xs font-semibold text-cyan-300">PM 最終判斷</span>
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                    {d.pm || (
+                      <details className="cursor-pointer">
+                        <summary className="text-slate-500">展開原始內容</summary>
+                        <p className="mt-2 whitespace-pre-wrap text-slate-400">{d.raw.slice(0, 300)}</p>
+                      </details>
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -88,7 +194,7 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">
-            
+
           </button>
         </div>
 
@@ -116,14 +222,14 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
                 onClick={onApprove}
                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-emerald-500"
               >
-                 (Approve)
+                (Approve)
               </button>
               <button
                 disabled={busy || String(proposal?.status || '').toLowerCase() !== 'pending'}
                 onClick={onReject}
                 className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-rose-500"
               >
-                 (Reject)
+                (Reject)
               </button>
               <div className="text-[11px] text-slate-500"> pending </div>
             </div>
@@ -178,7 +284,8 @@ export default function StrategyPage() {
 
   // SSE integration: when new llm_traces logs arrive, refresh proposals (debounced).
   useEffect(() => {
-    const url = `${STREAM_BASE}/logs`
+    const token = getToken()
+    const url = `${STREAM_BASE}/logs${token ? `?token=${token}` : ''}`
     const es = new EventSource(url)
 
     let t = null
@@ -267,7 +374,7 @@ export default function StrategyPage() {
                 onClick={() => saveOpsToken('')}
                 className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
               >
-                
+
               </button>
             </div>
           </div>
@@ -292,7 +399,7 @@ export default function StrategyPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td className="px-4 py-5 text-slate-500" colSpan={7}>
-                    {loading.proposals ? '...' : ''}
+                    {loading.proposals ? '讀取中...' : ''}
                   </td>
                 </tr>
               ) : (
@@ -372,6 +479,9 @@ export default function StrategyPage() {
         onApprove={() => doApprove(selected)}
         onReject={() => doReject(selected)}
       />
+
+      {/* Bull vs Bear Debate — design doc §4.3 */}
+      <DebatePanel />
     </div>
   )
 }

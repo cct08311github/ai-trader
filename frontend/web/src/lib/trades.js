@@ -1,8 +1,7 @@
-const DEFAULT_API_BASE = ''
+import { authFetch, getApiBase } from './auth'
 
-const API_BASE = (import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
-const API_URL = `${API_BASE}/api/portfolio/trades`
-const TRADE_CAUSAL_API = `${API_BASE}/api/portfolio/trade-causal`
+const API_URL = () => `${getApiBase()}/api/portfolio/trades`
+const TRADE_CAUSAL_API = () => `${getApiBase()}/api/portfolio/trade-causal`
 
 export const mockTrades = [
   {
@@ -47,7 +46,7 @@ export async function fetchTrades(
     signal
   } = {}
 ) {
-  const url = new URL(API_URL)
+  const url = new URL(API_URL())
   if (start) url.searchParams.set('start', start)
   if (end) url.searchParams.set('end', end)
   if (symbol) url.searchParams.set('symbol', symbol)
@@ -58,7 +57,7 @@ export async function fetchTrades(
   url.searchParams.set('sort_by', sortBy)
   url.searchParams.set('sort_dir', sortDir)
 
-  const res = await fetch(url.toString(), { signal })
+  const res = await authFetch(url.toString(), { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
 
@@ -70,8 +69,8 @@ export async function fetchTrades(
 }
 
 export async function fetchTradeCausalChain(tradeId) {
-  const url = `${TRADE_CAUSAL_API}/${tradeId}`
-  const res = await fetch(url)
+  const url = `${TRADE_CAUSAL_API()}/${tradeId}`
+  const res = await authFetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
 

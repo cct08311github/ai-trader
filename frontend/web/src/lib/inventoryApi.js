@@ -1,9 +1,8 @@
 // Inventory API for fetching inventory data
 import { formatCurrency } from './format'
+import { authFetch, getApiBase } from './auth'
 
-const DEFAULT_API_BASE = ''
-
-const API_BASE = (import.meta?.env?.VITE_API_BASE || DEFAULT_API_BASE).replace(/\/$/, '')
+const API_BASE = getApiBase
 
 // Mock inventory data for development
 export const mockInventoryData = [
@@ -103,7 +102,7 @@ export const mockInventoryData = [
 export async function fetchInventoryData() {
   try {
     // Try to fetch from the backend API
-    const response = await fetch(`${API_BASE}/api/inventory`, {
+    const response = await authFetch(`${API_BASE()}/api/inventory`, {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json'

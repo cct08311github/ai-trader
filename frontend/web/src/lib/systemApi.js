@@ -1,15 +1,18 @@
 // System monitoring API client + React hooks
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-
-const DEFAULT_API_BASE = ''
+import { authFetch, getApiBase } from './auth'
 
 async function fetchJson(url, { timeoutMs = 5000 } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const res = await fetch(url, { signal: controller.signal })
-    if (!res.ok) throw new Error(`API ${res.status}`)
+    const res = await authFetch(url, { signal: controller.signal })
+    if (!res.ok) {
+      let detail = ''
+      try { const b = await res.json(); detail = b?.detail ? `: ${b.detail}` : '' } catch { }
+      throw new Error(`API error: ${res.status}${detail}`)
+    }
     return await res.json()
   } catch (err) {
     if (err?.name === 'AbortError') throw new Error('timeout')
@@ -20,7 +23,7 @@ async function fetchJson(url, { timeoutMs = 5000 } = {}) {
 }
 
 function getBase() {
-  return (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) || DEFAULT_API_BASE
+  return getApiBase()
 }
 
 export function useSystemHealth({ pollMs = 5000 } = {}) {
@@ -135,7 +138,7 @@ export function useCapital() {
     setSaving(true)
     setSaved(false)
     try {
-      const res = await fetch(`${getBase()}/api/capital`, {
+      const res = await authFetch(`${getBase()}/api/capital`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

@@ -113,7 +113,7 @@ export default function DashboardPage() {
           disabled={loading}
           className="w-full sm:w-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.35] px-4 py-2 text-sm text-[rgb(var(--text))] shadow-panel transition hover:bg-[rgb(var(--surface))/0.5] disabled:opacity-50"
         >
-          {loading ? 'Loading…' : 'Reload'}
+          {loading ? '讀取中…' : '重新整理'}
         </button>
       </div>
 
@@ -204,7 +204,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="sr-only" aria-live="polite">
-        {loading ? 'Loading dashboard data' : `Dashboard data loaded from ${source}`}
+        {loading ? '讀取儀表板資料中...' : `資料來源：${source}`}
       </div>
     </div>
   )
