@@ -30,3 +30,13 @@ export async function pmReject(reason = '') {
   if (!res.ok) throw new Error('封鎖失敗')
   return (await res.json()).data
 }
+
+export async function pmTriggerReview() {
+  const res = await authFetch(`${getApiBase()}/api/pm/review`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (!res.ok) throw new Error('AI 審核失敗')
+  return (await res.json()).data
+}

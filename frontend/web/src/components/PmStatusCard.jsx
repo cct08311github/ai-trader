@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ShieldCheck, ShieldOff, ShieldAlert, RefreshCw } from 'lucide-react'
-import { fetchPmStatus, pmApprove, pmReject } from '../lib/pmApi'
+import { fetchPmStatus, pmApprove, pmReject, pmTriggerReview } from '../lib/pmApi'
 
 /**
  * PmStatusCard — 每日 PM 審核狀態卡片
@@ -32,6 +32,12 @@ export default function PmStatusCard() {
   async function handleReject() {
     setActing(true); setError(null)
     try { setState(await pmReject()) } catch (e) { setError(e.message) }
+    setActing(false)
+  }
+
+  async function handleReview() {
+    setActing(true); setError(null)
+    try { setState(await pmTriggerReview()) } catch (e) { setError(e.message) }
     setActing(false)
   }
 
@@ -79,6 +85,14 @@ export default function PmStatusCard() {
 
         {/* Actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={handleReview}
+            disabled={acting}
+            className="rounded-lg bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-400 ring-1 ring-violet-500/20 transition hover:bg-violet-500/20 disabled:opacity-40"
+            title="呼叫 Gemini 進行多空辯論審核"
+          >
+            {acting ? '審核中…' : 'AI 審核'}
+          </button>
           <button
             onClick={handleApprove}
             disabled={acting || approved}
