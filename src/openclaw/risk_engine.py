@@ -110,43 +110,49 @@ def _build_candidate(decision: Decision, market: MarketState, portfolio: Portfol
     if decision.signal_side not in {"buy", "sell"}:
         return None
 
-    mid = (market.best_bid + market.best_ask) / 2
-    stop_price = decision.stop_price
-    if stop_price is None:
-        if decision.signal_side == "buy":
-            stop_price = mid * (1 - limits["default_stop_pct"])
-        else:
-            stop_price = mid * (1 + limits["default_stop_pct"])
-
-    authority_level = limits.get("authority_level")
-    try:
-        authority_level = int(authority_level) if authority_level is not None else None
-    except Exception:
-        authority_level = None
-
-    qty = calculate_position_qty(
-        nav=portfolio.nav,
-        entry_price=mid,
-        stop_price=stop_price,
-        atr=decision.atr,
-        atr_stop_multiple=decision.atr_stop_multiple,
-        base_risk_pct=limits["max_loss_per_trade_pct_nav"],
-        confidence=decision.confidence,
-        confidence_threshold=limits.get("low_confidence_threshold", 0.60),
-        low_confidence_scale=limits.get("low_confidence_scale", 0.50),
-        volatility_multiplier=decision.volatility_multiplier,
-        method=str(limits.get("position_sizing_method", "fixed_fractional")),
-        authority_level=authority_level,
-        sentinel_policy_path=str(limits.get("sentinel_policy_path", "config/sentinel_policy_v1.json")),
-    )
-    if qty <= 0:
-        return None
-
     side = decision.signal_side
     pos = portfolio.positions.get(decision.symbol)
     opens_new = True
     if pos and ((side == "buy" and pos.qty < 0) or (side == "sell" and pos.qty > 0)):
         opens_new = False
+
+    mid = (market.best_bid + market.best_ask) / 2
+
+    if not opens_new and pos is not None:
+        # Reducing an existing position: use current position qty, skip sizing
+        qty = abs(pos.qty)
+    else:
+        stop_price = decision.stop_price
+        if stop_price is None:
+            if side == "buy":
+                stop_price = mid * (1 - limits["default_stop_pct"])
+            else:
+                stop_price = mid * (1 + limits["default_stop_pct"])
+
+        authority_level = limits.get("authority_level")
+        try:
+            authority_level = int(authority_level) if authority_level is not None else None
+        except Exception:
+            authority_level = None
+
+        qty = calculate_position_qty(
+            nav=portfolio.nav,
+            entry_price=mid,
+            stop_price=stop_price,
+            atr=decision.atr,
+            atr_stop_multiple=decision.atr_stop_multiple,
+            base_risk_pct=limits["max_loss_per_trade_pct_nav"],
+            confidence=decision.confidence,
+            confidence_threshold=limits.get("low_confidence_threshold", 0.60),
+            low_confidence_scale=limits.get("low_confidence_scale", 0.50),
+            volatility_multiplier=decision.volatility_multiplier,
+            method=str(limits.get("position_sizing_method", "fixed_fractional")),
+            authority_level=authority_level,
+            sentinel_policy_path=str(limits.get("sentinel_policy_path", "config/sentinel_policy_v1.json")),
+        )
+
+    if qty <= 0:
+        return None
 
     price = market.best_ask if side == "buy" else market.best_bid
     return OrderCandidate(
