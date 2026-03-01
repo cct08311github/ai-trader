@@ -195,7 +195,7 @@ export default function PortfolioPage() {
                               className={`h-full rounded-full ${
                                 p.chipHealthScore <= 3 ? 'bg-red-500' : p.chipHealthScore <= 6 ? 'bg-yellow-500' : 'bg-green-500'
                               }`}
-                              style={{`width: ${p.chipHealthScore * 10}%`}}
+                              style={{width: `${p.chipHealthScore * 10}%`}}
                             />
                           </div>
                           <span className={`text-xs ${
@@ -234,19 +234,3 @@ export default function PortfolioPage() {
   )
 }
 
-      {selectedSymbol && (
-        <div className="fixed inset-0 z-50 flex items-center justify-end bg-black/60" onClick={() => setSelectedSymbol(null)}>
-          <div className="h-full w-full max-w-md bg-slate-900 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-800 p-4">
-              <h3 className="text-lg font-semibold">持倉詳情 - {selectedSymbol}</h3>
-              <button onClick={() => setSelectedSymbol(null)} className="text-slate-400 hover:text-white">
-                Close
-              </button>
-            </div>
-            <div className="p-4">
-              <p>Loading details for {selectedSymbol}...</p>
-              {/* TODO: Fetch position details from API */}
-            </div>
-          </div>
-        </div>
-      )}
