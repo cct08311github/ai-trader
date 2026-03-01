@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Lock } from 'lucide-react'
+import PmStatusCard from '../components/PmStatusCard'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import PnlLineChart from '../components/charts/PnlLineChart'
@@ -130,6 +131,9 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6">
+      {/* Daily PM approval status */}
+      <PmStatusCard />
+
       {/* Header / controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
