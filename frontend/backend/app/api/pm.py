@@ -121,4 +121,36 @@ def pm_review():
     # Persist to episodic_memory so Strategy page debate section shows history
     _write_debate_to_db(state)
 
+    # Write prompt + raw response to llm_traces for full transparency
+    _write_llm_trace(state, model)
+
     return {"status": "ok", "data": state}
+
+
+def _write_llm_trace(state: dict, model: str) -> None:
+    """Write prompt and raw Gemini response to llm_traces for audit."""
+    import json, time, uuid
+    prompt = state.pop("_prompt", None)
+    raw = state.pop("_raw_response", None)
+    latency = state.pop("_latency_ms", None)
+    state.pop("_model", None)
+    if not prompt or not raw:
+        return
+    try:
+        from app.db import get_conn_rw
+        with get_conn_rw() as conn:
+            conn.execute(
+                """INSERT INTO llm_traces
+                   (trace_id, agent, model, prompt, response, latency_ms, created_at)
+                   VALUES (?, 'pm_review', ?, ?, ?, ?, ?)""",
+                (
+                    f"pm_{uuid.uuid4().hex[:12]}",
+                    model,
+                    prompt,
+                    raw,
+                    latency,
+                    int(time.time()),
+                )
+            )
+    except Exception:
+        pass

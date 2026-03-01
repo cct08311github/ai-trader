@@ -54,16 +54,18 @@ def gemini_call(model: str, prompt: str) -> Dict[str, Any]:
     """Call Gemini and return parsed JSON dict.
 
     Args:
-        model: Gemini model ID, e.g. "gemini-2.0-flash" or "gemini-1.5-pro".
+        model: Gemini model ID, e.g. "gemini-3.1-pro-preview".
         prompt: Full prompt string (built by build_debate_prompt).
 
     Returns:
         Parsed dict matching DebateDecisionV2 fields.
+        Also includes '_raw_response' and '_prompt' for transparency logging.
 
     Raises:
         RuntimeError: GEMINI_API_KEY not set.
         ValueError: Response is not valid JSON.
     """
+    import time
     import google.generativeai as genai  # lazy import
 
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -75,5 +77,17 @@ def gemini_call(model: str, prompt: str) -> Dict[str, Any]:
         model,
         generation_config={"response_mime_type": "application/json"},
     )
+    t0 = time.time()
     response = gen_model.generate_content(prompt)
-    return _extract_json(response.text)
+    latency_ms = int((time.time() - t0) * 1000)
+
+    raw_text = response.text
+    result = _extract_json(raw_text)
+
+    # Attach metadata for caller to log to llm_traces
+    result["_prompt"] = prompt
+    result["_raw_response"] = raw_text
+    result["_latency_ms"] = latency_ms
+    result["_model"] = model
+
+    return result

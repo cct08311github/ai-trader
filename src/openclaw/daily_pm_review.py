@@ -141,6 +141,16 @@ def run_daily_pm_review(
 
     prompt = build_debate_prompt(context)
     result = llm_call(model, prompt)
+
+    # Capture transparency metadata BEFORE parse_debate_response processes the dict,
+    # since it only reads known fields and _prompt/_raw_response would be discarded.
+    _trace = {
+        "_prompt": result.get("_prompt"),
+        "_raw_response": result.get("_raw_response"),
+        "_latency_ms": result.get("_latency_ms"),
+        "_model": result.get("_model"),
+    }
+
     parsed = parse_debate_response(result)
 
     action_lower = parsed.recommended_action.lower()
@@ -166,7 +176,8 @@ def run_daily_pm_review(
         "reviewed_at": datetime.now(timezone.utc).isoformat(),
         "source": "llm",
     }
-    _save_state(state)
+    _save_state(state)  # save clean state without trace data
+    state.update(_trace)  # append trace fields for caller to log (not persisted to file)
     return state
 
 

@@ -286,6 +286,31 @@ def get_semantic_memory(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/pm-traces")
+def get_pm_traces(
+    limit: int = 10,
+    conn: sqlite3.Connection = Depends(conn_dep),
+):
+    """Return recent PM review LLM traces with full prompt and raw Gemini response."""
+    try:
+        rows = conn.execute(
+            """
+            SELECT trace_id, model, prompt, response, latency_ms, created_at
+            FROM llm_traces
+            WHERE agent = 'pm_review'
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (min(limit, 50),),
+        ).fetchall()
+        data = [dict(r) for r in rows]
+        return {"status": "ok", "data": data, "total": len(data)}
+    except sqlite3.OperationalError:
+        return {"status": "ok", "data": [], "total": 0}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/debates")
 def get_debates(
     date: str = "today",

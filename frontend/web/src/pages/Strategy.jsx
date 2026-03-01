@@ -50,6 +50,102 @@ function RatingCard({ rating, basis }) {
   )
 }
 
+/** PM LLM Trace Panel — shows full prompt + raw Gemini response */
+function PmTracePanel() {
+  const [traces, setTraces] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState({}) // trace_id -> 'prompt' | 'response' | null
+
+  function reload() {
+    setLoading(true)
+    const base = getApiBase()
+    authFetch(`${base}/api/strategy/pm-traces?limit=5`)
+      .then(r => r.json())
+      .then(d => { setTraces(d?.data || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  function toggle(id, field) {
+    setExpanded(prev => ({ ...prev, [id]: prev[id] === field ? null : field }))
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-5 shadow-panel">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-200">PM 審核提示詞 &amp; 原始回覆</div>
+          <div className="text-xs text-slate-500 mt-0.5">點擊展開，可查看送給 Gemini 的完整提示詞及原始 JSON 回覆</div>
+        </div>
+        <button
+          onClick={reload}
+          disabled={loading}
+          className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-50"
+        >
+          {loading ? '載入中…' : '重新整理'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="text-xs text-slate-500 py-6 text-center">載入中…</div>
+      ) : traces.length === 0 ? (
+        <div className="text-xs text-slate-500 py-8 text-center">無記錄（點擊 Portfolio 頁面的「AI 審核」按鈕後才會出現）</div>
+      ) : (
+        <div className="space-y-3">
+          {traces.map(t => (
+            <div key={t.trace_id} className="rounded-xl border border-slate-800 overflow-hidden">
+              {/* Header row */}
+              <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-slate-950/50 text-[11px] text-slate-400">
+                <span className="font-mono text-slate-300">{t.trace_id}</span>
+                <span>{new Date((t.created_at || 0) * 1000).toLocaleString('zh-TW', { hour12: false })}</span>
+                <span className="text-indigo-300">{t.model}</span>
+                {t.latency_ms != null && <span>{t.latency_ms} ms</span>}
+              </div>
+
+              {/* Prompt section */}
+              <div className="border-t border-slate-800">
+                <button
+                  onClick={() => toggle(t.trace_id, 'prompt')}
+                  className="flex items-center gap-2 px-4 py-2 w-full text-left text-xs font-medium text-amber-300 hover:bg-slate-950/30"
+                >
+                  {expanded[t.trace_id] === 'prompt'
+                    ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />
+                    : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" />}
+                  提示詞 (Prompt)
+                </button>
+                {expanded[t.trace_id] === 'prompt' && (
+                  <pre className="max-h-[60vh] overflow-auto px-4 pb-4 text-[11px] text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
+                    {t.prompt || '(無內容)'}
+                  </pre>
+                )}
+              </div>
+
+              {/* Raw response section */}
+              <div className="border-t border-slate-800">
+                <button
+                  onClick={() => toggle(t.trace_id, 'response')}
+                  className="flex items-center gap-2 px-4 py-2 w-full text-left text-xs font-medium text-emerald-300 hover:bg-slate-950/30"
+                >
+                  {expanded[t.trace_id] === 'response'
+                    ? <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" />
+                    : <ChevronRight className="h-3.5 w-3.5 flex-shrink-0" />}
+                  原始回覆 (Raw Response)
+                </button>
+                {expanded[t.trace_id] === 'response' && (
+                  <pre className="max-h-[60vh] overflow-auto px-4 pb-4 text-[11px] text-emerald-200 whitespace-pre-wrap break-words leading-relaxed">
+                    {t.response || '(無內容)'}
+                  </pre>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Bull vs Bear Debate Panel — design doc §4.3 */
 function DebatePanel() {
   const [debates, setDebates] = useState([])
@@ -501,6 +597,9 @@ export default function StrategyPage() {
 
       {/* Bull vs Bear Debate — design doc §4.3 */}
       <DebatePanel />
+
+      {/* PM LLM Trace — full prompt + raw Gemini response for transparency */}
+      <PmTracePanel />
     </div>
   )
 }
