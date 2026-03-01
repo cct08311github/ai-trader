@@ -62,9 +62,6 @@ def _get_llm_call():
     return None
 
 
-_PM_MODEL = os.environ.get("PM_LLM_MODEL", "gemini-2.0-flash")
-
-
 @router.post("/review")
 def pm_review():
     """Trigger LLM-based daily review via Gemini.
@@ -79,6 +76,8 @@ def pm_review():
     except Exception:
         context = build_daily_context(conn=None)
 
+    # Read model at request time (not module load) so env vars from run.sh are visible
+    model = os.environ.get("PM_LLM_MODEL", "gemini-3.1-pro-preview")
     llm_call = _get_llm_call()
-    state = run_daily_pm_review(context=context, llm_call=llm_call, model=_PM_MODEL)
+    state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)
     return {"status": "ok", "data": state}
