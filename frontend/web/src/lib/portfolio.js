@@ -31,6 +31,17 @@ export async function fetchPortfolioPositions({ signal } = {}) {
   if (!Array.isArray(data)) throw new Error('Invalid API response: expected array or object with positions')
   return data
 }
+
+export async function fetchPositionDetail(symbol) {
+  const res = await fetch(`http://localhost:8080/api/portfolio/position-detail/${symbol}`)
+  if (!res.ok) throw new Error(`Failed to fetch position detail for ${symbol}`)
+  const data = await res.json()
+  if (data.status === 'ok' && data.data) {
+    return data.data
+  }
+  throw new Error('Invalid API response format')
+}
+
 export function calcPortfolioKpis(positions, { equitySeries } = {}) {
   const safe = positions ?? []
   const total = safe.reduce((acc, p) => acc + Number(p.qty || 0) * Number(p.lastPrice || 0), 0)
@@ -81,8 +92,8 @@ export function buildMockEquitySeries({ days = 30, startEquity = 100000 } = {}) 
     const equity = startEquity + drift * (days - i) + noise
 
     out.push({
-      date: d.toISOString().slice(5, 10),
-      equity: Math.round(equity * 100) / 100
+      date: d.toISOString().slice(0, 10),
+      equity
     })
   }
 
@@ -90,13 +101,13 @@ export function buildMockEquitySeries({ days = 30, startEquity = 100000 } = {}) 
 }
 
 function calcSharpeFromEquity(series) {
-  if (!Array.isArray(series) || series.length < 3) return null
+  if (!Array.isArray(series) || series.length < 2) return null
   const returns = []
   for (let i = 1; i < series.length; i += 1) {
-    const prev = Number(series[i - 1].equity)
-    const cur = Number(series[i].equity)
-    if (!Number.isFinite(prev) || prev === 0 || !Number.isFinite(cur)) continue
-    returns.push((cur - prev) / prev)
+    const prev = series[i - 1].equity
+    const curr = series[i].equity
+    if (prev <= 0) continue
+    returns.push((curr - prev) / prev)
   }
   if (returns.length < 2) return null
 
