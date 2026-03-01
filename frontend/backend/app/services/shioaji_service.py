@@ -42,7 +42,14 @@ def _get_api(simulation: bool = True):
 
     NOTE: caching avoids repeated logins. The first login can still be slow.
     """
-    import shioaji as sj  # type: ignore
+    try:
+        import shioaji as sj  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "shioaji 未安裝。若要使用真實/模擬券商模式，請執行：\n"
+            "  pip install shioaji>=1.0\n"
+            "或繼續使用 Mock 模式（預設）。"
+        ) from exc
 
     api = sj.Shioaji(simulation=simulation)
     api_key = os.environ.get("SHIOAJI_API_KEY")
