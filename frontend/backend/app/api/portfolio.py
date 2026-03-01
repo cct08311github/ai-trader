@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Query
@@ -9,6 +11,47 @@ from app.services.shioaji_service import get_positions, _get_system_simulation_m
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
+_LOCKED_PATH = os.path.join(os.path.dirname(__file__), "../../../../config/locked_symbols.json")
+
+
+def _read_locked() -> list:
+    try:
+        with open(_LOCKED_PATH, "r") as f:
+            return json.load(f).get("locked", [])
+    except Exception:
+        return []
+
+
+def _write_locked(symbols: list) -> None:
+    with open(_LOCKED_PATH, "w") as f:
+        json.dump({"locked": sorted(set(symbols))}, f, indent=2)
+
+
+@router.get("/locks")
+def list_locked_symbols():
+    """Return the list of locked symbols (sell-forbidden)."""
+    return {"status": "ok", "locked": _read_locked()}
+
+
+@router.post("/lock/{symbol}")
+def lock_symbol(symbol: str):
+    """Lock a symbol — AI agent cannot sell it."""
+    symbol = symbol.strip().upper()
+    locked = _read_locked()
+    if symbol not in locked:
+        locked.append(symbol)
+        _write_locked(locked)
+    return {"status": "ok", "locked": sorted(locked)}
+
+
+@router.delete("/lock/{symbol}")
+def unlock_symbol(symbol: str):
+    """Unlock a symbol — allow AI agent to sell again."""
+    symbol = symbol.strip().upper()
+    locked = [s for s in _read_locked() if s != symbol]
+    _write_locked(locked)
+    return {"status": "ok", "locked": locked}
+
 
 @router.get("/positions")
 def portfolio_positions(source: str = "shioaji", simulation: Optional[bool] = None):
@@ -17,7 +60,6 @@ def portfolio_positions(source: str = "shioaji", simulation: Optional[bool] = No
     source: mock|shioaji
     simulation: None = read from system_state.json (mirrors System page toggle)
     """
-    # Resolve simulation from system_state.json if not explicitly specified
     if simulation is None:
         simulation = _get_system_simulation_mode()
 
@@ -25,7 +67,14 @@ def portfolio_positions(source: str = "shioaji", simulation: Optional[bool] = No
     if source not in {"mock", "shioaji"}:
         source = "mock"
 
-    return {"status": "ok", **get_positions(source=source, simulation=simulation)}
+    result = get_positions(source=source, simulation=simulation)
+
+    # Attach locked status to each position
+    locked_set = set(_read_locked())
+    for p in result.get("positions", []):
+        p["locked"] = p.get("symbol", "").upper() in locked_set
+
+    return {"status": "ok", **result}
 
 
 SortBy = Literal["time", "amount", "pnl"]
@@ -140,6 +189,17 @@ def get_position_detail(symbol: str):
     """
     symbol = symbol.strip().upper()
 
+    import os, json
+    cap_path = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
+    def_sl, def_tp = 0.05, 0.10
+    try:
+        if os.path.exists(cap_path):
+            with open(cap_path, 'r') as f:
+                cap_data = json.load(f)
+                def_sl = float(cap_data.get("default_stop_loss_pct", 0.05))
+                def_tp = float(cap_data.get("default_take_profit_pct", 0.10))
+    except Exception: pass
+
     with get_conn() as conn:
         # 1. 取最近的 PM 決策（從 trades 找到買入時間再找 llm_traces）
         entry_reason = "暫無進場資料（請確認 llm_traces 表是否有對應筆數）"
@@ -188,9 +248,9 @@ def get_position_detail(symbol: str):
         if avg_price and (stop_loss is None or take_profit is None):
             p = float(avg_price)
             if stop_loss is None:
-                stop_loss = round(p * 0.95, 2)
+                stop_loss = round(p * (1.0 - def_sl), 2)
             if take_profit is None:
-                take_profit = round(p * 1.10, 2)
+                take_profit = round(p * (1.0 + def_tp), 2)
 
         # 3. 籌碼趨勢 — 嘗試讀 chip_trend 表
         chip_trend = []
@@ -230,7 +290,18 @@ def get_portfolio_kpis():
     import datetime
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
 
-    available_cash = 700000.0  # mock/default cash for now
+    import os, json
+    cap_path = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
+    try:
+        with open(cap_path, 'r') as f:
+            cap_data = json.load(f)
+            available_cash = float(cap_data.get("total_capital_twd", 500000.0))
+            def_sl = float(cap_data.get("default_stop_loss_pct", 0.05))
+            def_tp = float(cap_data.get("default_take_profit_pct", 0.10))
+    except Exception:
+        available_cash = 500000.0
+        def_sl = 0.05
+        def_tp = 0.10
     today_trades_count = 0
     overall_win_rate = 0.0
 

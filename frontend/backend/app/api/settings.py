@@ -32,6 +32,9 @@ class CapitalSettings(BaseModel):
     max_single_position_pct: float = 0.10
     daily_loss_limit_twd: float = 5000.0
     monthly_loss_limit_twd: float = 30000.0
+    monthly_api_budget_twd: float = 1000.0
+    default_stop_loss_pct: float = 0.05
+    default_take_profit_pct: float = 0.10
 
 
 @router.get("/capital")
@@ -41,6 +44,9 @@ def get_capital():
         "max_single_position_pct": 0.10,
         "daily_loss_limit_twd": 5000.0,
         "monthly_loss_limit_twd": 30000.0,
+        "monthly_api_budget_twd": 1000.0,
+        "default_stop_loss_pct": 0.05,
+        "default_take_profit_pct": 0.10,
     })
     total   = float(cfg.get("total_capital_twd", 500000))
     max_pct = float(cfg.get("max_single_position_pct", 0.10))

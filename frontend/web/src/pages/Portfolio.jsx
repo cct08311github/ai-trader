@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Lock } from 'lucide-react'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import PnlLineChart from '../components/charts/PnlLineChart'
 import PositionDetailDrawer from '../components/PositionDetailDrawer'
-import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis } from '../lib/portfolio'
+import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis, fetchLockedSymbols, lockSymbol, unlockSymbol } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 
 function Panel({ title, right, children }) {
@@ -56,8 +57,8 @@ function AllocationWithWarning({ data }) {
 }
 
 export default function PortfolioPage() {
-  const [positions, setPositions] = useState(mockPositions)
-  const [source, setSource] = useState('mock')
+  const [positions, setPositions] = useState([])
+  const [source, setSource] = useState('api')
   const [preferApi, setPreferApi] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -68,6 +69,7 @@ export default function PortfolioPage() {
   const [equitySeries, setEquitySeries] = useState([])
   const [equitySource, setEquitySource] = useState('讀取中...')
   const [backendKpis, setBackendKpis] = useState({ available_cash: 0, today_trades_count: 0, overall_win_rate: 0 })
+  const [lockedSymbols, setLockedSymbols] = useState(new Set())
 
   // P1-6: Fetch real equity curve on mount; fallback to mock if no DB data
   useEffect(() => {
@@ -79,6 +81,7 @@ export default function PortfolioPage() {
         setEquitySource('mock (no trades)')
       }
     })
+    fetchLockedSymbols().then(setLockedSymbols)
   }, [])
 
   async function load(nextPreferApi = preferApi) {
@@ -104,8 +107,8 @@ export default function PortfolioPage() {
       setBackendKpis(kpisData)
       setSource('api')
     } catch (e) {
-      setPositions(mockPositions)
-      setSource('mock')
+      setPositions([])
+      setSource('error')
       setError(String(e?.message || e))
     } finally {
       clearTimeout(timeout)
@@ -145,19 +148,7 @@ export default function PortfolioPage() {
             {error ? <span className="ml-2 text-rose-600 dark:text-rose-300">(fallback: {error})</span> : null}
           </div>
 
-          <label className="mt-3 inline-flex items-center gap-2 text-xs text-[rgb(var(--muted))]">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={preferApi}
-              onChange={(e) => {
-                const v = e.target.checked
-                setPreferApi(v)
-                load(v)
-              }}
-            />
-            Prefer API (failover to mock)
-          </label>
+          {/* Prefer API checkbox removed per user request */}
         </div>
 
         <button
@@ -253,7 +244,12 @@ export default function PortfolioPage() {
                     title={`點擊查看 ${p.symbol} 詳情`}
                   >
                     <td className="px-4 py-3 font-medium text-[rgb(var(--text))]">
-                      {p.symbol}
+                      <div className="flex items-center gap-1.5">
+                        {p.symbol}
+                        {lockedSymbols.has(p.symbol) && (
+                          <Lock className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" title="鎖定：禁止賣出" />
+                        )}
+                      </div>
                       {p.name && <div className="text-xs text-[rgb(var(--muted))]">{p.name}</div>}
                     </td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
@@ -289,6 +285,15 @@ export default function PortfolioPage() {
         <PositionDetailDrawer
           symbol={drawerSymbol}
           position={drawerPosition}
+          isLocked={lockedSymbols.has(drawerSymbol)}
+          onLockChange={(symbol, locked) => {
+            setLockedSymbols(prev => {
+              const next = new Set(prev)
+              if (locked) next.add(symbol)
+              else next.delete(symbol)
+              return next
+            })
+          }}
           onClose={() => { setDrawerSymbol(null); setDrawerPosition(null) }}
         />
       )}

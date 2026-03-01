@@ -19,6 +19,7 @@ from openclaw.cash_mode_manager import CashModeManager
 from openclaw.market_regime import MarketRegime, MarketRegimeResult
 from openclaw.db_router import get_connection, init_execution_tables
 from openclaw.resume_protocol import system_self_check, run_resume_flow, ResumeProtocolTracker
+from openclaw.sentinel import filter_locked_positions
 
 def utc_now_iso() -> str:
     return dt.datetime.now(tz=dt.timezone.utc).isoformat()
@@ -340,6 +341,7 @@ def main() -> None:
     strategy_version = "strat_demo_v1_1"
     market = MarketState(best_bid=999.0, best_ask=1000.0, volume_1m=3000, feed_delay_ms=40)
     portfolio = PortfolioState(nav=1_000_000.0, cash=700_000.0, realized_pnl_today=0.0, unrealized_pnl=-2_000.0)
+    portfolio = filter_locked_positions(portfolio)  # exclude long-term locked holdings
     system = SystemState(
         now_ms=int(dt.datetime.now(tz=dt.timezone.utc).timestamp() * 1000),
         trading_locked=False,

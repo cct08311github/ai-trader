@@ -189,10 +189,24 @@ export default function SettingsPage() {
                     <Field label="總可操作資金" hint="AI 系統可動用的資金上限，所有比例限制均以此為基準"
                         prefix="TWD" value={capital.data.total_capital_twd} step={50000}
                         onChange={v => capital.set({ total_capital_twd: v })} />
-                    <PctField label="單一持倉上限"
-                        hint={`換算金額：TWD ${formatComma(Math.round(capital.data.total_capital_twd * capital.data.max_single_position_pct))}`}
-                        value={capital.data.max_single_position_pct}
-                        onChange={v => capital.set({ max_single_position_pct: v })} />
+                    <Field label="單一持倉上限"
+                        hint="系統允許投入單檔持倉的最大金額上限"
+                        type="number" prefix="TWD" step={10000}
+                        value={Math.round(capital.data.total_capital_twd * capital.data.max_single_position_pct)}
+                        onChange={v => {
+                            if (capital.data.total_capital_twd > 0) {
+                                capital.set({ max_single_position_pct: v / capital.data.total_capital_twd })
+                            }
+                        }} />
+                    <Field label="每月 API 預算" hint="達到此預算後當月停止下單 (需開啟 API 預算熔斷)"
+                        prefix="TWD" value={capital.data.monthly_api_budget_twd} step={500}
+                        onChange={v => capital.set({ monthly_api_budget_twd: v })} />
+                    <PctField label="預設止損比例" hint="當個別標的未設定止損時使用的全域預設值"
+                        value={capital.data.default_stop_loss_pct}
+                        onChange={v => capital.set({ default_stop_loss_pct: v })} />
+                    <PctField label="預設止盈比例" hint="當個別標的未設定止盈時使用的全域預設值"
+                        value={capital.data.default_take_profit_pct}
+                        onChange={v => capital.set({ default_take_profit_pct: v })} />
                     <Field label="每日虧損熔斷" hint="超過此金額系統切換防禦模式"
                         prefix="TWD" value={capital.data.daily_loss_limit_twd} step={1000}
                         onChange={v => capital.set({ daily_loss_limit_twd: v })} />

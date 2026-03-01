@@ -1,10 +1,23 @@
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
 from openclaw.drawdown_guard import DrawdownDecision
 from openclaw.risk_engine import OrderCandidate, SystemState
+
+_LOCKED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), "../../config/locked_symbols.json")
+
+
+def _locked_symbols() -> set:
+    """Read locked symbols from config. Returns empty set on error."""
+    try:
+        with open(_LOCKED_SYMBOLS_PATH, "r") as f:
+            return {s.upper() for s in json.load(f).get("locked", [])}
+    except Exception:
+        return set()
 
 
 @dataclass(frozen=True)
@@ -21,6 +34,7 @@ _HARD_BLOCK_CODES: Sequence[str] = (
     "SENTINEL_DB_LATENCY",
     "SENTINEL_DRAWDOWN_SUSPENDED",
     "SENTINEL_BUDGET_HALT",
+    "SENTINEL_SYMBOL_LOCKED",  # Long-term hold protection
 )
 
 
@@ -94,6 +108,14 @@ def sentinel_post_risk_check(
     if system_state.reduce_only_mode and candidate.opens_new_position:
         return SentinelVerdict(False, True, "SENTINEL_REDUCE_ONLY", {"symbol": candidate.symbol})
 
+    # Long-term hold protection: hard-block sell orders on locked symbols
+    if candidate.signal_side == "sell":
+        locked = _locked_symbols()
+        if candidate.symbol.upper() in locked:
+            return SentinelVerdict(
+                False, True, "SENTINEL_SYMBOL_LOCKED", {"symbol": candidate.symbol}
+            )
+
     return SentinelVerdict(True, False, "SENTINEL_OK", {})
 
 
@@ -107,3 +129,38 @@ def pm_veto(*, pm_approved: bool, reason_code: str = "PM_REJECT") -> SentinelVer
 
 def is_hard_block(verdict: SentinelVerdict) -> bool:
     return bool(verdict.hard_blocked or verdict.reason_code in _HARD_BLOCK_CODES)
+
+
+def filter_locked_positions(portfolio: "PortfolioState") -> "PortfolioState":
+    """Return a new PortfolioState with locked symbols removed.
+
+    Call this BEFORE passing PortfolioState into the decision pipeline so that
+    locked long-term holdings:
+      - are invisible to strategy signal evaluation
+      - do not inflate gross_exposure / NAV used for sizing
+      - do not affect unrealized PnL that influences risk guards
+      - cannot appear as sell candidates
+    """
+    locked = _locked_symbols()
+    if not locked:
+        return portfolio
+
+    active = {sym: pos for sym, pos in portfolio.positions.items() if sym.upper() not in locked}
+    removed = {sym: pos for sym, pos in portfolio.positions.items() if sym.upper() in locked}
+
+    if not removed:
+        return portfolio
+
+    # Subtract locked positions' market value and unrealized PnL
+    locked_mv = sum(abs(p.qty * p.last_price) for p in removed.values())
+    locked_unrealized = sum((p.last_price - p.avg_price) * p.qty for p in removed.values())
+
+    from openclaw.risk_engine import PortfolioState  # local import avoids circular dep
+    return PortfolioState(
+        nav=max(portfolio.nav - locked_mv, portfolio.cash),
+        cash=portfolio.cash,
+        realized_pnl_today=portfolio.realized_pnl_today,
+        unrealized_pnl=portfolio.unrealized_pnl - locked_unrealized,
+        positions=active,
+        consecutive_losses=portfolio.consecutive_losses,
+    )

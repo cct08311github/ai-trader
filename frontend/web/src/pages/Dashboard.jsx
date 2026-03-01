@@ -24,8 +24,8 @@ function Panel({ title, right, children }) {
 }
 
 export default function DashboardPage() {
-  const [positions, setPositions] = useState(mockPositions)
-  const [source, setSource] = useState('mock')
+  const [positions, setPositions] = useState([])
+  const [source, setSource] = useState('api')
   const [preferApi, setPreferApi] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -51,8 +51,8 @@ export default function DashboardPage() {
       setPositions(data)
       setSource('api')
     } catch (e) {
-      setPositions(mockPositions)
-      setSource('mock')
+      setPositions([])
+      setSource('error')
       setError(String(e?.message || e))
     } finally {
       clearTimeout(timeout)
@@ -92,19 +92,7 @@ export default function DashboardPage() {
             {error ? <span className="ml-2 text-rose-600 dark:text-rose-300">(fallback: {error})</span> : null}
           </div>
 
-          <label className="mt-3 inline-flex items-center gap-2 text-xs text-[rgb(var(--muted))]">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={preferApi}
-              onChange={(e) => {
-                const v = e.target.checked
-                setPreferApi(v)
-                load(v)
-              }}
-            />
-            Prefer API (failover to mock)
-          </label>
+          {/* Prefer API checkbox removed per user request */}
         </div>
 
         <button

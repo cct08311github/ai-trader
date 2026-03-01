@@ -2,6 +2,29 @@ import { authFetch, getApiBase } from './auth'
 
 const API_URL = () => `${getApiBase()}/api/portfolio/positions`
 
+export async function fetchLockedSymbols() {
+  try {
+    const res = await authFetch(`${getApiBase()}/api/portfolio/locks`)
+    if (res.ok) {
+      const data = await res.json()
+      return new Set(data.locked || [])
+    }
+  } catch { /* ignore */ }
+  return new Set()
+}
+
+export async function lockSymbol(symbol) {
+  const res = await authFetch(`${getApiBase()}/api/portfolio/lock/${encodeURIComponent(symbol)}`, { method: 'POST' })
+  if (!res.ok) throw new Error('鎖定失敗')
+  return res.json()
+}
+
+export async function unlockSymbol(symbol) {
+  const res = await authFetch(`${getApiBase()}/api/portfolio/lock/${encodeURIComponent(symbol)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('解鎖失敗')
+  return res.json()
+}
+
 export const mockPositions = [
   { symbol: 'AAPL', qty: 40, lastPrice: 182.34, avgCost: 165.1 },
   { symbol: 'TSLA', qty: 15, lastPrice: 196.72, avgCost: 210.0 },

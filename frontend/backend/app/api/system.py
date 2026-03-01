@@ -123,7 +123,16 @@ def system_quota():
             used_usd += (pt * cost["in"] + ct * cost["out"]) / 1_000_000
 
     used_twd = used_usd * 32.5 # Approximate rate
-    budget_twd = 1000.0
+    
+    # Read dynamic budget from capital settings
+    import os, json
+    cap_path = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
+    try:
+        with open(cap_path, 'r') as f:
+            cap_data = json.load(f)
+            budget_twd = float(cap_data.get("monthly_api_budget_twd", 1000.0))
+    except Exception:
+        budget_twd = 1000.0
 
     return {
         "month": month_start.strftime("%Y-%m"),

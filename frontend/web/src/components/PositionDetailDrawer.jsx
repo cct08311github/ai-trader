@@ -1,21 +1,36 @@
 import React, { useEffect, useState } from 'react'
-import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle, Lock, Unlock } from 'lucide-react'
 import { authFetch, getApiBase } from '../lib/auth'
+import { lockSymbol, unlockSymbol } from '../lib/portfolio'
 import { formatCurrency, formatNumber } from '../lib/format'
 
 /**
  * Position Detail Drawer — Design doc §4.1
- *
- * Slides in from the right to show:
- * - 進場理由（Entry reason from llm_traces PM decision）
- * - 止損/止盈設定（Stop-loss / take-profit settings）
- * - PM 授權原文（PM authorization text）
- * - 籌碼趨勢歷史（Chip trend history chart）
  */
-export default function PositionDetailDrawer({ symbol, position, onClose }) {
+export default function PositionDetailDrawer({ symbol, position, isLocked, onLockChange, onClose }) {
     const [detail, setDetail] = useState(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
+    const [lockLoading, setLockLoading] = useState(false)
+    const [lockError, setLockError] = useState(null)
+
+    async function handleToggleLock() {
+        setLockLoading(true)
+        setLockError(null)
+        try {
+            if (isLocked) {
+                await unlockSymbol(symbol)
+                onLockChange?.(symbol, false)
+            } else {
+                await lockSymbol(symbol)
+                onLockChange?.(symbol, true)
+            }
+        } catch (e) {
+            setLockError(e.message)
+        } finally {
+            setLockLoading(false)
+        }
+    }
 
     useEffect(() => {
         if (!symbol) return
@@ -54,17 +69,43 @@ export default function PositionDetailDrawer({ symbol, position, onClose }) {
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
                     <div>
-                        <h2 className="text-lg font-bold text-slate-100">{symbol}</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-bold text-slate-100">{symbol}</h2>
+                            {isLocked && (
+                                <span className="flex items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 ring-1 ring-amber-500/30">
+                                    <Lock className="h-3 w-3" /> 長期持股鎖定
+                                </span>
+                            )}
+                        </div>
                         <p className="text-xs text-slate-400">持倉詳情</p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
-                        aria-label="關閉"
-                    >
-                        <X className="h-5 w-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleToggleLock}
+                            disabled={lockLoading}
+                            title={isLocked ? '解除鎖定（允許賣出）' : '鎖定（禁止 AI 賣出）'}
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${isLocked
+                                    ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 ring-1 ring-amber-500/30'
+                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                                }`}
+                        >
+                            {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                            {lockLoading ? '處理中…' : isLocked ? '解除鎖定' : '鎖定持股'}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                            aria-label="關閉"
+                        >
+                            <X className="h-5 w-5" />
+                        </button>
+                    </div>
                 </div>
+                {lockError && (
+                    <div className="border-b border-rose-500/20 bg-rose-500/10 px-6 py-2 text-xs text-rose-300">
+                        {lockError}
+                    </div>
+                )}
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">

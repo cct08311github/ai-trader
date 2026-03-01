@@ -124,6 +124,8 @@ def get_positions(
             )
 
         if (time.time() - t0) > max_wait_seconds:
+            if source == "shioaji":
+                return {"status": "error", "message": "Shioaji API timeout", "positions": []}
             return {
                 "source": "mock", "simulation": simulation,
                 "positions": _mock_positions(), "note": "timeout_fallback"
@@ -132,6 +134,8 @@ def get_positions(
         return {"source": "shioaji", "simulation": simulation, "positions": out}
 
     except Exception as e:
+        if source == "shioaji":
+             return {"status": "error", "message": str(e), "positions": []}
         return {
             "source": "mock", "simulation": simulation,
             "positions": _mock_positions(), "note": f"fallback: {e}"
