@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 from enum import Enum
 
@@ -57,14 +57,14 @@ class StrategyRegistry:
             
             # Generate version ID
             import uuid
-            version_id = f"v{datetime.utcnow().strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
+            version_id = f"v{datetime.now(timezone.utc).strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
             
             # If no version tag provided, generate one
             if not version_tag:
                 version_tag = f"Version {self._get_next_version_number(conn)}"
             
             # Prepare version data
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             config_json = json.dumps(strategy_config, ensure_ascii=False)
             
             # Insert version
@@ -124,7 +124,7 @@ class StrategyRegistry:
             if current_active:
                 conn.execute(
                     "UPDATE strategy_versions SET status = ?, effective_to = ? WHERE version_id = ?",
-                    (VersionStatus.DEPRECATED.value, datetime.utcnow().isoformat(), current_active["version_id"])
+                    (VersionStatus.DEPRECATED.value, datetime.now(timezone.utc).isoformat(), current_active["version_id"])
                 )
                 
                 # Audit log for deactivation
@@ -138,12 +138,12 @@ class StrategyRegistry:
                         "deactivated",
                         activated_by,
                         json.dumps({"reason": "Replaced by new version", "new_version": version_id}),
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
                 )
             
             # Activate new version
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute(
                 """
                 UPDATE strategy_versions 
@@ -190,7 +190,7 @@ class StrategyRegistry:
             if current_active:
                 conn.execute(
                     "UPDATE strategy_versions SET status = ?, effective_to = ? WHERE version_id = ?",
-                    (VersionStatus.ROLLED_BACK.value, datetime.utcnow().isoformat(), current_active["version_id"])
+                    (VersionStatus.ROLLED_BACK.value, datetime.now(timezone.utc).isoformat(), current_active["version_id"])
                 )
                 
                 # Audit log for rollback deactivation
@@ -204,14 +204,14 @@ class StrategyRegistry:
                         "rolled_back",
                         rolled_back_by,
                         json.dumps({"reason": reason, "rolled_back_to": target_version_id}),
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     )
                 )
             
             # Create a copy of target version as new active version
             import uuid
-            new_version_id = f"rb_{datetime.utcnow().strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
-            now = datetime.utcnow().isoformat()
+            new_version_id = f"rb_{datetime.now(timezone.utc).strftime('%Y%m%d')}_{uuid.uuid4().hex[:8]}"
+            now = datetime.now(timezone.utc).isoformat()
             
             conn.execute(
                 """

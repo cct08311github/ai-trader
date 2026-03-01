@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import sqlite3
 import uuid
 from dataclasses import dataclass
@@ -186,7 +186,7 @@ def record_day_episode(conn: sqlite3.Connection, trade_date: str, reflection_id:
         INSERT INTO episodic_memory (episode_id, episode_type, trade_date, reflection_id, recorded_at)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (episode_id, 'day', trade_date, reflection_id, datetime.utcnow().isoformat())
+        (episode_id, 'day', trade_date, reflection_id, datetime.now(timezone.utc).isoformat())
     )
     
     return episode_id

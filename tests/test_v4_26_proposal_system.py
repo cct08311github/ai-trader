@@ -3,7 +3,7 @@
 import pytest
 import sqlite3
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 def test_proposal_status_enum():
@@ -158,7 +158,7 @@ def test_expire_old_proposals(conn):
     p2 = create_proposal(conn, "gen2", "rule2", "cat2", expires_days=7)  # Not expired
     
     # Manually set p1 to be expired (created_at - 10 days)
-    old_time = int((datetime.utcnow() - timedelta(days=10)).timestamp() * 1000)
+    old_time = int((datetime.now(timezone.utc) - timedelta(days=10)).timestamp() * 1000)
     conn.execute(
         "UPDATE strategy_proposals SET created_at = ?, expires_at = ? WHERE proposal_id = ?",
         (old_time, old_time, p1.proposal_id)
