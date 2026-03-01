@@ -57,3 +57,44 @@ def test_upsert_semantic():
     )
     row = conn.execute("SELECT confidence FROM semantic_memory WHERE rule_id = ?", (rid,)).fetchone()
     assert row[0] == 0.7
+
+
+def test_apply_episodic_decay_no_episodes():
+    """邊界測試：無情節記憶時應用衰減。"""
+    conn = _conn()
+    apply_episodic_decay(conn, decay_lambda=0.9, archive_threshold=0.1)
+    # 僅確認無錯誤
+
+
+def test_insert_episodic_memory_minimal():
+    """正向測試：插入最簡情節記錄。"""
+    conn = _conn()
+    record = EpisodicRecord(
+        trade_date="2026-02-27",
+        symbol="2330",
+        strategy_id="breakout",
+        market_regime="trending",
+        entry_reason="test",
+        outcome_pnl=100,
+        pm_score=0.8,
+        root_cause_code="",
+    )
+    insert_episodic_memory(conn, record)
+    count = conn.execute("SELECT COUNT(*) FROM episodic_memory").fetchone()[0]
+    assert count == 1
+
+
+def test_upsert_semantic_rule_minimal():
+    """正向測試：插入最簡語義規則。"""
+    conn = _conn()
+    rid = upsert_semantic_rule(
+        conn,
+        SemanticRule(
+            rule_text="test rule",
+            confidence=0.5,
+            source_episodes=[],
+            sample_count=0,
+            last_validated_date=None,
+        ),
+    )
+    assert rid is not None
