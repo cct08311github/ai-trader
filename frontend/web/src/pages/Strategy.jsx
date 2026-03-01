@@ -126,7 +126,6 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
       </div>
     </div>
   );
-}2 text-xs font-medium text-slate-200 hover:bg-slate-700">
             關閉
           </button>
         </div>
@@ -287,7 +286,6 @@ export default function StrategyPage() {
       </div>
     </div>
   );
-}2 text-xs font-medium text-slate-200 hover:bg-slate-700"
               >
                 清除
               </button>
