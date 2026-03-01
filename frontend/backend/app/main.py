@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -25,7 +26,24 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title=settings.service_name, version=settings.version)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    try:
+        init_readonly_pool(DB_PATH)
+        logger.info("SQLite readonly pool initialized size=%s path=%s", READONLY_POOL.size, DB_PATH)
+    except Exception as e:
+        logger.warning("Failed to init readonly pool: %s", e)
+    yield
+    # shutdown
+    try:
+        READONLY_POOL.close()
+    except Exception:
+        pass
+
+
+app = FastAPI(title=settings.service_name, version=settings.version, lifespan=lifespan)
 
 # Exception handlers (unified error shape)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
@@ -42,24 +60,6 @@ app.add_middleware(
 
 # Rate limiting
 app.add_middleware(RateLimitMiddleware, rpm=settings.rate_limit_rpm)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    # Initialize readonly pool (best-effort)
-    try:
-        init_readonly_pool(DB_PATH)
-        logger.info("SQLite readonly pool initialized size=%s path=%s", READONLY_POOL.size, DB_PATH)
-    except Exception as e:
-        logger.warning("Failed to init readonly pool: %s", e)
-
-
-@app.on_event("shutdown")
-def on_shutdown() -> None:
-    try:
-        READONLY_POOL.close()
-    except Exception:
-        pass
 
 
 @app.get("/api/health", tags=["health"])
