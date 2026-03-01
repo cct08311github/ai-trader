@@ -309,11 +309,11 @@ export default function SystemPage() {
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="space-y-1">
             <div className="text-slate-400">前端版本</div>
-            <div className="text-slate-300">v4.5.1</div>
+            <div className="text-slate-300">v4.6.0</div>
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">後端版本</div>
-            <div className="text-slate-300">v4.5.1</div>
+            <div className="text-slate-300">v4.6.0</div>
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">DB WAL</div>

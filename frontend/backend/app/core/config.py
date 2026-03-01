@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Service
     service_name: str = "AI-Trader Command Center API"
-    version: str = "0.1.0"
+    version: str = "4.6.0"
 
     def parse_cors_origins(self) -> List[str]:
         raw = (self.cors_origins or "").strip()
