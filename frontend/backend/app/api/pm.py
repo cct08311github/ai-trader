@@ -54,12 +54,23 @@ def pm_reject(body: OverrideRequest = OverrideRequest()):
     return {"status": "ok", "data": state}
 
 
+def _get_llm_call():
+    """Return gemini_call if GEMINI_API_KEY is configured, else None."""
+    if os.environ.get("GEMINI_API_KEY", "").strip():
+        from openclaw.llm_gemini import gemini_call
+        return gemini_call
+    return None
+
+
+_PM_MODEL = os.environ.get("PM_LLM_MODEL", "gemini-2.0-flash")
+
+
 @router.post("/review")
 def pm_review():
-    """Trigger LLM-based daily review.
+    """Trigger LLM-based daily review via Gemini.
 
-    In production, connect to real LLM by replacing llm_call.
-    Currently runs without LLM (sets state to pending_manual).
+    Requires GEMINI_API_KEY in environment or .env.
+    If not set, marks state as pending_manual (manual override required).
     """
     try:
         from app.db import get_conn
@@ -68,6 +79,6 @@ def pm_review():
     except Exception:
         context = build_daily_context(conn=None)
 
-    # llm_call=None → marks as pending_manual (operator must override)
-    state = run_daily_pm_review(context=context, llm_call=None)
+    llm_call = _get_llm_call()
+    state = run_daily_pm_review(context=context, llm_call=llm_call, model=_PM_MODEL)
     return {"status": "ok", "data": state}
