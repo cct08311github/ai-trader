@@ -173,7 +173,7 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
     } finally {
       if (mountedRef.current) setLoading(p => ({ ...p, logs: false }))
     }
-  }
+  }, [client])
 
   const refreshMarketRating = useCallback(async () => {
     setLoading(p => ({ ...p, marketRating: true }))
@@ -219,7 +219,6 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       if (mountedRef.current) setLoading(p => ({ ...p, debates: false }))
     }
   }, [client])
-, [client])
 
   useEffect(() => {
     mountedRef.current = true
@@ -265,7 +264,8 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       }
     },
     [client, refreshProposals]
-  )  return {
+)
+  return {
     API_BASE,
     opsToken,
     saveOpsToken,
