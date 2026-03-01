@@ -158,7 +158,9 @@ def apply_tw_session_risk_adjustments(
 
     phase = get_tw_trading_phase(now_ms, tz=cfg.tz)
     if phase == TWTradingPhase.CLOSED:
-        return dict(base_limits)
+        closed = dict(base_limits)
+        closed["tw_trading_phase"] = phase.value
+        return closed
 
     if phase == TWTradingPhase.PREOPEN_AUCTION:
         multipliers = cfg.preopen_multipliers

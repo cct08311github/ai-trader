@@ -35,6 +35,9 @@ def fixed_fractional_qty(inp: PositionSizingInput) -> int:
 
     if inp.nav <= 0 or inp.entry_price <= 0 or inp.stop_price <= 0:
         return 0
+    # 如果停損價高於入場價（負風險），返回 0
+    if inp.stop_price > inp.entry_price:
+        return 0
     stop_distance = abs(inp.entry_price - inp.stop_price)
     if stop_distance <= 0:
         return 0

@@ -183,12 +183,12 @@ def _insert_proposal(conn: sqlite3.Connection, p: StrategyProposal) -> None:
         'decided_by': p.decided_by,
         'decision_reason': p.decision_reason,
         # optional v4+ columns
-        'source_episodes_json': '[]',
+        'source_episodes_json': json.dumps(getattr(p, 'source_episodes', []), ensure_ascii=False),
         'backtest_sharpe_before': p.backtest_sharpe_before,
         'backtest_sharpe_after': p.backtest_sharpe_after,
-        'semantic_memory_action': 'NONE',
-        'rollback_version': '',
-        'auto_approve_eligible': 0,
+        'semantic_memory_action': getattr(p, 'semantic_memory_action', 'NONE'),
+        'rollback_version': getattr(p, 'rollback_version', ''),
+        'auto_approve_eligible': 1 if getattr(p, 'auto_approve_eligible', False) else 0,
     }
 
     preferred = [
@@ -203,7 +203,6 @@ def _insert_proposal(conn: sqlite3.Connection, p: StrategyProposal) -> None:
     sql=f"INSERT INTO strategy_proposals ({', '.join(insert_cols)}) VALUES ({', '.join(['?']*len(insert_cols))})"
     conn.execute(sql, tuple(values[c] for c in insert_cols))
     conn.commit()
-
 
 def approve_proposal(
     conn: sqlite3.Connection,
@@ -347,23 +346,49 @@ def get_proposal_history(
 # Backward compatibility
 def insert_strategy_proposal(conn: sqlite3.Connection, p: Any) -> None:
     """Legacy function for compatibility."""
-    # Convert to new format if needed
-    if hasattr(p, 'proposal_id'):
-        # It's already a ProposalInput-like object
-        create_proposal(
-            conn=conn,
-            generated_by=p.generated_by,
-            target_rule=p.target_rule,
-            rule_category=p.rule_category,
-            current_value=p.current_value,
-            proposed_value=p.proposed_value,
-            supporting_evidence=p.supporting_evidence,
-            confidence=p.confidence,
-            backtest_sharpe_before=p.backtest_sharpe_before,
-            backtest_sharpe_after=p.backtest_sharpe_after,
-            auto_approve=getattr(p, 'auto_approve_eligible', False)
-        )
-
+    # Build a StrategyProposal using provided fields
+    from datetime import datetime, timedelta
+    import json
+    import uuid
+    
+    proposal_id = getattr(p, 'proposal_id', f'prop_{uuid.uuid4().hex[:12]}')
+    # expires_at as YYYY-MM-DD string (legacy schema expects TEXT)
+    expires_at = (datetime.utcnow() + timedelta(days=7)).strftime('%Y-%m-%d')
+    
+    # Determine auto_approve eligibility
+    auto_approve = getattr(p, 'auto_approve_eligible', False)
+    # Check eligibility using similar logic as _check_auto_approve_eligibility
+    from .proposal_engine import LEVEL3_FORBIDDEN_CATEGORIES, _check_auto_approve_eligibility
+    requires_human = not _check_auto_approve_eligibility(
+        getattr(p, 'rule_category', ''),
+        getattr(p, 'confidence', None),
+        getattr(p, 'backtest_sharpe_after', None),
+        getattr(p, 'backtest_sharpe_before', None)
+    )
+    
+    proposal = StrategyProposal(
+        proposal_id=proposal_id,
+        generated_by=getattr(p, 'generated_by', ''),
+        target_rule=getattr(p, 'target_rule', ''),
+        rule_category=getattr(p, 'rule_category', ''),
+        current_value=getattr(p, 'current_value', None),
+        proposed_value=getattr(p, 'proposed_value', None),
+        supporting_evidence=getattr(p, 'supporting_evidence', None),
+        confidence=getattr(p, 'confidence', None),
+        backtest_sharpe_before=getattr(p, 'backtest_sharpe_before', None),
+        backtest_sharpe_after=getattr(p, 'backtest_sharpe_after', None),
+        requires_human_approval=requires_human or not auto_approve,
+        status='pending',
+        expires_at=expires_at,
+    )
+    # Add extra fields for legacy schema
+    proposal.source_episodes = getattr(p, 'source_episodes', [])
+    proposal.semantic_memory_action = getattr(p, 'semantic_memory_action', 'NONE')
+    proposal.rollback_version = getattr(p, 'rollback_version', '')
+    proposal.auto_approve_eligible = 1 if auto_approve else 0
+    
+    # Insert using _insert_proposal
+    _insert_proposal(conn, proposal)
 
 def get_authority_level(conn: sqlite3.Connection) -> int:
     """Get current authority level (for backward compatibility)."""
@@ -407,3 +432,35 @@ def format_proposal_for_telegram(proposal: Dict[str, Any]) -> str:
 if __name__ == "__main__":
     print("Strategy Proposal Engine (v4 #26)")
     print("Supports: pending → approved/rejected/expired state machine")
+
+# Backward compatibility for ref_package tests
+def apply_authority_decision(conn: sqlite3.Connection, proposal_id: str) -> Dict[str, Any]:
+    """
+    Legacy function for ref_package test compatibility.
+    """
+    row = conn.execute(
+        """
+        SELECT rule_category, auto_approve_eligible, expires_at, status
+        FROM strategy_proposals
+        WHERE proposal_id = ?
+        """,
+        (proposal_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("proposal not found")
+
+    category, eligible, expires_at, status = row
+    if status != "pending":
+        return {"allowed": False, "reason_code": "AUTH_NOT_PENDING"}
+    if category in LEVEL3_FORBIDDEN_CATEGORIES:
+        return {"allowed": False, "reason_code": "AUTH_LEVEL3_FORBIDDEN"}
+    if expires_at < datetime.utcnow().strftime("%Y-%m-%d"):
+        conn.execute("UPDATE strategy_proposals SET status='expired' WHERE proposal_id = ?", (proposal_id,))
+        return {"allowed": False, "reason_code": "AUTH_PROPOSAL_EXPIRED"}
+
+    level = get_authority_level(conn)
+    if level < 2 or int(eligible) != 1:
+        return {"allowed": False, "reason_code": "AUTH_MANUAL_REQUIRED"}
+
+    conn.execute("UPDATE strategy_proposals SET status='auto_approved' WHERE proposal_id = ?", (proposal_id,))
+    return {"allowed": True, "reason_code": "AUTH_AUTO_APPROVED"}

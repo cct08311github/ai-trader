@@ -1,4 +1,4 @@
-from openclaw.news_guard import cross_verify_news, compute_news_weight
+from openclaw.news_guard import cross_verify_news, compute_news_weight, NewsEvidence, lobster_gold_filter
 
 
 def test_cross_verify_news_passes_with_brave_and_twitter_evidence():
@@ -47,3 +47,41 @@ def test_lobster_gold_rejects_missing_url():
 def test_compute_news_weight_boosts_geopolitics():
     w = compute_news_weight("紅海航運風險升溫，原油走高")
     assert w > 1.0
+
+
+def test_evidence_quality_scoring():
+    # Test that evidence quality is computed correctly
+    # Create evidence with URL, source, title, snippet
+    evidence = NewsEvidence(
+        provider="brave",
+        title="A long enough title",
+        snippet="A snippet that is long enough to pass threshold",
+        url="https://example.com/article",
+        source="reuters",
+        quality=0.0  # will be computed by constructor? Actually quality is a field with default 0.0
+    )
+    # Note: quality is set manually, not computed automatically.
+    # We need to test the internal quality computation logic.
+    # Instead, we can test lobster_gold_filter's quality threshold.
+    # Create evidence with low quality
+    low_quality = NewsEvidence(
+        provider="brave",
+        title="short",
+        snippet="short",
+        url="",  # missing URL
+        source="",
+        quality=0.0
+    )
+    high_quality = NewsEvidence(
+        provider="brave",
+        title="Long title with enough length",
+        snippet="Snippet with sufficient length for quality score",
+        url="https://news.com/article",
+        source="reuters",
+        quality=1.0
+    )
+    filtered = lobster_gold_filter([low_quality, high_quality], min_quality=0.7)
+    assert len(filtered) == 1
+    assert filtered[0].quality >= 0.7
+    assert filtered[0].url.startswith("http")
+

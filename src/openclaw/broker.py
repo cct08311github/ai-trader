@@ -5,7 +5,7 @@ import time
 from typing import Any
 from typing import Protocol
 
-from openclaw.risk_engine import OrderCandidate
+from .risk_engine import OrderCandidate
 
 
 @dataclass
