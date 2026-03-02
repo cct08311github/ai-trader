@@ -454,37 +454,26 @@ def test_check_compliance_exception_path(tmp_path):
     assert result is False
 
 
-def test_get_authority_level_backward_compat(tmp_path):
+def test_get_authority_level_backward_compat(tmp_path, monkeypatch):
     """Test the backward-compat get_authority_level function (lines 324-325)."""
     from openclaw.authority import get_authority_level
-    import sqlite3
-
-    db_path = str(tmp_path / "auth.db")
-    conn = sqlite3.connect(db_path)
+    # Change CWD so the default relative path data/sqlite/trades.db resolves
+    # inside tmp_path (CI-safe: no real trades.db required).
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("data/sqlite", exist_ok=True)
     # Returns default level (2) when no table
-    level = get_authority_level(conn)
+    level = get_authority_level(None)
     assert level == 2
-    conn.close()
 
 
-def test_authority_main_block():
+def test_authority_main_block(tmp_path, monkeypatch):
     """Test the __main__ block executes without error (lines 329-338)."""
     import runpy
-    import openclaw.authority as mod
-
-    # Run the module's __main__ block by calling runpy with run_name="__main__"
-    # We use a temporary DB that doesn't exist (default path) — get_current_level returns LEVEL_2
-    # Patch db_path to :memory: to avoid filesystem issues
-    original_init = mod.AuthorityEngine.__init__
-
-    def patched_init(self, db_path=None):
-        original_init(self, ":memory:")
-
-    mod.AuthorityEngine.__init__ = patched_init
-    try:
-        runpy.run_module("openclaw.authority", run_name="__main__", alter_sys=False)
-    finally:
-        mod.AuthorityEngine.__init__ = original_init
+    # Change CWD so the default relative path data/sqlite/trades.db resolves
+    # inside tmp_path (CI-safe).
+    monkeypatch.chdir(tmp_path)
+    os.makedirs("data/sqlite", exist_ok=True)
+    runpy.run_module("openclaw.authority", run_name="__main__", alter_sys=False)
 
 
 if __name__ == "__main__":
