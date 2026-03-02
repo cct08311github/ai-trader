@@ -4,14 +4,17 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { axe } from 'jest-axe'
 import { ThemeProvider } from '../lib/theme'
+import { ToastProvider } from '../components/ToastProvider'
 import PortfolioPage from './Portfolio'
 
 function renderPage() {
   return render(
     <ThemeProvider defaultTheme="dark">
-      <MemoryRouter initialEntries={['/portfolio']}>
-        <PortfolioPage />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/portfolio']}>
+          <PortfolioPage />
+        </MemoryRouter>
+      </ToastProvider>
     </ThemeProvider>
   )
 }
