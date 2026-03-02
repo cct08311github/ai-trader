@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState, Fragment } from 'react'
 import { useStreamApiBase, useStrategyData } from '../lib/strategyApi'
-import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu, Copy, Check } from 'lucide-react'
 import { authFetch, getApiBase, getToken } from '../lib/auth'
+import { useToast } from '../components/ToastProvider'
 
 function formatUnixSec(sec) {
   const n = Number(sec)
@@ -393,8 +394,11 @@ export default function StrategyPage() {
   const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
 
+  const toast = useToast()
   const [selected, setSelected] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [pendingAct, setPendingAct] = useState(null)  // { type: 'approve'|'reject', proposal }
+  const [copiedId, setCopiedId] = useState(null)
 
   const [memOrder, setMemOrder] = useState('desc')
 
@@ -452,20 +456,34 @@ export default function StrategyPage() {
     setModalOpen(false)
   }
 
-  const doApprove = async p => {
+  const doApprove = (p) => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定批准提案 ${p.proposal_id}？`)
-    if (!ok) return
-    await act('approve', p.proposal_id, { actor: 'operator', reason: 'manual approve via UI' })
-    setModalOpen(false)
+    setPendingAct({ type: 'approve', proposal: p })
   }
 
-  const doReject = async p => {
+  const doReject = (p) => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(`確定拒絕提案 ${p.proposal_id}？`)
-    if (!ok) return
-    await act('reject', p.proposal_id, { actor: 'operator', reason: 'manual reject via UI' })
+    setPendingAct({ type: 'reject', proposal: p })
+  }
+
+  const confirmAct = async () => {
+    if (!pendingAct) return
+    const { type, proposal: p } = pendingAct
+    setPendingAct(null)
     setModalOpen(false)
+    try {
+      await act(type, p.proposal_id, { actor: 'operator', reason: `manual ${type} via UI` })
+      toast.success(type === 'approve' ? `提案 ${p.proposal_id} 已批准` : `提案 ${p.proposal_id} 已拒絕`)
+    } catch (e) {
+      toast.error(`操作失敗：${e?.message || e}`)
+    }
+  }
+
+  function copyId(id) {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 2000)
+    })
   }
 
   return (
@@ -510,9 +528,20 @@ export default function StrategyPage() {
                     <tr key={p.proposal_id} className="hover:bg-slate-950/30">
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{p._ts}</td>
                       <td className="px-4 py-3">
-                        <button onClick={() => openDetail(p)} className="text-slate-200 hover:text-white underline underline-offset-2">
-                          {p.proposal_id}
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => openDetail(p)} className="text-slate-200 hover:text-white underline underline-offset-2">
+                            {p.proposal_id}
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); copyId(p.proposal_id) }}
+                            title="複製 Proposal ID"
+                            className="text-slate-600 hover:text-slate-300 transition-colors"
+                          >
+                            {copiedId === p.proposal_id
+                              ? <Check className="h-3 w-3 text-emerald-400" />
+                              : <Copy className="h-3 w-3" />}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-300">{p._symbol}</td>
                       <td className="px-4 py-3 text-slate-300">{p._side}</td>
@@ -591,6 +620,44 @@ export default function StrategyPage() {
 
       {/* ── PM LLM Trace ─────────────────────────────────────────────── */}
       <PmTracePanel />
+
+      {/* ── Approve / Reject 確認 Dialog ──────────────────────────────── */}
+      {pendingAct && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={() => setPendingAct(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className={`text-sm font-semibold mb-2 ${pendingAct.type === 'approve' ? 'text-emerald-300' : 'text-rose-300'}`}>
+              確認{pendingAct.type === 'approve' ? '批准' : '拒絕'}提案
+            </div>
+            <div className="text-xs text-slate-500 mb-1">Proposal ID</div>
+            <div className="text-xs text-slate-200 font-mono bg-slate-950/60 rounded-lg px-3 py-2 mb-4 break-all">
+              {pendingAct.proposal?.proposal_id}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingAct(null)}
+                className="flex-1 rounded-xl border border-slate-700 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                autoFocus
+                onClick={confirmAct}
+                className={`flex-1 rounded-xl py-2 text-sm font-semibold text-white transition-colors ${
+                  pendingAct.type === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                }`}
+              >
+                確認
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

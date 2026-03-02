@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Lock, TrendingDown } from 'lucide-react'
+import { useToast } from '../components/ToastProvider'
 import PmStatusCard from '../components/PmStatusCard'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
@@ -135,10 +136,10 @@ export default function PortfolioPage() {
   // Drawer state — design doc §4.1
   const [drawerSymbol, setDrawerSymbol] = useState(null)
   const [drawerPosition, setDrawerPosition] = useState(null)
+  const toast = useToast()
   // Close position state
   const [closeTarget, setCloseTarget] = useState(null)   // position object
   const [closeBusy, setCloseBusy] = useState(false)
-  const [closeResult, setCloseResult] = useState(null)   // { ok, msg }
 
   const [equitySeries, setEquitySeries] = useState([])
   const [equitySource, setEquitySource] = useState('讀取中...')
@@ -198,14 +199,13 @@ export default function PortfolioPage() {
   async function handleCloseConfirm() {
     if (!closeTarget) return
     setCloseBusy(true)
-    setCloseResult(null)
     try {
       const res = await closePosition(closeTarget.symbol)
-      setCloseResult({ ok: true, msg: `已平倉 ${res.qty_closed} 股 @ ${formatCurrency(res.sell_price)}` })
+      toast.success(`已平倉 ${res.qty_closed} 股 @ ${formatCurrency(res.sell_price)}`)
       setCloseTarget(null)
       await load(preferApi)   // refresh positions
     } catch (e) {
-      setCloseResult({ ok: false, msg: String(e?.message || e) })
+      toast.error(String(e?.message || e))
       setCloseTarget(null)
     } finally {
       setCloseBusy(false)
@@ -396,18 +396,6 @@ export default function PortfolioPage() {
         onCancel={() => setCloseTarget(null)}
         busy={closeBusy}
       />
-
-      {/* Close result toast */}
-      {closeResult && (
-        <div className={`fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border px-4 py-3 text-sm shadow-lg ${
-          closeResult.ok
-            ? 'border-emerald-700 bg-emerald-900/80 text-emerald-200'
-            : 'border-rose-700 bg-rose-900/80 text-rose-200'
-        }`}>
-          {closeResult.msg}
-          <button onClick={() => setCloseResult(null)} className="ml-3 opacity-60 hover:opacity-100">✕</button>
-        </div>
-      )}
 
       {/* Position Detail Drawer — design doc §4.1 */}
       {drawerSymbol && (

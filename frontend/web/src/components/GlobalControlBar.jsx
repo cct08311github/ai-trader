@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useControlStatus } from '../lib/controlApi'
 import { useToast } from './ToastProvider'
 
@@ -19,6 +19,58 @@ function Pill({ tone = 'slate', dotClassName = '', className = '', children, tit
   )
 }
 
+/** Styled confirmation dialog — replaces window.confirm / window.prompt */
+function ConfirmDialog({ open, title, message, dangerous, inputLabel, inputDefault, onConfirm, onCancel }) {
+  const [val, setVal] = useState(inputDefault || '')
+  if (!open) return null
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onMouseDown={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div className={`mb-2 text-base font-semibold ${dangerous ? 'text-rose-300' : 'text-slate-100'}`}>
+          {title}
+        </div>
+        <p className="text-sm text-slate-400 leading-relaxed mb-5 whitespace-pre-wrap">{message}</p>
+
+        {inputLabel && (
+          <div className="mb-5">
+            <label className="block text-xs text-slate-400 mb-1.5">{inputLabel}</label>
+            <input
+              autoFocus
+              value={val}
+              onChange={e => setVal(e.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-slate-700 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            autoFocus={!inputLabel}
+            onClick={() => onConfirm(val)}
+            className={`flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors ${
+              dangerous ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
+            }`}
+          >
+            確認
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const ACT_LABELS = {
   '/enable': '✅ 自動交易已啟用',
   '/disable': '⏸️ 自動交易已停用',
@@ -29,8 +81,9 @@ const ACT_LABELS = {
 }
 
 export default function GlobalControlBar() {
-  const { status, error, loading, lastAction, act } = useControlStatus({ pollMs: 5000 })
+  const { status, error, loading, act } = useControlStatus({ pollMs: 5000 })
   const toast = useToast()
+  const [dlg, setDlg] = useState(null)
 
   const isEmergency = Boolean(status?.emergency_stop)
   const isAutoTradingEnabled = Boolean(status?.auto_trading_enabled)
@@ -45,11 +98,25 @@ export default function GlobalControlBar() {
     }
   }
 
-  const handleEnable = () => {
+  /** Open a styled confirm/input dialog; resolves { ok, val } */
+  function ask(cfg) {
+    return new Promise(resolve => {
+      setDlg({
+        ...cfg,
+        _key: Date.now(),
+        onConfirm: val => { setDlg(null); resolve({ ok: true, val }) },
+        onCancel:  ()  => { setDlg(null); resolve({ ok: false }) },
+      })
+    })
+  }
+
+  const handleEnable = async () => {
     if (status?.simulation_mode === false) {
-      const ok = window.confirm(
-        '⚠️ 警告：您目前處於實際盤模式。啟用自動交易將使用真實資金進行交易。\n\n確定要啟用自動交易嗎？'
-      )
+      const { ok } = await ask({
+        title: '⚠️ 啟用自動交易',
+        message: '您目前處於實際盤模式。啟用自動交易將使用真實資金進行交易。\n\n確定要啟用嗎？',
+        dangerous: true,
+      })
       if (!ok) return
     }
     runAct('/enable')
@@ -58,16 +125,25 @@ export default function GlobalControlBar() {
   const handleDisable = () => runAct('/disable')
   const handleSwitchToSimulation = () => runAct('/simulation')
 
-  const handleSwitchToLive = () => {
-    const ok = window.confirm(
-      '🚨 極度危險警告 🚨\n\n您即將切換到實際盤模式，所有交易將使用真實資金。\n\n確定要切換到實際盤嗎？'
-    )
+  const handleSwitchToLive = async () => {
+    const { ok } = await ask({
+      title: '🚨 切換至實際盤',
+      message: '您即將切換到實際盤模式，所有交易將使用真實資金。\n\n此操作無法自動撤銷，請謹慎確認。',
+      dangerous: true,
+    })
     if (ok) runAct('/live')
   }
 
-  const handleEmergencyStop = () => {
-    const reason = prompt('請輸入緊急停止原因（可選）:', '手動緊急停止')
-    runAct('/stop', { method: 'POST', body: { reason: reason || 'User initiated manual stop' } })
+  const handleEmergencyStop = async () => {
+    const { ok, val } = await ask({
+      title: '🚨 緊急停止',
+      message: '即將觸發緊急停止，所有自動交易將立即暫停。',
+      dangerous: true,
+      inputLabel: '停止原因（可選）',
+      inputDefault: '手動緊急停止',
+    })
+    if (!ok) return
+    runAct('/stop', { method: 'POST', body: { reason: val || 'User initiated manual stop' } })
   }
 
   const handleResume = () => runAct('/resume')
@@ -198,6 +274,21 @@ export default function GlobalControlBar() {
             {error}
           </div>
         </div>
+      )}
+
+      {/* Styled confirm / input dialog */}
+      {dlg && (
+        <ConfirmDialog
+          key={dlg._key}
+          open
+          title={dlg.title}
+          message={dlg.message}
+          dangerous={dlg.dangerous}
+          inputLabel={dlg.inputLabel}
+          inputDefault={dlg.inputDefault}
+          onConfirm={dlg.onConfirm}
+          onCancel={dlg.onCancel}
+        />
       )}
     </div>
   )
