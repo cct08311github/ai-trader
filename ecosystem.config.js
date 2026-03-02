@@ -38,6 +38,17 @@ module.exports = {
       env: {
         OPENCLAW_CURRENT_IP: "127.0.0.1"
       }
+    },
+    {
+      name: "ai-trader-agents",
+      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_agents.sh",
+      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      interpreter: "bash",
+      instances: 1,
+      autorestart: true,
+      restart_delay: 10000,
+      max_restarts: 5,
+      watch: false,
     }
   ]
 };

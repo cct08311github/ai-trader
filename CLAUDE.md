@@ -45,6 +45,8 @@ trading_enabled = true
 | `ticker_watcher.py` | 每 3 分鐘掃盤、自動選股 |
 | `sentinel.py` | 市場異常偵測 |
 | `memory_store.py` | 跨次決策記憶 |
+| `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
+| `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
 
 ---
 
@@ -133,6 +135,7 @@ trading_enabled = true
 | `ai-trader-api` | FastAPI 後端 |
 | `ai-trader-web` | React Vite Dev Server（port 3000） |
 | `ai-trader-watcher` | ticker_watcher，每 3 分鐘掃盤，使用真實 Shioaji 行情 |
+| `ai-trader-agents` | agent_orchestrator.py，5 個 Gemini agent 角色排程 |
 
 ```bash
 pm2 status                  # 查看所有服務
