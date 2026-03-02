@@ -17,6 +17,9 @@ from fastapi.testclient import TestClient
 
 BACKEND_PATH = Path(__file__).resolve().parents[1] / "frontend" / "backend"
 
+_TEST_TOKEN = "test-bearer-token"
+_AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
 
 def _init_db(p: Path):
     conn = sqlite3.connect(p)
@@ -89,11 +92,10 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setenv("DB_PATH", str(db))
     monkeypatch.setenv("STRATEGY_OPS_TOKEN", "secret")
+    monkeypatch.setenv("AUTH_TOKEN", _TEST_TOKEN)   # fix: required by AuthMiddleware
 
-    # Ensure backend package is importable
     sys.path.insert(0, str(BACKEND_PATH))
 
-    # Import after env set, to ensure app.db resolves DB_PATH correctly.
     import app.db as dbmod
     import app.main as mainmod
 
@@ -104,7 +106,7 @@ def client(tmp_path, monkeypatch):
 
 
 def test_get_proposals(client):
-    r = client.get("/api/strategy/proposals")
+    r = client.get("/api/strategy/proposals", headers=_AUTH_HEADERS)
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
@@ -113,7 +115,7 @@ def test_get_proposals(client):
 
 
 def test_get_logs(client):
-    r = client.get("/api/strategy/logs")
+    r = client.get("/api/strategy/logs", headers=_AUTH_HEADERS)
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
@@ -121,8 +123,12 @@ def test_get_logs(client):
     assert body["data"][0]["trace_id"] == "t1"
 
 
-def test_approve_requires_token(client):
-    r = client.post("/api/strategy/p1/approve", json={"actor": "tester", "reason": "ok"})
+def test_approve_requires_bearer(client):
+    # No Bearer token at all → 401 from auth middleware
+    r = client.post(
+        "/api/strategy/p1/approve",
+        json={"actor": "tester", "reason": "ok"},
+    )
     assert r.status_code == 401
 
 
@@ -130,7 +136,7 @@ def test_approve_ok(client):
     r = client.post(
         "/api/strategy/p1/approve",
         json={"actor": "tester", "reason": "ok"},
-        headers={"X-OPS-TOKEN": "secret"},
+        headers={**_AUTH_HEADERS, "X-OPS-TOKEN": "secret"},
     )
     assert r.status_code == 200
     body = r.json()
@@ -142,7 +148,7 @@ def test_reject_ok(client):
     r = client.post(
         "/api/strategy/p1/reject",
         json={"actor": "tester", "reason": "no"},
-        headers={"X-OPS-TOKEN": "secret"},
+        headers={**_AUTH_HEADERS, "X-OPS-TOKEN": "secret"},
     )
     assert r.status_code == 200
     assert r.json()["data"]["status"] == "rejected"

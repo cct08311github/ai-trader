@@ -16,74 +16,60 @@ except ImportError:
 
 from fastapi.testclient import TestClient
 
+_TEST_TOKEN = "test-bearer-token"
+_AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
 
 def _make_db(tmp_path: Path) -> Path:
+    """Create orders + fills tables (current schema; trades table is legacy)."""
     db_path = tmp_path / "trades.db"
     conn = sqlite3.connect(db_path)
+
     conn.execute(
         """
-        CREATE TABLE trades (
-            id TEXT PRIMARY KEY,
-            symbol TEXT,
-            action TEXT,
-            quantity INTEGER,
-            price REAL,
-            fee REAL,
-            tax REAL,
-            pnl REAL,
-            timestamp TEXT,
-            agent_id TEXT,
-            decision_id TEXT
-        );
+        CREATE TABLE orders (
+            order_id        TEXT PRIMARY KEY,
+            symbol          TEXT,
+            side            TEXT,
+            qty             INTEGER,
+            price           REAL,
+            status          TEXT,
+            ts_submit       TEXT,
+            strategy_version TEXT,
+            decision_id     TEXT
+        )
         """
     )
-    rows = [
-        (
-            "t1",
-            "2330",
-            "buy",
-            1,
-            100.0,
-            1.0,
-            0.2,
-            0.0,
-            "2026-02-27T09:00:00Z",
-            "agentA",
-            "d1",
-        ),
-        (
-            "t2",
-            "2330",
-            "sell",
-            1,
-            110.0,
-            1.0,
-            0.2,
-            9.0,
-            "2026-02-28T09:00:00Z",
-            "agentA",
-            "d2",
-        ),
-        (
-            "t3",
-            "0050",
-            "buy",
-            2,
-            50.0,
-            0.5,
-            0.1,
-            -1.0,
-            "2026-02-26T09:00:00Z",
-            "agentB",
-            "d3",
-        ),
-    ]
-    conn.executemany(
+    conn.execute(
         """
-        INSERT INTO trades (id, symbol, action, quantity, price, fee, tax, pnl, timestamp, agent_id, decision_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        rows,
+        CREATE TABLE fills (
+            fill_id   TEXT PRIMARY KEY,
+            order_id  TEXT,
+            qty       INTEGER,
+            price     REAL,
+            fee       REAL,
+            tax       REAL
+        )
+        """
+    )
+
+    # orders: t1=buy 2330 @100, t2=sell 2330 @110, t3=buy 0050 @50 qty=2
+    conn.executemany(
+        "INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?)",
+        [
+            ("t1", "2330", "buy",  1, 100.0, "filled", "2026-02-27T09:00:00Z", "agentA", "d1"),
+            ("t2", "2330", "sell", 1, 110.0, "filled", "2026-02-28T09:00:00Z", "agentA", "d2"),
+            ("t3", "0050", "buy",  2,  50.0, "filled", "2026-02-26T09:00:00Z", "agentB", "d3"),
+        ],
+    )
+    # fills: one fill per order
+    conn.executemany(
+        "INSERT INTO fills VALUES (?,?,?,?,?,?)",
+        [
+            ("f1", "t1", 1, 100.0, 1.0, 0.2),
+            ("f2", "t2", 1, 110.0, 1.0, 0.2),
+            ("f3", "t3", 2,  50.0, 0.5, 0.1),
+        ],
     )
     conn.commit()
     conn.close()
@@ -94,14 +80,13 @@ def _make_db(tmp_path: Path) -> Path:
 def client(tmp_path: Path):
     db_path = _make_db(tmp_path)
 
-    # Make frontend backend importable
     backend_root = Path(__file__).resolve().parents[2] / "frontend" / "backend"
     sys.path.insert(0, str(backend_root))
 
     os.environ["DB_PATH"] = str(db_path)
+    os.environ["AUTH_TOKEN"] = _TEST_TOKEN   # fix: auth middleware requires this
 
-    # Import after setting env
-    import app.db as db  # noqa: E402
+    import app.db as db      # noqa: E402
     import app.main as main  # noqa: E402
 
     importlib.reload(db)
@@ -114,7 +99,7 @@ def client(tmp_path: Path):
 
 
 def test_list_trades_default_sort_time_desc(client: TestClient):
-    res = client.get("/api/portfolio/trades")
+    res = client.get("/api/portfolio/trades", headers=_AUTH_HEADERS)
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "ok"
@@ -124,7 +109,11 @@ def test_list_trades_default_sort_time_desc(client: TestClient):
 
 
 def test_list_trades_filter_symbol_and_type(client: TestClient):
-    res = client.get("/api/portfolio/trades", params={"symbol": "2330", "type": "buy"})
+    res = client.get(
+        "/api/portfolio/trades",
+        params={"symbol": "2330", "type": "buy"},
+        headers=_AUTH_HEADERS,
+    )
     data = res.json()
     assert data["total"] == 1
     assert data["items"][0]["id"] == "t1"
@@ -134,6 +123,7 @@ def test_list_trades_time_range_and_pagination(client: TestClient):
     res = client.get(
         "/api/portfolio/trades",
         params={"start": "2026-02-27T00:00:00Z", "end": "2026-02-28T23:59:59Z", "limit": 1, "offset": 0},
+        headers=_AUTH_HEADERS,
     )
     data = res.json()
     assert data["total"] == 2
@@ -142,9 +132,13 @@ def test_list_trades_time_range_and_pagination(client: TestClient):
 
 
 def test_list_trades_sort_by_amount_asc(client: TestClient):
-    res = client.get("/api/portfolio/trades", params={"sort_by": "amount", "sort_dir": "asc"})
+    res = client.get(
+        "/api/portfolio/trades",
+        params={"sort_by": "amount", "sort_dir": "asc"},
+        headers=_AUTH_HEADERS,
+    )
     data = res.json()
     ids = [it["id"] for it in data["items"]]
-    # amounts: t1=100, t2=110, t3=100
+    # amounts: t1=100*1=100, t2=110*1=110, t3=50*2=100
     assert ids[0] in {"t1", "t3"}
     assert ids[-1] == "t2"
