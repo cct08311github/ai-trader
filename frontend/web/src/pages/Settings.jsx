@@ -339,7 +339,7 @@ export default function SettingsPage() {
     const loading = !capital.data && !sentinel.data && !limits.data
 
     return (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-6 max-w-5xl">
             <div>
                 <h1 className="text-2xl font-bold text-slate-100 tracking-tight">系統維護設定</h1>
                 <p className="mt-1 text-sm text-slate-400">所有設定儲存後即時生效，不需重啟服務。</p>
@@ -357,148 +357,150 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            {/* 0. Watchlist */}
-            <WatchlistSection />
+            <div className="grid grid-cols-2 gap-6 items-start">
+                {/* 0. Watchlist */}
+                <WatchlistSection />
 
-            {/* 1. Capital */}
-            {capital.data && (
-                <Section title="可操作資金" icon={DollarSign} color="text-emerald-400">
-                    <Field label="總可操作資金" hint="AI 系統可動用的資金上限，所有比例限制均以此為基準"
-                        prefix="TWD" value={capital.data.total_capital_twd} step={50000}
-                        onChange={v => capital.set({ total_capital_twd: v })} />
-                    <Field label="單一持倉上限"
-                        hint="系統允許投入單檔持倉的最大金額上限"
-                        type="number" prefix="TWD" step={10000}
-                        value={Math.round(capital.data.total_capital_twd * capital.data.max_single_position_pct)}
-                        onChange={v => {
-                            if (capital.data.total_capital_twd > 0) {
-                                capital.set({ max_single_position_pct: v / capital.data.total_capital_twd })
-                            }
-                        }} />
-                    <Field label="每月 API 預算" hint="達到此預算後當月停止下單 (需開啟 API 預算熔斷)"
-                        prefix="TWD" value={capital.data.monthly_api_budget_twd} step={500}
-                        onChange={v => capital.set({ monthly_api_budget_twd: v })} />
-                    <PctField label="預設止損比例" hint="當個別標的未設定止損時使用的全域預設值"
-                        value={capital.data.default_stop_loss_pct}
-                        onChange={v => capital.set({ default_stop_loss_pct: v })} />
-                    <PctField label="預設止盈比例" hint="當個別標的未設定止盈時使用的全域預設值"
-                        value={capital.data.default_take_profit_pct}
-                        onChange={v => capital.set({ default_take_profit_pct: v })} />
-                    <Field label="每日虧損熔斷" hint="超過此金額系統切換防禦模式"
-                        prefix="TWD" value={capital.data.daily_loss_limit_twd} step={1000}
-                        onChange={v => capital.set({ daily_loss_limit_twd: v })} />
-                    <Field label="每月虧損熔斷" hint="超過此金額觸發月度熔斷，需手動解除"
-                        prefix="TWD" value={capital.data.monthly_loss_limit_twd} step={5000}
-                        onChange={v => capital.set({ monthly_loss_limit_twd: v })} />
-                    <SaveBar saving={capital.saving} saved={capital.saved} dirty={capital.dirty}
-                        onSave={() => capital.save(capital.data)} />
-                </Section>
-            )}
+                {/* 1. Capital */}
+                {capital.data && (
+                    <Section title="可操作資金" icon={DollarSign} color="text-emerald-400">
+                        <Field label="總可操作資金" hint="AI 系統可動用的資金上限，所有比例限制均以此為基準"
+                            prefix="TWD" value={capital.data.total_capital_twd} step={50000}
+                            onChange={v => capital.set({ total_capital_twd: v })} />
+                        <Field label="單一持倉上限"
+                            hint="系統允許投入單檔持倉的最大金額上限"
+                            type="number" prefix="TWD" step={10000}
+                            value={Math.round(capital.data.total_capital_twd * capital.data.max_single_position_pct)}
+                            onChange={v => {
+                                if (capital.data.total_capital_twd > 0) {
+                                    capital.set({ max_single_position_pct: v / capital.data.total_capital_twd })
+                                }
+                            }} />
+                        <Field label="每月 API 預算" hint="達到此預算後當月停止下單 (需開啟 API 預算熔斷)"
+                            prefix="TWD" value={capital.data.monthly_api_budget_twd} step={500}
+                            onChange={v => capital.set({ monthly_api_budget_twd: v })} />
+                        <PctField label="預設止損比例" hint="當個別標的未設定止損時使用的全域預設值"
+                            value={capital.data.default_stop_loss_pct}
+                            onChange={v => capital.set({ default_stop_loss_pct: v })} />
+                        <PctField label="預設止盈比例" hint="當個別標的未設定止盈時使用的全域預設值"
+                            value={capital.data.default_take_profit_pct}
+                            onChange={v => capital.set({ default_take_profit_pct: v })} />
+                        <Field label="每日虧損熔斷" hint="超過此金額系統切換防禦模式"
+                            prefix="TWD" value={capital.data.daily_loss_limit_twd} step={1000}
+                            onChange={v => capital.set({ daily_loss_limit_twd: v })} />
+                        <Field label="每月虧損熔斷" hint="超過此金額觸發月度熔斷，需手動解除"
+                            prefix="TWD" value={capital.data.monthly_loss_limit_twd} step={5000}
+                            onChange={v => capital.set({ monthly_loss_limit_twd: v })} />
+                        <SaveBar saving={capital.saving} saved={capital.saved} dirty={capital.dirty}
+                            onSave={() => capital.save(capital.data)} />
+                    </Section>
+                )}
 
-            {/* 2. Position Limits */}
-            {limits.data && (
-                <Section title="倉位授權層級（Position Limits）" icon={Layers} color="text-sky-400" defaultOpen={false}>
-                    <p className="text-xs text-slate-500 pt-4">
-                        Level 越高代表交易授權越大。Level 0 = 禁止交易；Level 3 = 最高自動化授權。
-                    </p>
-                    {[1, 2, 3].map(lv => (
-                        <div key={lv} className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 space-y-2">
-                            <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Level {lv}</div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <PctField label="單筆風險上限（% NAV）"
-                                    value={limits.data[`level_${lv}_max_risk_pct`]}
-                                    onChange={v => limits.set({ [`level_${lv}_max_risk_pct`]: v })} />
-                                <PctField label="持倉名義上限（% NAV）"
-                                    value={limits.data[`level_${lv}_max_position_pct`]}
-                                    onChange={v => limits.set({ [`level_${lv}_max_position_pct`]: v })} />
+                {/* 2. Position Limits */}
+                {limits.data && (
+                    <Section title="倉位授權層級（Position Limits）" icon={Layers} color="text-sky-400" defaultOpen={false}>
+                        <p className="text-xs text-slate-500 pt-4">
+                            Level 越高代表交易授權越大。Level 0 = 禁止交易；Level 3 = 最高自動化授權。
+                        </p>
+                        {[1, 2, 3].map(lv => (
+                            <div key={lv} className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 space-y-2">
+                                <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Level {lv}</div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <PctField label="單筆風險上限（% NAV）"
+                                        value={limits.data[`level_${lv}_max_risk_pct`]}
+                                        onChange={v => limits.set({ [`level_${lv}_max_risk_pct`]: v })} />
+                                    <PctField label="持倉名義上限（% NAV）"
+                                        value={limits.data[`level_${lv}_max_position_pct`]}
+                                        onChange={v => limits.set({ [`level_${lv}_max_position_pct`]: v })} />
+                                </div>
+                            </div>
+                        ))}
+                        <SaveBar saving={limits.saving} saved={limits.saved} dirty={limits.dirty}
+                            onSave={() => limits.save(limits.data)} />
+                    </Section>
+                )}
+
+                {/* 3. Sentinel */}
+                {sentinel.data && (
+                    <Section title="Sentinel 熔斷開關" icon={Shield} color="text-orange-400" defaultOpen={false}>
+                        <Toggle label="API 預算熔斷" hint="超過月度 API 預算後暫停"
+                            checked={sentinel.data.budget_halt_enabled}
+                            onChange={v => sentinel.set({ budget_halt_enabled: v })} />
+                        <Toggle label="回撤熔斷" hint="日虧損超過上限後暫停交易"
+                            checked={sentinel.data.drawdown_suspended_enabled}
+                            onChange={v => sentinel.set({ drawdown_suspended_enabled: v })} />
+                        <Toggle label="只減倉模式" hint="熔斷後僅允許平倉，不允許開新倉"
+                            checked={sentinel.data.reduce_only_enabled}
+                            onChange={v => sentinel.set({ reduce_only_enabled: v })} />
+                        <Toggle label="券商斷線熔斷" hint="Shioaji 連線中斷後暫停"
+                            checked={sentinel.data.broker_disconnected_enabled}
+                            onChange={v => sentinel.set({ broker_disconnected_enabled: v })} />
+                        <Toggle label="DB 延遲熔斷" hint="資料庫寫入 p99 超過門檻後告警"
+                            checked={sentinel.data.db_latency_enabled}
+                            onChange={v => sentinel.set({ db_latency_enabled: v })} />
+                        <Field label="DB 延遲門檻（ms）"
+                            value={sentinel.data.max_db_write_p99_ms} step={50} min={50}
+                            onChange={v => sentinel.set({ max_db_write_p99_ms: v })} />
+                        <Field label="健康檢查間隔（秒）"
+                            value={sentinel.data.health_check_interval_seconds} step={5} min={5}
+                            onChange={v => sentinel.set({ health_check_interval_seconds: v })} />
+                        <SaveBar saving={sentinel.saving} saved={sentinel.saved} dirty={sentinel.dirty}
+                            onSave={() => sentinel.save(sentinel.data)} />
+                    </Section>
+                )}
+
+                {/* 4. Telegram */}
+                {sentinel.data && (
+                    <Section title="Telegram 通知" icon={Bell} color="text-blue-400" defaultOpen={false}>
+                        <Field label="Telegram Chat ID" hint="填入您的頻道或群組 ID（例如：-1003772422881）"
+                            type="text" value={sentinel.data.telegram_chat_id || ''}
+                            onChange={v => sentinel.set({ telegram_chat_id: v })} />
+                        <SaveBar saving={sentinel.saving} saved={sentinel.saved} dirty={sentinel.dirty}
+                            onSave={() => sentinel.save(sentinel.data)} />
+                    </Section>
+                )}
+
+                {/* 5. Authority Level */}
+                <Section title="交易授權層級" icon={Lock} color="text-red-400" defaultOpen={false}>
+                    {auth.data && (
+                        <div className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 text-sm space-y-1 mt-4">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">目前層級</span>
+                                <span className="font-semibold text-slate-100">Level {auth.data.level}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">原因</span>
+                                <span className="text-slate-300">{auth.data.reason}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">生效時間</span>
+                                <span className="text-slate-400 text-xs">{auth.data.effective_from?.replace('T', ' ').slice(0, 19)}</span>
                             </div>
                         </div>
-                    ))}
-                    <SaveBar saving={limits.saving} saved={limits.saved} dirty={limits.dirty}
-                        onSave={() => limits.save(limits.data)} />
-                </Section>
-            )}
-
-            {/* 3. Sentinel */}
-            {sentinel.data && (
-                <Section title="Sentinel 熔斷開關" icon={Shield} color="text-orange-400" defaultOpen={false}>
-                    <Toggle label="API 預算熔斷" hint="超過月度 API 預算後暫停"
-                        checked={sentinel.data.budget_halt_enabled}
-                        onChange={v => sentinel.set({ budget_halt_enabled: v })} />
-                    <Toggle label="回撤熔斷" hint="日虧損超過上限後暫停交易"
-                        checked={sentinel.data.drawdown_suspended_enabled}
-                        onChange={v => sentinel.set({ drawdown_suspended_enabled: v })} />
-                    <Toggle label="只減倉模式" hint="熔斷後僅允許平倉，不允許開新倉"
-                        checked={sentinel.data.reduce_only_enabled}
-                        onChange={v => sentinel.set({ reduce_only_enabled: v })} />
-                    <Toggle label="券商斷線熔斷" hint="Shioaji 連線中斷後暫停"
-                        checked={sentinel.data.broker_disconnected_enabled}
-                        onChange={v => sentinel.set({ broker_disconnected_enabled: v })} />
-                    <Toggle label="DB 延遲熔斷" hint="資料庫寫入 p99 超過門檻後告警"
-                        checked={sentinel.data.db_latency_enabled}
-                        onChange={v => sentinel.set({ db_latency_enabled: v })} />
-                    <Field label="DB 延遲門檻（ms）"
-                        value={sentinel.data.max_db_write_p99_ms} step={50} min={50}
-                        onChange={v => sentinel.set({ max_db_write_p99_ms: v })} />
-                    <Field label="健康檢查間隔（秒）"
-                        value={sentinel.data.health_check_interval_seconds} step={5} min={5}
-                        onChange={v => sentinel.set({ health_check_interval_seconds: v })} />
-                    <SaveBar saving={sentinel.saving} saved={sentinel.saved} dirty={sentinel.dirty}
-                        onSave={() => sentinel.save(sentinel.data)} />
-                </Section>
-            )}
-
-            {/* 4. Telegram */}
-            {sentinel.data && (
-                <Section title="Telegram 通知" icon={Bell} color="text-blue-400" defaultOpen={false}>
-                    <Field label="Telegram Chat ID" hint="填入您的頻道或群組 ID（例如：-1003772422881）"
-                        type="text" value={sentinel.data.telegram_chat_id || ''}
-                        onChange={v => sentinel.set({ telegram_chat_id: v })} />
-                    <SaveBar saving={sentinel.saving} saved={sentinel.saved} dirty={sentinel.dirty}
-                        onSave={() => sentinel.save(sentinel.data)} />
-                </Section>
-            )}
-
-            {/* 5. Authority Level */}
-            <Section title="交易授權層級" icon={Lock} color="text-red-400" defaultOpen={false}>
-                {auth.data && (
-                    <div className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 text-sm space-y-1 mt-4">
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">目前層級</span>
-                            <span className="font-semibold text-slate-100">Level {auth.data.level}</span>
+                    )}
+                    <div className="space-y-3">
+                        <div className="flex flex-col gap-1 pt-4">
+                            <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">新層級</label>
+                            <select
+                                value={authorityInput.level}
+                                onChange={e => setAuthorityInput(p => ({ ...p, level: Number(e.target.value) }))}
+                                className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500/40"
+                            >
+                                <option value={0}>Level 0 — 禁止交易</option>
+                                <option value={1}>Level 1 — 極保守（1% NAV）</option>
+                                <option value={2}>Level 2 — 保守（5% NAV）</option>
+                                <option value={3}>Level 3 — 標準（10% NAV）</option>
+                            </select>
                         </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">原因</span>
-                            <span className="text-slate-300">{auth.data.reason}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-slate-400">生效時間</span>
-                            <span className="text-slate-400 text-xs">{auth.data.effective_from?.replace('T', ' ').slice(0, 19)}</span>
-                        </div>
+                        <Field label="變更原因（必填）" type="text"
+                            value={authorityInput.reason}
+                            onChange={v => setAuthorityInput(p => ({ ...p, reason: v }))} />
                     </div>
-                )}
-                <div className="space-y-3">
-                    <div className="flex flex-col gap-1 pt-4">
-                        <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">新層級</label>
-                        <select
-                            value={authorityInput.level}
-                            onChange={e => setAuthorityInput(p => ({ ...p, level: Number(e.target.value) }))}
-                            className="rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-500/40"
-                        >
-                            <option value={0}>Level 0 — 禁止交易</option>
-                            <option value={1}>Level 1 — 極保守（1% NAV）</option>
-                            <option value={2}>Level 2 — 保守（5% NAV）</option>
-                            <option value={3}>Level 3 — 標準（10% NAV）</option>
-                        </select>
-                    </div>
-                    <Field label="變更原因（必填）" type="text"
-                        value={authorityInput.reason}
-                        onChange={v => setAuthorityInput(p => ({ ...p, reason: v }))} />
-                </div>
-                {authError && <div className="text-xs text-red-400">{authError}</div>}
-                <SaveBar saving={authSaving} saved={authSaved} dirty={!!authorityInput.reason}
-                    onSave={saveAuthority} />
-            </Section>
+                    {authError && <div className="text-xs text-red-400">{authError}</div>}
+                    <SaveBar saving={authSaving} saved={authSaved} dirty={!!authorityInput.reason}
+                        onSave={saveAuthority} />
+                </Section>
+            </div>
         </div>
     )
 }

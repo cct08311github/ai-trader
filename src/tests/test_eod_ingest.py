@@ -1,6 +1,8 @@
 import sqlite3
+import types
+from unittest.mock import patch
 
-from openclaw.eod_ingest import EODRow, _to_float, upsert_eod_rows
+from openclaw.eod_ingest import EODRow, _to_float, fetch_tpex_rows, upsert_eod_rows
 
 
 def _conn() -> sqlite3.Connection:
@@ -77,6 +79,33 @@ def test_upsert_eod_rows_empty():
     conn = _conn()
     n = upsert_eod_rows(conn, [])
     assert n == 0
+
+
+def test_fetch_tpex_rows_column_mapping():
+    """TPEx CSV col[7]=均價 應被跳過，volume=col[8], turnover=col[9], trades=col[10]。"""
+    # 19-col TPEx CSV header + 1 trading row + 1 non-trading row
+    fake_csv = (
+        "日期,2026/03/02\n"
+        "代號,名稱,收盤,漲跌,開盤,最高,最低,均價,成交股數,成交金額(元),成交筆數,"
+        "最後買價,最後買量(千股),最後賣價,最後賣量(千股),發行股數,次日參考價,次日漲停價,次日跌停價\n"
+        "006201,元大富櫃50,31.41,-0.02,31.10,31.56,30.50,31.16,\"137,665\",\"4,289,822\",100,31.30,1,31.41,5,18000000,31.41,34.56,28.27\n"
+        "2724,藝舍-KY,---,---,---,---,---,18.00,0,0,0,18.00,0,---,0,8000000,18.00,19.79,16.21\n"
+    )
+    with patch("openclaw.eod_ingest._fetch_text", return_value=fake_csv):
+        rows = fetch_tpex_rows("2026-03-02")
+
+    # 未成交標的（2724）已被過濾，只剩有收盤價的標的
+    assert len(rows) == 1
+
+    trading = next(r for r in rows if r.symbol == "006201")
+    assert trading.close == 31.41
+    assert trading.volume == 137665.0     # 成交股數，不是 31.16 (均價)
+    assert trading.turnover == 4289822.0  # 成交金額
+    assert trading.trades == 100.0        # 成交筆數
+
+    # 未成交標的（close=---）應被過濾，不進入結果
+    assert all(r.symbol != "2724" for r in rows), "非交易標的應被過濾掉"
+    assert len(rows) == 1
 
 
 def test_upsert_eod_rows_multiple():

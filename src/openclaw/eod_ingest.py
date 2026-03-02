@@ -78,13 +78,16 @@ def fetch_twse_rows(trade_date: str) -> List[EODRow]:
             continue
         name = str(it.get("Name") or it.get("證券名稱") or "").strip()
         td = _extract_trade_date_from_payload(it) or trade_date
+        close = _to_float(it.get("ClosingPrice") or it.get("收盤價"))
+        if close is None:
+            continue  # 當日未成交（停牌/除息）— 無分析價值，跳過
         rows.append(
             EODRow(
                 trade_date=td,
                 market="TWSE",
                 symbol=symbol,
                 name=name,
-                close=_to_float(it.get("ClosingPrice") or it.get("收盤價")),
+                close=close,
                 change=_to_float(it.get("Change") or it.get("漲跌價差")),
                 open=_to_float(it.get("OpeningPrice") or it.get("開盤價")),
                 high=_to_float(it.get("HighestPrice") or it.get("最高價")),
@@ -130,13 +133,16 @@ def fetch_tpex_rows(trade_date: str) -> List[EODRow]:
             continue
         name = row[1] if len(row) > 1 else ""
         close = _to_float(row[2] if len(row) > 2 else None)
+        if close is None:
+            continue  # 當日未成交（到期/低流動性）— 無分析價值，跳過
         change = _to_float(row[3] if len(row) > 3 else None)
         open_ = _to_float(row[4] if len(row) > 4 else None)
         high = _to_float(row[5] if len(row) > 5 else None)
         low = _to_float(row[6] if len(row) > 6 else None)
-        volume = _to_float(row[7] if len(row) > 7 else None)
-        turnover = _to_float(row[8] if len(row) > 8 else None)
-        trades = _to_float(row[9] if len(row) > 9 else None)
+        # col[7] = 均價 (average price) — skip
+        volume = _to_float(row[8] if len(row) > 8 else None)    # 成交股數
+        turnover = _to_float(row[9] if len(row) > 9 else None)  # 成交金額(元)
+        trades = _to_float(row[10] if len(row) > 10 else None)  # 成交筆數
         rows.append(
             EODRow(
                 trade_date=trade_date,
