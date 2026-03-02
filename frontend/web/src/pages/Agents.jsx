@@ -249,6 +249,13 @@ export default function AgentsPage() {
         return () => clearInterval(id)
     }, [running.length, load])
 
+    async function handleRunAll() {
+        const toRun = agents.filter(a => !running.includes(a.name))
+        for (const agent of toRun) {
+            await handleRun(agent.name)
+        }
+    }
+
     async function handleRun(agentName) {
         try {
             const res = await authFetch(`${getApiBase()}/api/agents/${agentName}/run`, { method: 'POST' })
@@ -279,12 +286,22 @@ export default function AgentsPage() {
                         {totalRuns > 0 && <span className="ml-2 text-slate-500">{totalRuns}/{agents.length} 個 Agent 已執行過</span>}
                     </p>
                 </div>
-                <button
-                    onClick={load}
-                    className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
-                >
-                    <RefreshCw className="h-4 w-4" />刷新
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleRunAll}
+                        disabled={agents.length === 0 || running.length === agents.length}
+                        title="觸發所有未執行中的 Agent"
+                        className="flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-sm text-violet-300 hover:bg-violet-500/15 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <Zap className="h-4 w-4" />全部執行
+                    </button>
+                    <button
+                        onClick={load}
+                        className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm text-slate-400 hover:text-slate-200 transition-colors"
+                    >
+                        <RefreshCw className="h-4 w-4" />刷新
+                    </button>
+                </div>
             </div>
 
             {/* Toast / Error */}
