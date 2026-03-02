@@ -9,6 +9,13 @@ from openclaw.risk_engine import (
 )
 
 
+def _test_limits() -> dict:
+    """default_limits() with pm_review_required=0 to bypass daily PM file check in unit tests."""
+    lim = default_limits()
+    lim["pm_review_required"] = 0
+    return lim
+
+
 def _base_decision() -> Decision:
     return Decision(
         decision_id="d1",
@@ -52,7 +59,7 @@ def test_approve_happy_path():
         decision=_base_decision(),
         market=_base_market(),
         portfolio=_base_portfolio(),
-        limits=default_limits(),
+        limits=_test_limits(),
         system_state=_base_system(),
     )
     assert result.approved is True
@@ -63,7 +70,7 @@ def test_approve_happy_path():
 def test_reject_trading_locked():
     sys = _base_system()
     sys.trading_locked = True
-    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), default_limits(), sys)
+    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), _test_limits(), sys)
     assert result.approved is False
     assert result.reject_code == "RISK_TRADING_LOCKED"
 
@@ -71,7 +78,7 @@ def test_reject_trading_locked():
 def test_reject_daily_loss_limit():
     pf = _base_portfolio()
     pf.unrealized_pnl = -60_000.0  # >5% NAV loss
-    result = evaluate_and_build_order(_base_decision(), _base_market(), pf, default_limits(), _base_system())
+    result = evaluate_and_build_order(_base_decision(), _base_market(), pf, _test_limits(), _base_system())
     assert result.approved is False
     assert result.reject_code == "RISK_DAILY_LOSS_LIMIT"
 
@@ -79,7 +86,7 @@ def test_reject_daily_loss_limit():
 def test_reject_rate_limit():
     sys = _base_system()
     sys.orders_last_60s = 3
-    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), default_limits(), sys)
+    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), _test_limits(), sys)
     assert result.approved is False
     assert result.reject_code == "RISK_ORDER_RATE_LIMIT"
 
@@ -87,7 +94,7 @@ def test_reject_rate_limit():
 def test_reject_data_staleness():
     mkt = _base_market()
     mkt.feed_delay_ms = 2000
-    result = evaluate_and_build_order(_base_decision(), mkt, _base_portfolio(), default_limits(), _base_system())
+    result = evaluate_and_build_order(_base_decision(), mkt, _base_portfolio(), _test_limits(), _base_system())
     assert result.approved is False
     assert result.reject_code == "RISK_DATA_STALENESS"
 
@@ -95,13 +102,13 @@ def test_reject_data_staleness():
 def test_reject_reduce_only_new_position():
     sys = _base_system()
     sys.reduce_only_mode = True
-    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), default_limits(), sys)
+    result = evaluate_and_build_order(_base_decision(), _base_market(), _base_portfolio(), _test_limits(), sys)
     assert result.approved is False
     assert result.reject_code == "RISK_CONSECUTIVE_LOSSES"
 
 
 def test_auto_reduce_qty_when_liquidity_ratio_hit():
-    limits = default_limits()
+    limits = _test_limits()
     limits["max_qty_to_1m_volume_ratio"] = 0.01  # 100 shares max
     mkt = _base_market()
     mkt.volume_1m = 10_000
@@ -112,7 +119,7 @@ def test_auto_reduce_qty_when_liquidity_ratio_hit():
 
 
 def test_reject_when_auto_reduce_disabled_and_qty_too_large():
-    limits = default_limits()
+    limits = _test_limits()
     limits["max_qty_to_1m_volume_ratio"] = 0.001
     limits["allow_auto_reduce_qty"] = 0
     mkt = _base_market()
@@ -129,7 +136,7 @@ def test_reduce_only_allows_position_reduction():
     sys.reduce_only_mode = True
     d = _base_decision()
     d.signal_side = "sell"  # reduces long position
-    result = evaluate_and_build_order(d, _base_market(), pf, default_limits(), sys)
+    result = evaluate_and_build_order(d, _base_market(), pf, _test_limits(), sys)
     assert result.approved is True
     assert result.order is not None
     assert result.order.opens_new_position is False
