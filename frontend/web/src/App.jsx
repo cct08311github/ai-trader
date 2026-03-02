@@ -7,6 +7,7 @@ import PortfolioPage from './pages/Portfolio'
 import TradesPage from './pages/Trades'
 import StrategyPage from './pages/Strategy'
 import SystemPage from './pages/System'
+import AgentsPage from './pages/Agents'
 import SettingsPage from './pages/Settings'
 
 /**
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/portfolio" element={<PortfolioPage />} />
         <Route path="/trades" element={<TradesPage />} />
         <Route path="/strategy" element={<StrategyPage />} />
+        <Route path="/agents" element={<AgentsPage />} />
         <Route path="/system" element={<SystemPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

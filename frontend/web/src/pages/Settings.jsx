@@ -357,7 +357,7 @@ export default function SettingsPage() {
                 </div>
             )}
 
-            <div className="grid grid-cols-2 gap-6 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 {/* 0. Watchlist */}
                 <WatchlistSection />
 
@@ -405,7 +405,7 @@ export default function SettingsPage() {
                         {[1, 2, 3].map(lv => (
                             <div key={lv} className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 space-y-2">
                                 <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Level {lv}</div>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <PctField label="單筆風險上限（% NAV）"
                                         value={limits.data[`level_${lv}_max_risk_pct`]}
                                         onChange={v => limits.set({ [`level_${lv}_max_risk_pct`]: v })} />
