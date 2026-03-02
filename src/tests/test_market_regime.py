@@ -15,6 +15,12 @@ from openclaw.risk_engine import (
 )
 
 
+def _test_limits() -> dict:
+    lim = default_limits()
+    lim["pm_review_required"] = 0
+    return lim
+
+
 def test_market_regime_classify_bull_bear_range():
     # Bull: trending up + volume confirmation
     prices_bull = [100 + i * 0.8 for i in range(80)]
@@ -69,7 +75,7 @@ def test_risk_engine_qty_reduces_when_volatility_multiplier_decreases():
     portfolio = PortfolioState(nav=10_000_000.0, cash=8_000_000.0, realized_pnl_today=0.0, unrealized_pnl=0.0)
     system = SystemState(now_ms=1_000_100, trading_locked=False, broker_connected=True, db_write_p99_ms=50, orders_last_60s=0)
 
-    limits = default_limits()
+    limits = _test_limits()
     limits["max_symbol_weight"] = 1.0
     limits["max_gross_exposure"] = 10.0
     limits["max_loss_per_trade_pct_nav"] = 0.006

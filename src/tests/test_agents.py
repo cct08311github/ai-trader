@@ -56,7 +56,8 @@ def mem_db():
         CREATE TABLE positions (
             symbol TEXT PRIMARY KEY,
             quantity INTEGER,
-            avg_price REAL
+            avg_price REAL,
+            unrealized_pnl REAL DEFAULT 0
         );
         CREATE TABLE fills (
             fill_id TEXT PRIMARY KEY,
@@ -68,7 +69,10 @@ def mem_db():
         CREATE TABLE daily_pnl_summary (
             trade_date TEXT,
             symbol TEXT,
-            realized_pnl REAL
+            realized_pnl REAL,
+            total_pnl REAL DEFAULT 0,
+            total_trades INTEGER DEFAULT 0,
+            rolling_win_rate REAL DEFAULT 0
         );
         CREATE TABLE decisions (
             decision_id TEXT,
