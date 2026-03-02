@@ -13,5 +13,8 @@ sse-starlette>=2.1
 # Google Gemini (for daily PM review)
 google-generativeai>=0.8
 
+# Anthropic Claude (for chat feature — optional, falls back to Gemini)
+anthropic>=0.84
+
 # Optional: install separately for live/simulation broker mode
 # pip install shioaji>=1.0

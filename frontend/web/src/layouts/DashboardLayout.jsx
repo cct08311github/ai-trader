@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar'
 import GlobalControlBar from '../components/GlobalControlBar'
 import Breadcrumbs from '../components/Breadcrumbs'
 import ThemeToggle from '../components/ThemeToggle'
+import ChatButton from '../components/chat/ChatButton'
 import { logout } from '../lib/auth'
 
 export default function DashboardLayout() {
@@ -82,6 +83,9 @@ export default function DashboardLayout() {
           </div>
 
           <Outlet />
+
+          {/* AI Chat floating button — available on all pages */}
+          <ChatButton />
 
           <footer className="mt-10 border-t border-[rgb(var(--border))] pt-6 text-xs text-[rgb(var(--muted))]">
             Sprint 1 · API:{' '}
