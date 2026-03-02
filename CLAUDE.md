@@ -132,13 +132,19 @@ trading_enabled = true
 |--------|------|
 | `ai-trader-api` | FastAPI 後端 |
 | `ai-trader-web` | React Vite Dev Server（port 3000） |
-| `ai-trader-watcher` | ticker_watcher，每 3 分鐘掃盤 |
+| `ai-trader-watcher` | ticker_watcher，每 3 分鐘掃盤，使用真實 Shioaji 行情 |
 
 ```bash
 pm2 status                  # 查看所有服務
 pm2 restart ai-trader-api   # 重啟 API
 pm2 logs ai-trader-watcher  # 看掃盤 log
 ```
+
+**Broker 說明**：
+- Shioaji 憑證已設定於 `frontend/backend/.env`（`SHIOAJI_API_KEY` / `SHIOAJI_SECRET_KEY`）
+- watcher 啟動時會自動登入，行情為**真實市場資料**
+- 目前程式碼固定 `sj.Shioaji(simulation=True)` → 永豐模擬帳戶下單，不影響真實部位
+- 切換為實際下單：修改 `ticker_watcher.py` 中 `simulation=True` → `False`
 
 ---
 
