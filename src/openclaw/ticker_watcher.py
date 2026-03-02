@@ -26,6 +26,8 @@ import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from openclaw.pnl_engine import on_sell_filled, sync_positions_table
+
 # ── 設定 ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SEC: int = 180  # 3 分鐘
 STRATEGY_ID: str = "momentum_watcher"
@@ -521,7 +523,28 @@ def run_watcher() -> None:
                         if result.order.side == "buy":
                             positions[symbol] = result.order.price
                         elif result.order.side == "sell":
+                            # Compute realized PnL and persist to daily_pnl_summary
+                            try:
+                                trade_date = dt.datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+                                pnl = on_sell_filled(
+                                    conn,
+                                    symbol=symbol,
+                                    sell_qty=result.order.qty,
+                                    sell_price=result.order.price,
+                                    sell_fee=0.0,
+                                    sell_tax=0.0,
+                                    trade_date=trade_date,
+                                )
+                                log.info("[%s] realized_pnl=%.2f written to daily_pnl_summary", symbol, pnl)
+                            except Exception as pnl_err:
+                                log.warning("[%s] pnl_engine error: %s", symbol, pnl_err)
                             positions.pop(symbol, None)
+
+                        # Sync positions table after every fill
+                        try:
+                            sync_positions_table(conn)
+                        except Exception as sync_err:
+                            log.warning("sync_positions_table error: %s", sync_err)
                 except Exception as e:
                     log.error("[%s] order execution error: %s", symbol, e, exc_info=True)
                     try:

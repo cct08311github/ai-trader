@@ -368,8 +368,13 @@ def get_portfolio_kpis():
             if today_count_row:
                 today_trades_count = today_count_row["cnt"]
 
-            # overall_win_rate: fills have no pnl column yet; keep 0.0 until sell+pnl tracking is added
-                    
+            # overall_win_rate: read from daily_pnl_summary (written by pnl_engine on sell fills)
+            try:
+                from openclaw.pnl_engine import get_overall_win_rate as _win_rate
+                overall_win_rate = _win_rate(conn)
+            except Exception:
+                pass
+
             # Try to get latest cash from position snapshots if available
             try:
                 snapshot_row = conn.execute(
@@ -511,29 +516,20 @@ def get_monthly_summary(month: str = "2026-02"):
 @router.get("/equity-curve")
 def get_equity_curve(days: int = 60, start_equity: float = 100000.0):
     """
-    P1-6: 損益曲線 — 從 trades 表計算每日累積已實現 PnL。
+    P1-6: 損益曲線 — 從 daily_pnl_summary 計算每日累積已實現 PnL。
 
     回傳格式: [{ date: "YYYY-MM-DD", equity: float }]
     若 DB 無資料，回傳空陣列（前端可 fallback 到 mock）。
     """
-    import datetime as _dt
-    cutoff_dt = _dt.datetime.utcnow() - _dt.timedelta(days=days)
-    cutoff_str = cutoff_dt.strftime("%Y-%m-%d")
-
-    # fills table has no realized pnl column yet; equity curve requires sell+pnl tracking
-    rows = []
-
-    if not rows:
-        return {"status": "ok", "data": [], "source": "no_data"}
-
-    # 累積計算
-    series = []
-    equity = start_equity
-    for r in rows:
-        equity += float(r["daily_pnl"] or 0)
-        series.append({"date": r["trade_date"], "equity": round(equity, 2)})
-
-    return {"status": "ok", "data": series, "source": "db"}
+    try:
+        from openclaw.pnl_engine import get_equity_curve as _eq_curve
+        with get_conn() as conn:
+            series = _eq_curve(conn, days=days, start_equity=start_equity)
+        if series:
+            return {"status": "ok", "data": series, "source": "db"}
+    except Exception:
+        pass
+    return {"status": "ok", "data": [], "source": "no_data"}
 
 
 @router.get("/trade-causal/{trade_id}")

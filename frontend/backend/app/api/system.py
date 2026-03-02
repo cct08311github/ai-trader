@@ -151,12 +151,18 @@ def system_risk():
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
-    with READONLY_POOL.conn() as conn:
-        cursor = conn.cursor()
-        
-        # fills table has no realized pnl; return 0.0 until sell+pnl tracking is added
-        today_pnl = 0.0
-        monthly_pnl = 0.0
+    today_str   = now.strftime("%Y-%m-%d")
+    month_str   = now.strftime("%Y-%m")
+
+    today_pnl   = 0.0
+    monthly_pnl = 0.0
+    try:
+        from openclaw.pnl_engine import get_today_pnl, get_monthly_pnl
+        with READONLY_POOL.conn() as conn:
+            today_pnl   = get_today_pnl(conn, today_str)
+            monthly_pnl = get_monthly_pnl(conn, month_str)
+    except Exception:
+        pass
 
     return {
         "today_realized_pnl": round(today_pnl, 2),
