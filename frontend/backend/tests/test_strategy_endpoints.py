@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+_TEST_TOKEN = "test-bearer-token"
+_AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
+
 
 def test_get_proposals(client):
-    r = client.get('/api/strategy/proposals?limit=10&offset=0')
+    r = client.get('/api/strategy/proposals?limit=10&offset=0', headers=_AUTH_HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert data['status'] == 'ok'
@@ -11,7 +14,7 @@ def test_get_proposals(client):
 
 
 def test_get_logs(client):
-    r = client.get('/api/strategy/logs?limit=10&offset=0')
+    r = client.get('/api/strategy/logs?limit=10&offset=0', headers=_AUTH_HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert data['status'] == 'ok'
@@ -19,6 +22,6 @@ def test_get_logs(client):
 
 
 def test_rw_endpoints_disabled(client):
-    r = client.post('/api/strategy/p1/approve', json={'actor':'u','reason':'x'}, headers={'X-OPS-TOKEN':'nope'})
-    # unauthorized comes before 405
+    # No Bearer token → 401 from auth middleware (before route is reached)
+    r = client.post('/api/strategy/p1/approve', json={'actor': 'u', 'reason': 'x'})
     assert r.status_code in (401, 503)

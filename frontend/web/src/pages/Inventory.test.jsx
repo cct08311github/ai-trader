@@ -11,6 +11,8 @@ describe('InventoryPage', () => {
 
   it('shows loading state initially', () => {
     render(<InventoryPage />)
-    expect(screen.getByText(/Loading…/i)).toBeDefined()
+    // Multiple elements may show loading text simultaneously (table + status bar)
+    const loadingEls = screen.queryAllByText(/讀取庫存資料中/i)
+    expect(loadingEls.length).toBeGreaterThan(0)
   })
 })

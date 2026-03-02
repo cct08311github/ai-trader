@@ -55,6 +55,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setenv("DB_PATH", db_path.as_posix())
     monkeypatch.setenv("RATE_LIMIT_RPM", "1000")
+    monkeypatch.setenv("AUTH_TOKEN", "test-bearer-token")
 
     # Reload modules that read env at import-time
     import app.core.config as config
