@@ -25,6 +25,16 @@ export async function unlockSymbol(symbol) {
   return res.json()
 }
 
+export async function closePosition(symbol) {
+  const res = await authFetch(
+    `${getApiBase()}/api/portfolio/close-position/${encodeURIComponent(symbol)}`,
+    { method: 'POST' }
+  )
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body?.detail || `平倉失敗 (${res.status})`)
+  return body
+}
+
 export const mockPositions = [
   { symbol: 'AAPL', qty: 40, lastPrice: 182.34, avgCost: 165.1 },
   { symbol: 'TSLA', qty: 15, lastPrice: 196.72, avgCost: 210.0 },

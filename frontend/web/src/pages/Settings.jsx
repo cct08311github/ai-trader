@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
     DollarSign, Shield, TrendingDown, CheckCircle, AlertCircle,
-    Save, RefreshCw, Lock, Bell, Layers, ChevronDown, ChevronUp
+    Save, RefreshCw, Lock, Bell, Layers, ChevronDown, ChevronUp,
+    List, Plus, X, Zap
 } from 'lucide-react'
 import { formatComma } from '../lib/format'
 import { authFetch, getApiBase } from '../lib/auth'
@@ -138,6 +139,179 @@ function useSection(path) {
     return { data, error, saving, saved, dirty, set, save, refresh: load }
 }
 
+/* ── Watchlist Section ────────────────────────────────────── */
+function WatchlistSection() {
+    const [data, setData] = useState(null)
+    const [error, setError] = useState(null)
+    const [saving, setSaving] = useState(false)
+    const [saved, setSaved] = useState(false)
+    const [dirty, setDirty] = useState(false)
+    const [newSymbol, setNewSymbol] = useState('')
+    const [addError, setAddError] = useState('')
+
+    const load = useCallback(async () => {
+        try {
+            const res = await authFetch(`${getApiBase()}/api/settings/watchlist`)
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
+            setData(await res.json())
+            setError(null)
+        } catch (e) { setError(e.message) }
+    }, [])
+
+    useEffect(() => { load() }, [load])
+
+    function addSymbol() {
+        const sym = newSymbol.trim().toUpperCase()
+        if (!sym) return
+        if (!/^\d{4}$/.test(sym) && !/^[A-Z]{1,5}$/.test(sym)) {
+            setAddError('格式不正確（台股4位數字或美股英文代碼）')
+            return
+        }
+        if (data.universe.includes(sym)) {
+            setAddError(`${sym} 已在清單中`)
+            return
+        }
+        setData(d => ({ ...d, universe: [...d.universe, sym] }))
+        setNewSymbol('')
+        setAddError('')
+        setDirty(true)
+        setSaved(false)
+    }
+
+    function removeSymbol(sym) {
+        setData(d => ({ ...d, universe: d.universe.filter(s => s !== sym) }))
+        setDirty(true)
+        setSaved(false)
+    }
+
+    async function save() {
+        setSaving(true)
+        try {
+            const res = await authFetch(`${getApiBase()}/api/settings/watchlist`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ universe: data.universe, max_active: data.max_active }),
+            })
+            if (!res.ok) {
+                const b = await res.json().catch(() => ({}))
+                throw new Error(b.detail || `HTTP ${res.status}`)
+            }
+            const updated = await res.json()
+            setData(updated)
+            setDirty(false)
+            setSaved(true)
+            setTimeout(() => setSaved(false), 4000)
+        } catch (e) { setError(e.message) }
+        finally { setSaving(false) }
+    }
+
+    return (
+        <Section title="選股候選池 (Watchlist)" icon={List} color="text-violet-400" defaultOpen={true}>
+            {error && (
+                <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300 mt-4">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />{error}
+                </div>
+            )}
+            {!data ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 py-4">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />載入中...
+                </div>
+            ) : (
+                <>
+                    {/* Active watchlist — read-only */}
+                    <div className="pt-4">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Zap className="h-3.5 w-3.5 text-amber-400" />
+                            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                系統主動篩選（Active Watchlist）
+                            </span>
+                            <button onClick={load} className="ml-auto text-slate-500 hover:text-slate-300 transition-colors">
+                                <RefreshCw className="h-3 w-3" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-2">
+                            每3分鐘從候選池中依漲跌幅排名自動更新，最多取前 {data.max_active} 支。
+                            {data.screened_at && <span className="ml-1 text-slate-600">最後篩選：{data.screened_at}</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                            {data.active_watchlist && data.active_watchlist.length > 0 ? (
+                                data.active_watchlist.map(sym => (
+                                    <span key={sym} className="flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-xs font-mono font-semibold text-amber-300">
+                                        <Zap className="h-3 w-3" />{sym}
+                                    </span>
+                                ))
+                            ) : (
+                                <span className="text-xs text-slate-500 italic">尚無篩選結果（watcher 執行後自動更新）</span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="my-4 border-t border-slate-800/60" />
+
+                    {/* Universe — editable */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <List className="h-3.5 w-3.5 text-violet-400" />
+                            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                候選池（Universe）
+                            </span>
+                            <span className="ml-auto text-xs text-slate-500">{data.universe.length} 支</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-3">手動維護的股票候選池。系統每次掃描時從此清單篩選 active watchlist。</p>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {data.universe.map(sym => (
+                                <span key={sym} className="flex items-center gap-1 rounded-lg bg-slate-800/60 border border-slate-700/60 px-2.5 py-1 text-xs font-mono text-slate-200">
+                                    {sym}
+                                    <button
+                                        onClick={() => removeSymbol(sym)}
+                                        className="text-slate-500 hover:text-rose-400 transition-colors ml-0.5"
+                                        title={`移除 ${sym}`}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+
+                        {/* Add symbol */}
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                placeholder="新增股票代碼（如 2330 或 AAPL）"
+                                value={newSymbol}
+                                onChange={e => { setNewSymbol(e.target.value); setAddError('') }}
+                                onKeyDown={e => e.key === 'Enter' && addSymbol()}
+                                className="flex-1 rounded-xl border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 outline-none focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
+                            />
+                            <button
+                                onClick={addSymbol}
+                                className="flex items-center gap-1.5 rounded-xl bg-violet-600/20 border border-violet-500/30 px-3 py-2 text-sm font-medium text-violet-300 hover:bg-violet-600/30 transition-colors"
+                            >
+                                <Plus className="h-4 w-4" />新增
+                            </button>
+                        </div>
+                        {addError && <p className="text-xs text-rose-400 mt-1">{addError}</p>}
+                    </div>
+
+                    <div className="my-4 border-t border-slate-800/60" />
+
+                    {/* max_active */}
+                    <Field
+                        label="Active Watchlist 最大數量"
+                        hint="每次掃描最多選取幾支股票進行監控與交易訊號產生"
+                        value={data.max_active}
+                        min={1} max={20} step={1}
+                        onChange={v => { setData(d => ({ ...d, max_active: v })); setDirty(true); setSaved(false) }}
+                        suffix="支"
+                    />
+
+                    <SaveBar saving={saving} saved={saved} dirty={dirty} onSave={save} />
+                </>
+            )}
+        </Section>
+    )
+}
+
 /* ── Page ─────────────────────────────────────────────────── */
 export default function SettingsPage() {
     const capital = useSection('/api/settings/capital')
@@ -182,6 +356,9 @@ export default function SettingsPage() {
                     <RefreshCw className="h-4 w-4 animate-spin" />載入中...
                 </div>
             )}
+
+            {/* 0. Watchlist */}
+            <WatchlistSection />
 
             {/* 1. Capital */}
             {capital.data && (

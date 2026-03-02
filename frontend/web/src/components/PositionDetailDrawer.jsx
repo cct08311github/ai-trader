@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle, Lock, Unlock } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle, Lock, Unlock, GitBranch, CheckCircle2, XCircle } from 'lucide-react'
 import { authFetch, getApiBase } from '../lib/auth'
 import { lockSymbol, unlockSymbol } from '../lib/portfolio'
 import { formatCurrency, formatNumber } from '../lib/format'
@@ -36,6 +36,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
         if (!symbol) return
         setLoading(true)
         setError(null)
+        setDetail(null)
 
         const base = getApiBase()
         authFetch(`${base}/api/portfolio/position-detail/${encodeURIComponent(symbol)}`)
@@ -63,7 +64,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
 
             {/* Drawer panel */}
             <div
-                className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-800 bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-transform duration-300"
+                className="fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col border-l border-slate-800 bg-slate-950/95 shadow-2xl backdrop-blur-xl transition-transform duration-300"
                 style={{ transform: symbol ? 'translateX(0)' : 'translateX(100%)' }}
             >
                 {/* Header */}
@@ -77,17 +78,18 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-slate-400">持倉詳情</p>
+                        <p className="text-xs text-slate-400">持倉詳情 · 決策鏈</p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleToggleLock}
                             disabled={lockLoading}
                             title={isLocked ? '解除鎖定（允許賣出）' : '鎖定（禁止 AI 賣出）'}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${isLocked
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                                isLocked
                                     ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 ring-1 ring-amber-500/30'
                                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                                }`}
+                            }`}
                         >
                             {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
                             {lockLoading ? '處理中…' : isLocked ? '解除鎖定' : '鎖定持股'}
@@ -108,7 +110,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                 )}
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {loading && (
                         <div className="flex items-center justify-center py-20">
                             <svg className="h-6 w-6 animate-spin text-emerald-400" viewBox="0 0 24 24" fill="none">
@@ -126,19 +128,27 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
 
                     {!loading && detail && (
                         <>
-                            {/* Current position summary */}
+                            {/* ── 持倉摘要 ── */}
                             {position && (
                                 <DetailSection icon={BarChart3} title="持倉摘要">
                                     <div className="grid grid-cols-2 gap-3">
                                         <DetailField label="數量" value={formatNumber(position.qty || 0)} />
                                         <DetailField label="均價" value={formatCurrency(position.avgCost || position.avg_price || 0)} />
-                                        <DetailField label="現價" value={formatCurrency(position.lastPrice || position.last_price || 0)} />
+                                        <DetailField label="現價" value={
+                                            (position.lastPrice || position.last_price)
+                                                ? formatCurrency(position.lastPrice || position.last_price)
+                                                : <span className="text-slate-500">市場休市中</span>
+                                        } />
                                         <DetailField
                                             label="未實現損益"
-                                            value={formatCurrency(
-                                                ((position.lastPrice || position.last_price || 0) - (position.avgCost || position.avg_price || 0)) *
-                                                (position.qty || 0)
-                                            )}
+                                            value={
+                                                (position.lastPrice || position.last_price)
+                                                    ? formatCurrency(
+                                                        ((position.lastPrice || position.last_price) - (position.avgCost || position.avg_price || 0)) *
+                                                        (position.qty || 0)
+                                                    )
+                                                    : '-'
+                                            }
                                             valueClass={
                                                 ((position.lastPrice || position.last_price || 0) - (position.avgCost || position.avg_price || 0)) >= 0
                                                     ? 'text-emerald-400' : 'text-rose-400'
@@ -148,14 +158,10 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                                 </DetailSection>
                             )}
 
-                            {/* Entry reason */}
-                            <DetailSection icon={FileText} title="進場理由">
-                                <p className="text-sm leading-relaxed text-slate-300">
-                                    {detail.entry_reason || '暫無進場理由資料'}
-                                </p>
-                            </DetailSection>
+                            {/* ── 決策鏈 ── */}
+                            <DecisionChainSection decision={detail.decision} riskCheck={detail.risk_check} fills={detail.fills} />
 
-                            {/* Stop-loss / Take-profit */}
+                            {/* ── 止損 / 止盈 ── */}
                             <DetailSection icon={Shield} title="止損 / 止盈設定">
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3">
@@ -177,16 +183,9 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                                 </div>
                             </DetailSection>
 
-                            {/* PM authorization */}
-                            <DetailSection icon={FileText} title="PM 授權原文">
-                                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-3 text-xs font-mono text-slate-400 leading-relaxed whitespace-pre-wrap max-h-40 overflow-y-auto">
-                                    {detail.pm_authorization || '暫無 PM 授權資料'}
-                                </div>
-                            </DetailSection>
-
-                            {/* Chip trend history */}
-                            <DetailSection icon={BarChart3} title="籌碼趨勢歷史">
-                                {detail.chip_trend && detail.chip_trend.length > 0 ? (
+                            {/* ── 籌碼趨勢 ── */}
+                            {detail.chip_trend && detail.chip_trend.length > 0 && (
+                                <DetailSection icon={BarChart3} title="籌碼趨勢歷史">
                                     <div className="space-y-2">
                                         <div className="grid grid-cols-4 gap-2 text-xs text-slate-500 font-medium">
                                             <span>日期</span>
@@ -206,15 +205,130 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                                             </div>
                                         ))}
                                     </div>
-                                ) : (
-                                    <p className="text-sm text-slate-500">暫無籌碼趨勢資料</p>
-                                )}
-                            </DetailSection>
+                                </DetailSection>
+                            )}
                         </>
                     )}
                 </div>
             </div>
         </>
+    )
+}
+
+/** 決策鏈 section：strategy → risk_check → fills */
+function DecisionChainSection({ decision, riskCheck, fills }) {
+    return (
+        <DetailSection icon={GitBranch} title="決策鏈">
+            <div className="space-y-3">
+                {/* Strategy decision */}
+                <ChainStep
+                    step="1"
+                    label="策略決策"
+                    color="indigo"
+                    content={
+                        decision ? (
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                <span className="text-slate-500">策略</span>
+                                <span className="text-indigo-300 font-mono">{decision.strategy_id || '-'}</span>
+                                <span className="text-slate-500">版本</span>
+                                <span className="text-slate-300">{decision.strategy_version || '-'}</span>
+                                <span className="text-slate-500">方向</span>
+                                <span className={`font-semibold ${decision.signal_side === 'buy' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                                    {decision.signal_side?.toUpperCase() || '-'}
+                                </span>
+                                <span className="text-slate-500">信心分</span>
+                                <span className="text-amber-300">{decision.signal_score ?? '-'}</span>
+                                <span className="text-slate-500">時間</span>
+                                <span className="text-slate-400">{decision.ts ? new Date(decision.ts).toLocaleString('zh-TW', { hour12: false }) : '-'}</span>
+                            </div>
+                        ) : (
+                            <span className="text-slate-500 text-xs">暫無決策記錄</span>
+                        )
+                    }
+                />
+
+                {/* Risk check */}
+                <ChainStep
+                    step="2"
+                    label="風控核驗"
+                    color={riskCheck?.passed ? 'emerald' : 'rose'}
+                    content={
+                        riskCheck ? (
+                            <div className="flex items-center gap-3 text-xs">
+                                {riskCheck.passed
+                                    ? <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                                    : <XCircle className="h-4 w-4 text-rose-400 flex-shrink-0" />
+                                }
+                                <span className={riskCheck.passed ? 'text-emerald-300' : 'text-rose-300'}>
+                                    {riskCheck.passed ? '通過' : `拒絕：${riskCheck.reject_code || '未知'}`}
+                                </span>
+                                {riskCheck.metrics?.orders_last_60s != null && (
+                                    <span className="text-slate-500">60s 訂單數：{riskCheck.metrics.orders_last_60s}</span>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="text-slate-500 text-xs">暫無風控記錄</span>
+                        )
+                    }
+                />
+
+                {/* Fills */}
+                <ChainStep
+                    step="3"
+                    label="成交明細"
+                    color="slate"
+                    content={
+                        fills && fills.length > 0 ? (
+                            <div className="space-y-1">
+                                <div className="grid grid-cols-4 gap-2 text-[11px] text-slate-500 font-medium">
+                                    <span>時間</span>
+                                    <span>數量</span>
+                                    <span>價格</span>
+                                    <span>手續費</span>
+                                </div>
+                                {fills.map((f, i) => (
+                                    <div key={f.fill_id || i} className="grid grid-cols-4 gap-2 text-xs">
+                                        <span className="text-slate-400">
+                                            {f.ts ? new Date(f.ts).toLocaleTimeString('zh-TW', { hour12: false }) : '-'}
+                                        </span>
+                                        <span className="text-slate-200">{f.qty}</span>
+                                        <span className="text-slate-200">{formatCurrency(f.price)}</span>
+                                        <span className="text-slate-400">{f.fee ? formatCurrency(f.fee) : '0'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="text-slate-500 text-xs">暫無成交記錄</span>
+                        )
+                    }
+                />
+            </div>
+        </DetailSection>
+    )
+}
+
+/** 單一鏈節點 */
+function ChainStep({ step, label, color, content }) {
+    const dotColor = {
+        indigo: 'bg-indigo-500',
+        emerald: 'bg-emerald-500',
+        rose: 'bg-rose-500',
+        slate: 'bg-slate-500',
+    }[color] || 'bg-slate-500'
+
+    return (
+        <div className="flex gap-3">
+            <div className="flex flex-col items-center">
+                <div className={`flex h-6 w-6 items-center justify-center rounded-full ${dotColor} text-[10px] font-bold text-white flex-shrink-0`}>
+                    {step}
+                </div>
+                <div className="mt-1 w-px flex-1 bg-slate-800" />
+            </div>
+            <div className="pb-3 flex-1 min-w-0">
+                <div className="text-xs font-semibold text-slate-300 mb-1.5">{label}</div>
+                {content}
+            </div>
+        </div>
     )
 }
 

@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 import app.db as db
@@ -34,20 +34,6 @@ def conn_dep():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB connection failed: {e}")
 
-
-def require_ops_token(x_ops_token: Optional[str] = Header(default=None, alias="X-OPS-TOKEN")) -> None:
-    """Require an operator token for state-changing operations.
-
-    Note: use env lookup directly to avoid stale lru_cache state across tests.
-    """
-
-    import os
-
-    expected = os.environ.get("STRATEGY_OPS_TOKEN")
-    if not expected:
-        raise HTTPException(status_code=503, detail="STRATEGY_OPS_TOKEN not configured on backend")
-    if not x_ops_token or x_ops_token != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 class DecideRequest(BaseModel):
@@ -188,7 +174,6 @@ def _update_proposal_status(
 def approve_strategy_proposal(
     proposal_id: str,
     req: DecideRequest,
-    _: None = Depends(require_ops_token),
 ):
     try:
         with db.get_conn_rw() as conn:
@@ -210,7 +195,6 @@ def approve_strategy_proposal(
 def reject_strategy_proposal(
     proposal_id: str,
     req: DecideRequest,
-    _: None = Depends(require_ops_token),
 ):
     try:
         with db.get_conn_rw() as conn:

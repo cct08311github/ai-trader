@@ -20,22 +20,32 @@ function safeJsonParse(s) {
 function StatusTag({ status }) {
   const s = String(status || '').toLowerCase() || 'unknown'
   const map = {
-    pending: 'bg-slate-800 text-slate-200 border-slate-700',
+    pending:  'bg-slate-800 text-slate-200 border-slate-700',
     approved: 'bg-emerald-900/30 text-emerald-200 border-emerald-800',
     rejected: 'bg-rose-900/30 text-rose-200 border-rose-800',
     executed: 'bg-indigo-900/30 text-indigo-200 border-indigo-800',
-    unknown: 'bg-slate-900/30 text-slate-300 border-slate-800'
+    unknown:  'bg-slate-900/30 text-slate-300 border-slate-800',
+  }
+  const label = {
+    pending:  'pending 待審',
+    approved: 'approved 已批准',
+    rejected: 'rejected 已拒絕',
+    executed: 'executed 已執行',
   }
   const cls = map[s] || map.unknown
-  return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>{s}</span>
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${cls}`}>
+      {label[s] || s}
+    </span>
+  )
 }
 
 function RatingCard({ rating, basis }) {
   const r = String(rating || '').toUpperCase()
   const theme = {
     A: { bg: 'bg-emerald-900/20', border: 'border-emerald-700', text: 'text-emerald-200', sub: 'text-emerald-200/80' },
-    B: { bg: 'bg-amber-900/15', border: 'border-amber-700', text: 'text-amber-200', sub: 'text-amber-200/80' },
-    C: { bg: 'bg-rose-900/15', border: 'border-rose-700', text: 'text-rose-200', sub: 'text-rose-200/80' }
+    B: { bg: 'bg-amber-900/15',  border: 'border-amber-700',   text: 'text-amber-200',   sub: 'text-amber-200/80'  },
+    C: { bg: 'bg-rose-900/15',   border: 'border-rose-700',    text: 'text-rose-200',    sub: 'text-rose-200/80'   },
   }[r] || { bg: 'bg-slate-950/20', border: 'border-slate-800', text: 'text-slate-200', sub: 'text-slate-400' }
 
   return (
@@ -265,7 +275,7 @@ function JsonBox({ value }) {
     return JSON.stringify(value, null, 2)
   }, [value])
 
-  if (!text) return <div className="text-xs text-slate-500">()</div>
+  if (!text) return <div className="text-xs text-slate-500">（無內容）</div>
 
   return (
     <pre className="max-h-[55vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200">
@@ -276,6 +286,8 @@ function JsonBox({ value }) {
 
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   const payload = safeJsonParse(proposal?.proposal_json || '')
+  const status = String(proposal?.status || '').toLowerCase()
+  const isPending = status === 'pending'
 
   if (!open) return null
 
@@ -284,23 +296,24 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
       <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-sm font-semibold"></div>
+            <div className="text-sm font-semibold text-slate-200">提案詳情</div>
             <div className="mt-1 text-xs text-slate-400">
               ID: <code className="text-slate-200">{proposal?.proposal_id || '-'}</code>
-              <span className="mx-2"></span>
+              <span className="mx-2">·</span>
               {formatUnixSec(proposal?.created_at) || '-'}
-              <span className="mx-2"></span>
+              <span className="mx-2">·</span>
               <StatusTag status={proposal?.status} />
             </div>
           </div>
           <button onClick={onClose} className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700">
-
+            關閉
           </button>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {/* Left: metadata + actions */}
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-200"></div>
+            <div className="text-xs font-semibold text-slate-200">基本資訊</div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-3 text-xs text-slate-300">
               <div className="grid grid-cols-3 gap-2">
                 <div className="text-slate-500">generated_by</div>
@@ -318,25 +331,28 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                disabled={busy || String(proposal?.status || '').toLowerCase() !== 'pending'}
+                disabled={busy || !isPending}
                 onClick={onApprove}
                 className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-emerald-500"
               >
-                (Approve)
+                ✓ Approve（批准）
               </button>
               <button
-                disabled={busy || String(proposal?.status || '').toLowerCase() !== 'pending'}
+                disabled={busy || !isPending}
                 onClick={onReject}
                 className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40 hover:bg-rose-500"
               >
-                (Reject)
+                ✕ Reject（拒絕）
               </button>
-              <div className="text-[11px] text-slate-500"> pending </div>
+              {!isPending && (
+                <div className="text-[11px] text-slate-500">僅 pending 狀態可操作</div>
+              )}
             </div>
           </div>
 
+          {/* Right: proposal_json */}
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-slate-200">proposal_json /  / </div>
+            <div className="text-xs font-semibold text-slate-200">proposal_json 原始資料</div>
             <JsonBox value={payload || proposal?.proposal_json} />
           </div>
         </div>
@@ -345,14 +361,14 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   )
 }
 
-function SemanticMemoryTable({ data, order }) {
+function SemanticMemoryTable({ data }) {
   if (!data || data.length === 0) return <div className="text-xs text-slate-500 py-4">（尚無學習規則）</div>
   return (
     <div className="overflow-auto rounded-xl border border-slate-800">
       <table className="w-full text-left text-[11px]">
         <thead className="bg-slate-950/40 text-slate-400">
           <tr>
-            <th className="px-3 py-2">信心</th>
+            <th className="px-3 py-2">信心度</th>
             <th className="px-3 py-2">Rule Key</th>
             <th className="px-3 py-2">規則內容</th>
             <th className="px-3 py-2">更新時間</th>
@@ -374,24 +390,15 @@ function SemanticMemoryTable({ data, order }) {
 }
 
 export default function StrategyPage() {
-  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, opsToken, saveOpsToken, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
+  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
 
   const [selected, setSelected] = useState(null)
   const [modalOpen, setModalOpen] = useState(false)
 
   const [memOrder, setMemOrder] = useState('desc')
-  const [tokenSaved, setTokenSaved] = useState(false)
 
-  function handleSaveToken(v) {
-    saveOpsToken(v)
-    if (v.trim()) {
-      setTokenSaved(true)
-      setTimeout(() => setTokenSaved(false), 2000)
-    }
-  }
-
-  // SSE integration: when new llm_traces logs arrive, refresh proposals (debounced).
+  // SSE 整合：監聽 llm_traces 新事件 → 自動刷新提案列表（debounce 500ms）
   useEffect(() => {
     const token = getToken()
     const url = `${STREAM_BASE}/logs${token ? `?token=${token}` : ''}`
@@ -447,7 +454,7 @@ export default function StrategyPage() {
 
   const doApprove = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(` proposal ${p.proposal_id}`)
+    const ok = window.confirm(`確定批准提案 ${p.proposal_id}？`)
     if (!ok) return
     await act('approve', p.proposal_id, { actor: 'operator', reason: 'manual approve via UI' })
     setModalOpen(false)
@@ -455,7 +462,7 @@ export default function StrategyPage() {
 
   const doReject = async p => {
     if (!p?.proposal_id) return
-    const ok = window.confirm(` proposal ${p.proposal_id}`)
+    const ok = window.confirm(`確定拒絕提案 ${p.proposal_id}？`)
     if (!ok) return
     await act('reject', p.proposal_id, { actor: 'operator', reason: 'manual reject via UI' })
     setModalOpen(false)
@@ -463,35 +470,13 @@ export default function StrategyPage() {
 
   return (
     <div className="space-y-5">
+      {/* ── 提案審核列表 ─────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-sm font-semibold"></div>
-            <div className="mt-1 text-xs text-slate-400">pending/approved/rejected/executed+ proposal_json+ SSE </div>
-          </div>
-
-          <div className="flex flex-col items-start gap-2">
-            <div className="flex items-center gap-2">
-              <div className="text-[11px] text-slate-500">OPS TOKEN（approve/reject 需要）</div>
-              {tokenSaved && <span className="text-[11px] text-emerald-400">✓ 已儲存</span>}
-              {opsToken && !tokenSaved && <span className="text-[11px] text-slate-500">● 已設定</span>}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={opsToken}
-                onChange={e => handleSaveToken(e.target.value)}
-                placeholder="貼上 STRATEGY_OPS_TOKEN"
-                className={`w-72 max-w-full rounded-lg border px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 bg-slate-950/40 transition-colors ${
-                  tokenSaved ? 'border-emerald-600' : opsToken ? 'border-slate-600' : 'border-slate-800'
-                }`}
-              />
-              <button
-                onClick={() => { saveOpsToken(''); setTokenSaved(false) }}
-                className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700"
-              >
-                清除
-              </button>
-            </div>
+        <div>
+          <div className="text-sm font-semibold text-slate-200">策略提案審核</div>
+          <div className="mt-1 text-xs text-slate-400">
+            pending 可手動 Approve / Reject；approved → 排隊執行；executed → 已成交；rejected → 已封鎖。
+            點擊 ID 開啟 proposal_json 詳情。提案列表由 SSE llm_traces 事件自動刷新。
           </div>
         </div>
 
@@ -501,20 +486,20 @@ export default function StrategyPage() {
           <table className="min-w-[980px] w-full text-left text-xs">
             <thead className="bg-slate-950/40 text-slate-400">
               <tr>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
+                <th className="px-4 py-3">時間</th>
+                <th className="px-4 py-3">Proposal ID</th>
+                <th className="px-4 py-3">標的</th>
+                <th className="px-4 py-3">方向</th>
+                <th className="px-4 py-3">信心度</th>
+                <th className="px-4 py-3">狀態</th>
+                <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {rows.length === 0 ? (
                 <tr>
                   <td className="px-4 py-5 text-slate-500" colSpan={7}>
-                    {loading.proposals ? '讀取中...' : ''}
+                    {loading.proposals ? '讀取中...' : '目前無提案記錄'}
                   </td>
                 </tr>
               ) : (
@@ -561,31 +546,37 @@ export default function StrategyPage() {
           </table>
         </div>
 
-        <div className="mt-3 text-[11px] text-slate-500"> ID  proposal_jsonSSE llm_traces</div>
+        <div className="mt-3 text-[11px] text-slate-500">
+          點擊 Proposal ID 開啟詳情 · approve/reject 需要 OPS TOKEN · 由 SSE llm_traces 事件自動刷新（每 10s 輪詢兜底）
+        </div>
       </div>
 
+      {/* ── 市場評級 + Semantic Memory ────────────────────────────────── */}
       <div className="grid gap-5 lg:grid-cols-3">
         <RatingCard rating={marketRating?.rating} basis={marketRating?.basis} />
 
         <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel lg:col-span-2">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold">semantic_memory</div>
-              <div className="mt-1 text-xs text-slate-400"> source episodes confidence </div>
+              <div className="text-sm font-semibold text-slate-200">語義記憶（Semantic Memory）</div>
+              <div className="mt-1 text-xs text-slate-400">
+                AI 學習沉澱的交易規則，由 source episodes 累積 confidence 決定優先級
+              </div>
             </div>
             <button
               onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
-              className="rounded-lg bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700 transition-colors"
+              className="rounded-lg bg-slate-800 px-3 py-2 text-xs hover:bg-slate-700 transition-colors text-slate-200"
             >
-              {memOrder === "desc" ? " " : " "}
+              信心度 {memOrder === 'desc' ? '↓ 高→低' : '↑ 低→高'}
             </button>
           </div>
           <div className="mt-4">
-            <SemanticMemoryTable data={semanticMemory} order={memOrder} />
+            <SemanticMemoryTable data={semanticMemory} />
           </div>
         </div>
       </div>
 
+      {/* ── 提案詳情 Modal ────────────────────────────────────────────── */}
       <ProposalModal
         open={modalOpen}
         onClose={closeDetail}
@@ -595,10 +586,10 @@ export default function StrategyPage() {
         onReject={() => doReject(selected)}
       />
 
-      {/* Bull vs Bear Debate — design doc §4.3 */}
+      {/* ── 多空辯論記錄 ─────────────────────────────────────────────── */}
       <DebatePanel />
 
-      {/* PM LLM Trace — full prompt + raw Gemini response for transparency */}
+      {/* ── PM LLM Trace ─────────────────────────────────────────────── */}
       <PmTracePanel />
     </div>
   )

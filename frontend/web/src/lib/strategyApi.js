@@ -63,9 +63,7 @@ export function useStreamApiBase() {
   return useMemo(() => `${getApiBase()}/api/stream`, [])
 }
 
-export function createStrategyClient(API_BASE, { opsToken } = {}) {
-  const headers = opsToken ? { 'X-OPS-TOKEN': opsToken } : {}
-
+export function createStrategyClient(API_BASE) {
   return {
     async proposals({ limit = 100, offset = 0, status, timeoutMs = 5000 } = {}) {
       const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) })
@@ -80,14 +78,14 @@ export function createStrategyClient(API_BASE, { opsToken } = {}) {
     async approve(proposalId, { actor = 'user', reason = '' } = {}) {
       return await callApiWithRetry(
         `${API_BASE}/${encodeURIComponent(proposalId)}/approve`,
-        { method: 'POST', headers, body: JSON.stringify({ actor, reason }) },
+        { method: 'POST', body: JSON.stringify({ actor, reason }) },
         { retries: 0, timeoutMs: 8000 }
       )
     },
     async reject(proposalId, { actor = 'user', reason = '' } = {}) {
       return await callApiWithRetry(
         `${API_BASE}/${encodeURIComponent(proposalId)}/reject`,
-        { method: 'POST', headers, body: JSON.stringify({ actor, reason }) },
+        { method: 'POST', body: JSON.stringify({ actor, reason }) },
         { retries: 0, timeoutMs: 8000 }
       )
     },
@@ -120,15 +118,7 @@ export function createStrategyClient(API_BASE, { opsToken } = {}) {
 export function useStrategyData({ pollMs = 8000 } = {}) {
   const API_BASE = useStrategyApiBase()
 
-  const [opsToken, setOpsToken] = useState(() => {
-    try {
-      return localStorage.getItem('strategyOpsToken') || ''
-    } catch {
-      return ''
-    }
-  })
-
-  const client = useMemo(() => createStrategyClient(API_BASE, { opsToken: opsToken || undefined }), [API_BASE, opsToken])
+  const client = useMemo(() => createStrategyClient(API_BASE), [API_BASE])
 
   const [proposals, setProposals] = useState([])
   const [logs, setLogs] = useState([])
@@ -149,7 +139,7 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
       setError(null)
     } catch (err) {
       if (!mountedRef.current) return
-      setError(`無法取得策略提案: `)
+      setError(`無法取得策略提案: ${err.message}`)
     } finally {
       if (mountedRef.current) setLoading(p => ({ ...p, proposals: false }))
     }
@@ -231,17 +221,6 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
     }
   }, [refreshProposals, refreshLogs, refreshMarketRating, refreshSemanticMemory, refreshDebates, pollMs])
 
-  const saveOpsToken = useCallback(next => {
-    const v = String(next || '').trim()
-    setOpsToken(v)
-    try {
-      if (v) localStorage.setItem('strategyOpsToken', v)
-      else localStorage.removeItem('strategyOpsToken')
-    } catch {
-      // ignore
-    }
-  }, [])
-
   const act = useCallback(
     async (kind, proposalId, { actor = 'user', reason = '' } = {}) => {
       setLoading(p => ({ ...p, act: true }))
@@ -262,8 +241,6 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
   )
   return {
     API_BASE,
-    opsToken,
-    saveOpsToken,
     proposals,
     logs,
     marketRating,

@@ -1,14 +1,15 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json, os, sqlite3
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
-POLICY_PATH  = os.path.join(os.path.dirname(__file__), "../../../../config/sentinel_policy_v1.json")
-CAPITAL_PATH = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
-DB_PATH_ENV  = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "../../../../data/sqlite/trades.db"))
+POLICY_PATH     = os.path.join(os.path.dirname(__file__), "../../../../config/sentinel_policy_v1.json")
+CAPITAL_PATH    = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
+WATCHLIST_PATH  = os.path.join(os.path.dirname(__file__), "../../../../config/watchlist.json")
+DB_PATH_ENV     = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "../../../../data/sqlite/trades.db"))
 
 
 def _load_json(path: str, default: dict) -> dict:
@@ -212,3 +213,77 @@ def update_limits(req: BudgetUpdateRequest):
         data["position_limits"]["levels"]["3"]["max_position_notional_pct_nav"] = req.max_position_notional_pct_nav
     _save_json(POLICY_PATH, data)
     return {"status": "ok", "message": "Limits updated successfully"}
+
+
+# ─── Watchlist ─────────────────────────────────────────────────────────────────
+
+_WATCHLIST_DEFAULT = {
+    "universe": ["2330", "2317", "2454", "2308", "2382",
+                 "2881", "2882", "2886", "2412", "3008",
+                 "2002", "1301", "1303", "2603", "2609"],
+    "max_active": 5,
+    "screening": {"method": "top_movers"},
+}
+
+
+class WatchlistSettings(BaseModel):
+    universe: List[str]
+    max_active: int = 5
+
+
+def _get_active_watchlist() -> dict:
+    """從 llm_traces 取最新一次 screener 結果。"""
+    try:
+        con = sqlite3.connect(DB_PATH_ENV)
+        row = con.execute(
+            "SELECT response, created_at FROM llm_traces "
+            "WHERE agent='watcher' AND prompt LIKE '%SCREENER%' "
+            "ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        con.close()
+        if row:
+            # response 格式: "active watchlist: 2002, 2886, 3008, 2382, 2317"
+            resp, ts_ms = row
+            symbols = []
+            if "active watchlist:" in resp:
+                part = resp.split("active watchlist:")[-1].strip()
+                symbols = [s.strip() for s in part.split(",") if s.strip()]
+            ts_iso = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d %H:%M:%S UTC")
+            return {"symbols": symbols, "screened_at": ts_iso}
+    except Exception:
+        pass
+    return {"symbols": [], "screened_at": None}
+
+
+@router.get("/watchlist")
+def get_watchlist():
+    cfg = _load_json(WATCHLIST_PATH, _WATCHLIST_DEFAULT)
+    active = _get_active_watchlist()
+    return {
+        "universe": cfg.get("universe", _WATCHLIST_DEFAULT["universe"]),
+        "max_active": cfg.get("max_active", 5),
+        "screening_method": cfg.get("screening", {}).get("method", "top_movers"),
+        "active_watchlist": active["symbols"],
+        "screened_at": active["screened_at"],
+    }
+
+
+@router.put("/watchlist")
+def update_watchlist(req: WatchlistSettings):
+    if req.max_active < 1 or req.max_active > 20:
+        raise HTTPException(status_code=400, detail="max_active 必須介於 1-20")
+    if not req.universe:
+        raise HTTPException(status_code=400, detail="universe 不可為空")
+    cfg = _load_json(WATCHLIST_PATH, _WATCHLIST_DEFAULT)
+    cfg["universe"] = [s.strip().upper() for s in req.universe if s.strip()]
+    cfg["max_active"] = req.max_active
+    _save_json(WATCHLIST_PATH, cfg)
+    active = _get_active_watchlist()
+    return {
+        "status": "ok",
+        "universe": cfg["universe"],
+        "max_active": cfg["max_active"],
+        "screening_method": cfg.get("screening", {}).get("method", "top_movers"),
+        "active_watchlist": active["symbols"],
+        "screened_at": active["screened_at"],
+    }

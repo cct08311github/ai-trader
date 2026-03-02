@@ -283,23 +283,23 @@ export default function SystemPage() {
         )}
       </div>
 
-      <ControlPanel />
+      {/* 主要兩欄佈局：左 = 控制，右 = 狀態監控 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* 左欄：操作控制 + 事件時間軸 */}
+        <div className="space-y-6">
+          <ControlPanel />
+          <EventsPanel events={events} />
+        </div>
 
-      {/* Row 1: Service status + Sentinel + Resource */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ServiceStatusPanel health={health} />
-        <SentinelPanel health={health} />
-        <ResourcePanel health={health} />
+        {/* 右欄：服務狀態、資源、配額、風控 */}
+        <div className="space-y-6">
+          <ServiceStatusPanel health={health} />
+          <SentinelPanel health={health} />
+          <ResourcePanel health={health} />
+          <QuotaPanel quota={quota} />
+          <RiskPanel risk={risk} />
+        </div>
       </div>
-
-      {/* Row 2: Quota + Risk */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <QuotaPanel quota={quota} />
-        <RiskPanel risk={risk} />
-      </div>
-
-      {/* Row 3: Event timeline */}
-      <EventsPanel events={events} />
 
       <LogTerminal />
 
@@ -309,11 +309,11 @@ export default function SystemPage() {
         <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="space-y-1">
             <div className="text-slate-400">前端版本</div>
-            <div className="text-slate-300">v4.6.1</div>
+            <div className="text-slate-300">v{__APP_VERSION__}</div>
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">後端版本</div>
-            <div className="text-slate-300">v4.6.1</div>
+            <div className="text-slate-300">v{__APP_VERSION__}</div>
           </div>
           <div className="space-y-1">
             <div className="text-slate-400">DB WAL</div>

@@ -96,22 +96,27 @@ def system_quota():
     month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     ts_start = int(month_start.timestamp())
 
-    # Mock costs if openclaw.json not parsed (TWD/1M tokens)
-    # Based on openclaw.json: input 2 -> $2 -> ~64 TWD
-    # We'll use a simpler mapping for common models
-    model_costs = {
-        "gemini-3.1-pro-preview": {"in": 2.0, "out": 12.0},
-        "gemini-3-flash-preview": {"in": 0.5, "out": 3.0},
-        "deepseek-chat": {"in": 0.28, "out": 0.42},
-        "deepseek-reasoner": {"in": 0.55, "out": 2.19},
-        "gpt-4": {"in": 30.0, "out": 60.0}, # Placeholder
-    }
+    # Load pricing from llm_observability_v1.json (configurable, not hardcoded)
+    _obs_path = os.path.join(os.path.dirname(__file__), "../../../../config/llm_observability_v1.json")
+    _DEFAULT_COSTS = {"in": 1.0, "out": 3.0}
+    usd_to_twd = 32.5
+    model_costs: dict = {}
+    try:
+        with open(_obs_path, "r") as _f:
+            _obs = json.load(_f)
+        _pricing = _obs.get("model_pricing_usd_per_1m_tokens", {})
+        usd_to_twd = float(_pricing.get("usd_to_twd_rate", 32.5))
+        model_costs = {k: v for k, v in _pricing.items()
+                       if k not in ("_comment", "usd_to_twd_rate") and isinstance(v, dict)}
+    except Exception:
+        pass  # fall through to _DEFAULT_COSTS below
 
     used_usd = 0.0
     with READONLY_POOL.conn() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT model, SUM(prompt_tokens) as pt, SUM(completion_tokens) as ct FROM llm_traces WHERE created_at >= ? GROUP BY model",
+            "SELECT model, SUM(prompt_tokens) as pt, SUM(completion_tokens) as ct "
+            "FROM llm_traces WHERE created_at >= ? GROUP BY model",
             (ts_start,)
         )
         rows = cursor.fetchall()
@@ -119,10 +124,10 @@ def system_quota():
             m = r["model"] or "unknown"
             pt = r["pt"] or 0
             ct = r["ct"] or 0
-            cost = model_costs.get(m, {"in": 1.0, "out": 2.0}) # Default conservative
+            cost = model_costs.get(m) or model_costs.get("_default") or _DEFAULT_COSTS
             used_usd += (pt * cost["in"] + ct * cost["out"]) / 1_000_000
 
-    used_twd = used_usd * 32.5 # Approximate rate
+    used_twd = used_usd * usd_to_twd
     
     # Read dynamic budget from capital settings
     import os, json
@@ -193,26 +198,30 @@ def system_events():
 
 @inventory_router.get("")
 def get_inventory():
-    """Return current stock holdings from Shioaji (simulation mode)."""
-    import os
+    """Return current stock holdings from positions table (ticker_watcher source of truth)."""
     try:
-        from app.services.shioaji_service import get_positions
-        simulation = os.environ.get("SHIOAJI_SIMULATION", "true").lower() != "false"
-        res = get_positions(source="shioaji", simulation=simulation)
-        positions = res.get("positions", [])
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT symbol, quantity, avg_price, current_price, chip_health_score, sector "
+            "FROM positions WHERE quantity > 0 ORDER BY symbol"
+        ).fetchall()
+        conn.close()
         inventory = []
-        for p in positions:
-            qty = p.get("qty", 0) or 0
-            avg_price = p.get("avg_price", 0) or 0
-            last_price = p.get("last_price") or avg_price
+        for r in rows:
+            qty = int(r["quantity"] or 0)
+            avg_price = float(r["avg_price"] or 0)
+            last_price = float(r["current_price"]) if r["current_price"] else avg_price
             inventory.append({
-                "id": p.get("symbol"),
-                "code": p.get("symbol"),
-                "name": p.get("name", ""),
+                "id": r["symbol"],
+                "code": r["symbol"],
+                "name": r["symbol"],
                 "quantity": qty,
                 "unitCost": avg_price,
-                "currentValue": qty * last_price,
-                "status": "正常" if qty > 0 else "缺貨"
+                "currentValue": round(qty * last_price, 2),
+                "status": "正常" if qty > 0 else "缺貨",
+                "chip_health_score": r["chip_health_score"],
+                "sector": r["sector"],
             })
         return inventory
     except Exception as e:

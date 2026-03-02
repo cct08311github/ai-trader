@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Lock } from 'lucide-react'
+import { Lock, TrendingDown } from 'lucide-react'
 import PmStatusCard from '../components/PmStatusCard'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import PnlLineChart from '../components/charts/PnlLineChart'
 import PositionDetailDrawer from '../components/PositionDetailDrawer'
-import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis, fetchLockedSymbols, lockSymbol, unlockSymbol } from '../lib/portfolio'
+import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis, fetchLockedSymbols, lockSymbol, unlockSymbol, closePosition } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 
 function Panel({ title, right, children }) {
@@ -40,7 +40,7 @@ function ChipScoreBar({ score }) {
 
 /** Sector concentration donut with 40% warning — design doc §4.1 */
 function AllocationWithWarning({ data }) {
-  const warnings = data.filter(d => d.value > 40)
+  const warnings = data.filter(d => (d.weight ?? 0) > 0.40)
   return (
     <div>
       <AllocationDonut data={data} warnThreshold={40} />
@@ -48,11 +48,80 @@ function AllocationWithWarning({ data }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {warnings.map(d => (
             <span key={d.label} className="flex items-center gap-1 rounded-lg border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-300">
-              ⚠️ {d.label} {d.value.toFixed(1)}% 超過 40% 集中度上限
+              ⚠️ {d.label} {((d.weight ?? 0) * 100).toFixed(1)}% 超過 40% 集中度上限
             </span>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/** 平倉確認 Modal */
+function ClosePositionModal({ position, onConfirm, onCancel, busy }) {
+  if (!position) return null
+  const qty = Number(position.qty || 0)
+  const avg = Number(position.avgCost || position.avg_price || 0)
+  const last = Number(position.lastPrice || position.last_price || avg)
+  const unreal = Number.isFinite(avg) && last ? (last - avg) * qty : null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onCancel}>
+      <div
+        className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <TrendingDown className="h-5 w-5 text-rose-400 flex-shrink-0" />
+          <div>
+            <div className="text-sm font-semibold text-slate-100">確認平倉</div>
+            <div className="text-xs text-slate-400 mt-0.5">以下操作將立即反向賣出全部持倉</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2 text-xs mb-5">
+          <div className="flex justify-between">
+            <span className="text-slate-400">標的</span>
+            <span className="text-slate-100 font-mono font-semibold">{position.symbol}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">賣出數量</span>
+            <span className="text-slate-100">{formatNumber(qty)} 股</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">均價（成本）</span>
+            <span className="text-slate-100">{formatCurrency(avg)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">賣出參考價</span>
+            <span className="text-slate-100">{last ? formatCurrency(last) : '均價（市場休市）'}</span>
+          </div>
+          {unreal != null && (
+            <div className="flex justify-between border-t border-slate-800 pt-2">
+              <span className="text-slate-400">未實現損益</span>
+              <span className={unreal >= 0 ? 'text-emerald-400 font-medium' : 'text-rose-400 font-medium'}>
+                {unreal >= 0 ? '+' : ''}{formatCurrency(unreal)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 rounded-xl border border-slate-700 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50 transition-colors"
+          >
+            {busy ? '執行中…' : '確認平倉'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -66,6 +135,10 @@ export default function PortfolioPage() {
   // Drawer state — design doc §4.1
   const [drawerSymbol, setDrawerSymbol] = useState(null)
   const [drawerPosition, setDrawerPosition] = useState(null)
+  // Close position state
+  const [closeTarget, setCloseTarget] = useState(null)   // position object
+  const [closeBusy, setCloseBusy] = useState(false)
+  const [closeResult, setCloseResult] = useState(null)   // { ok, msg }
 
   const [equitySeries, setEquitySeries] = useState([])
   const [equitySource, setEquitySource] = useState('讀取中...')
@@ -121,6 +194,23 @@ export default function PortfolioPage() {
     load(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function handleCloseConfirm() {
+    if (!closeTarget) return
+    setCloseBusy(true)
+    setCloseResult(null)
+    try {
+      const res = await closePosition(closeTarget.symbol)
+      setCloseResult({ ok: true, msg: `已平倉 ${res.qty_closed} 股 @ ${formatCurrency(res.sell_price)}` })
+      setCloseTarget(null)
+      await load(preferApi)   // refresh positions
+    } catch (e) {
+      setCloseResult({ ok: false, msg: String(e?.message || e) })
+      setCloseTarget(null)
+    } finally {
+      setCloseBusy(false)
+    }
+  }
 
   const allocation = useMemo(() => buildAllocationData(positions), [positions])
   const kpis = useMemo(() => calcPortfolioKpis(positions, { equitySeries }), [positions, equitySeries])
@@ -182,7 +272,7 @@ export default function PortfolioPage() {
         <KpiCard
           title="夏普比率"
           value={kpis.sharpe == null ? '-' : formatNumber(kpis.sharpe, { maximumFractionDigits: 2 })}
-          subtext={`(${equitySource}) annualized`}
+          subtext={kpis.sharpe == null ? '需有已實現損益才可計算' : `(${equitySource}) annualized`}
           tone={kpis.sharpe != null && kpis.sharpe >= 1 ? 'good' : 'neutral'}
         />
       </div>
@@ -223,6 +313,7 @@ export default function PortfolioPage() {
                 <th className="px-4 py-3">未實現損益</th>
                 <th className="px-4 py-3">持倉比例</th>
                 <th className="px-4 py-3">籌碼評分</th>
+                <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgb(var(--border))]">
@@ -264,13 +355,27 @@ export default function PortfolioPage() {
                     <td className="px-4 py-3">
                       <ChipScoreBar score={p.chip_score ?? p.chip_health_score ?? null} />
                     </td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      {lockedSymbols.has(p.symbol) ? (
+                        <span className="flex items-center gap-1 text-xs text-amber-500/60" title="鎖定部位，無法平倉">
+                          <Lock className="h-3 w-3" /> 鎖定
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setCloseTarget(p)}
+                          className="rounded-lg border border-rose-700/50 bg-rose-900/20 px-2.5 py-1.5 text-[11px] font-semibold text-rose-300 hover:bg-rose-800/40 transition-colors"
+                        >
+                          平倉
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
 
               {positions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
+                  <td colSpan={8} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
                     No positions.
                   </td>
                 </tr>
@@ -280,9 +385,29 @@ export default function PortfolioPage() {
         </div>
 
         <div className="border-t border-[rgb(var(--border))] px-4 py-3 text-xs text-[rgb(var(--muted))]">
-          點擊持倉行查看進場理由、止損止盈、PM 授權及籌碼趨勢。損益曲線目前為 mock 數據，待接入 daily_pnl 表。
+          點擊持倉行查看進場理由、止損止盈、決策鏈及籌碼趨勢。損益曲線與夏普比率在首次平倉後將自動顯示。
         </div>
       </section>
+
+      {/* Close Position Modal */}
+      <ClosePositionModal
+        position={closeTarget}
+        onConfirm={handleCloseConfirm}
+        onCancel={() => setCloseTarget(null)}
+        busy={closeBusy}
+      />
+
+      {/* Close result toast */}
+      {closeResult && (
+        <div className={`fixed bottom-6 right-6 z-50 max-w-sm rounded-xl border px-4 py-3 text-sm shadow-lg ${
+          closeResult.ok
+            ? 'border-emerald-700 bg-emerald-900/80 text-emerald-200'
+            : 'border-rose-700 bg-rose-900/80 text-rose-200'
+        }`}>
+          {closeResult.msg}
+          <button onClick={() => setCloseResult(null)} className="ml-3 opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
 
       {/* Position Detail Drawer — design doc §4.1 */}
       {drawerSymbol && (

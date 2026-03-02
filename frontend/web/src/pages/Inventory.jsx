@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import KpiCard from '../components/KpiCard'
-import { fetchInventoryData, mockInventoryData } from '../lib/inventoryApi'
+import { fetchInventoryData } from '../lib/inventoryApi'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 
 function InventoryTable({ data, loading }) {
@@ -100,32 +100,23 @@ export default function InventoryPage() {
   const [inventoryData, setInventoryData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [useMock, setUseMock] = useState(false)
 
-  const loadData = async (useMockData = false) => {
+  const loadData = async () => {
     setLoading(true)
     setError(null)
-
     try {
-      if (useMockData) {
-        setInventoryData(mockInventoryData)
-        setUseMock(true)
-      } else {
-        const data = await fetchInventoryData()
-        setInventoryData(data)
-        setUseMock(false)
-      }
+      const data = await fetchInventoryData()
+      setInventoryData(data)
     } catch (err) {
       setError(err.message)
-      setInventoryData(mockInventoryData)
-      setUseMock(true)
+      setInventoryData([])
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadData(false)
+    loadData()
   }, [])
 
   // Calculate KPIs
@@ -141,35 +132,16 @@ export default function InventoryPage() {
           <div className="text-sm font-semibold">庫存總覽 (Inventory Dashboard)</div>
           <div className="mt-1 text-xs text-[rgb(var(--muted))]">
             Data source:{' '}
-            <span
-              className={
-                !useMock
-                  ? 'rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/20'
-                  : 'rounded-md bg-[rgb(var(--surface))/0.45] px-2 py-0.5 text-[rgb(var(--text))] ring-1 ring-[rgb(var(--border))]'
-              }
-            >
-              {useMock ? 'MOCK' : 'API'}
+            <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500/20">
+              DB (positions table)
             </span>
-            {error ? <span className="ml-2 text-rose-600 dark:text-rose-300">(fallback: {error})</span> : null}
+            {error && <span className="ml-2 text-rose-600 dark:text-rose-300">{error}</span>}
           </div>
-
-          <label className="mt-3 inline-flex items-center gap-2 text-xs text-[rgb(var(--muted))]">
-            <input
-              type="checkbox"
-              className="h-4 w-4"
-              checked={useMock}
-              onChange={(e) => {
-                const v = e.target.checked
-                loadData(v)
-              }}
-            />
-            Use mock data (toggle for testing)
-          </label>
         </div>
 
         <button
           type="button"
-          onClick={() => loadData(useMock)}
+          onClick={loadData}
           disabled={loading}
           className="w-full sm:w-auto rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.35] px-4 py-2 text-sm text-[rgb(var(--text))] shadow-panel transition hover:bg-[rgb(var(--surface))/0.5] disabled:opacity-50"
         >
@@ -261,7 +233,7 @@ export default function InventoryPage() {
       </section>
 
       <div className="text-right text-xs text-[rgb(var(--muted))]">
-        {loading ? '讀取庫存資料中...' : `庫存資料來源：${useMock ? '模擬資料' : 'API'}`}
+        {loading ? '讀取庫存資料中...' : `${inventoryData.length} 筆持倉・資料來源：DB`}
       </div>
     </div>
   )

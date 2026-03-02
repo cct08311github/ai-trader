@@ -117,64 +117,66 @@ export default function ControlPanel() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2 space-y-3 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+        {/* 自動交易 + 模式切換：並排兩欄 */}
+        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
           <div className="text-xs font-semibold text-slate-300">自動交易主開關</div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <button
               onClick={handleEnable}
               disabled={loading.enable || isEmergency || isAutoTradingEnabled}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
+              className={`rounded-lg py-2 text-sm font-medium transition-all ${
                 isEmergency || isAutoTradingEnabled
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   : 'bg-emerald-600 hover:bg-emerald-500 text-white'
               }`}
             >
-              {loading.enable ? '處理中...' : '🟢 啟動自動交易'}
+              {loading.enable ? '處理中...' : '🟢 啟動'}
             </button>
             <button
               onClick={handleDisable}
               disabled={loading.disable || isEmergency || !isAutoTradingEnabled}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
+              className={`rounded-lg py-2 text-sm font-medium transition-all ${
                 isEmergency || !isAutoTradingEnabled
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   : 'bg-rose-600 hover:bg-rose-500 text-white'
               }`}
             >
-              {loading.disable ? '處理中...' : '🔴 停止自動交易'}
+              {loading.disable ? '處理中...' : '🔴 停止'}
             </button>
           </div>
         </div>
 
-        <div className="col-span-2 space-y-3 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
+        <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
           <div className="text-xs font-semibold text-slate-300">交易模式切換</div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
             <button
               onClick={handleSwitchToSimulation}
               disabled={loading.simulation || isEmergency || isSimulation}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
+              className={`rounded-lg py-2 text-sm font-medium transition-all ${
                 isEmergency || isSimulation
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-500 text-white'
               }`}
             >
-              {loading.simulation ? '切換中...' : '🔵 切換至模擬盤'}
+              {loading.simulation ? '切換中...' : '🔵 模擬盤'}
             </button>
             <button
               onClick={handleSwitchToLive}
               disabled={loading.live || isEmergency || !isSimulation}
-              className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
+              className={`rounded-lg py-2 text-sm font-medium transition-all ${
                 isEmergency || !isSimulation
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                   : 'bg-rose-600 hover:bg-rose-500 text-white'
               }`}
             >
-              {loading.live ? '切換中...' : '🔴 切換至實際盤'}
+              {loading.live ? '切換中...' : '🔴 實際盤'}
             </button>
           </div>
         </div>
 
-        <div className="col-span-2 space-y-3 rounded-xl border border-slate-800 bg-slate-900/30 p-4">
-          <div className="text-xs font-semibold text-slate-300">緊急控制</div>
+        {/* 緊急控制：橫跨全寬（高優先級，保持醒目） */}
+        <div className="col-span-2 space-y-3 rounded-xl border border-rose-900/40 bg-slate-900/30 p-4">
+          <div className="text-xs font-semibold text-rose-300">緊急控制</div>
           <div className="flex gap-2">
             <button
               onClick={handleEmergencyStop}
