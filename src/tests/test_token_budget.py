@@ -274,5 +274,145 @@ def test_emit_budget_event():
     conn.close()
 
 
+def test_record_token_usage_no_table():
+    """Line 79: no-op when token_usage_monthly table does not exist."""
+    conn = sqlite3.connect(":memory:")
+    # Intentionally do NOT create token_usage_monthly
+    # Should silently return without error
+    record_token_usage(
+        conn,
+        model="gemini-flash",
+        prompt_tokens=100,
+        completion_tokens=200,
+        est_cost_twd=5.0,
+    )
+    # Verify nothing was written (table still doesn't exist)
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='token_usage_monthly'"
+    ).fetchone()
+    assert row is None
+    conn.close()
+
+
+def test_get_monthly_cost_no_table():
+    """Line 98: return 0.0 when token_usage_monthly table does not exist."""
+    conn = sqlite3.connect(":memory:")
+    cost = get_monthly_cost(conn, month="2026-03")
+    assert cost == 0.0
+    conn.close()
+
+
+def test_get_monthly_cost_none_month():
+    """Line 102: return 0.0 when month=None (deterministic behaviour)."""
+    conn = sqlite3.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE token_usage_monthly (
+            month TEXT,
+            model TEXT,
+            prompt_tokens INTEGER,
+            completion_tokens INTEGER,
+            est_cost_twd REAL,
+            updated_at TIMESTAMP,
+            PRIMARY KEY (month, model)
+        )
+    """)
+    conn.execute(
+        "INSERT INTO token_usage_monthly(month, model, est_cost_twd, updated_at) VALUES (?, ?, ?, datetime('now'))",
+        ("2026-03", "gemini-flash", 100.0),
+    )
+    # month=None → always returns 0.0 regardless of data
+    cost = get_monthly_cost(conn, month=None)
+    assert cost == 0.0
+    conn.close()
+
+
+def test_evaluate_budget_halt_tier():
+    """Line 127: return 'halt' when used_pct >= critical_halt threshold."""
+    policy = BudgetPolicy(
+        system_name="Test",
+        version="1.0",
+        currency="TWD",
+        base_monthly_budget=1000.0,
+        tiers={
+            "warning": BudgetTier("warning", 70.0, "notify", "Warning"),
+            "throttling": BudgetTier("throttling", 85.0, "throttle", "Throttling"),
+            "critical_halt": BudgetTier("critical_halt", 100.0, "halt", "Halt"),
+        },
+    )
+    conn = sqlite3.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE token_usage_monthly (
+            month TEXT,
+            model TEXT,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            est_cost_twd REAL,
+            updated_at TIMESTAMP,
+            PRIMARY KEY (month, model)
+        )
+    """)
+    # Insert 1000 TWD = 100% → triggers halt
+    conn.execute(
+        "INSERT INTO token_usage_monthly(month, model, est_cost_twd, updated_at) VALUES (?,?,?,datetime('now'))",
+        ("2026-03", "gemini-flash", 1000.0),
+    )
+    status, used_pct, tier = evaluate_budget(conn, policy, month="2026-03")
+    assert status == "halt"
+    assert tier is not None
+    assert tier.name == "critical_halt"
+    conn.close()
+
+
+def test_evaluate_budget_throttle_tier():
+    """Line 129: return 'throttle' when used_pct >= throttling threshold but < halt."""
+    policy = BudgetPolicy(
+        system_name="Test",
+        version="1.0",
+        currency="TWD",
+        base_monthly_budget=1000.0,
+        tiers={
+            "warning": BudgetTier("warning", 70.0, "notify", "Warning"),
+            "throttling": BudgetTier("throttling", 85.0, "throttle", "Throttling"),
+            "critical_halt": BudgetTier("critical_halt", 100.0, "halt", "Halt"),
+        },
+    )
+    conn = sqlite3.connect(":memory:")
+    conn.execute("""
+        CREATE TABLE token_usage_monthly (
+            month TEXT,
+            model TEXT,
+            prompt_tokens INTEGER DEFAULT 0,
+            completion_tokens INTEGER DEFAULT 0,
+            est_cost_twd REAL,
+            updated_at TIMESTAMP,
+            PRIMARY KEY (month, model)
+        )
+    """)
+    # 900 TWD = 90% → throttle (> 85%, < 100%)
+    conn.execute(
+        "INSERT INTO token_usage_monthly(month, model, est_cost_twd, updated_at) VALUES (?,?,?,datetime('now'))",
+        ("2026-03", "gemini-flash", 900.0),
+    )
+    status, used_pct, tier = evaluate_budget(conn, policy, month="2026-03")
+    assert status == "throttle"
+    assert tier is not None
+    assert tier.name == "throttling"
+    conn.close()
+
+
+def test_emit_budget_event_no_table():
+    """Line 144: no-op when token_budget_events table does not exist."""
+    conn = sqlite3.connect(":memory:")
+    tier = BudgetTier(name="warning", threshold_pct=70.0, action="notify", message="Warning")
+    # Should silently return without error
+    emit_budget_event(conn, tier=tier, used_pct=75.0, month="2026-03")
+    # Table should still not exist
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='token_budget_events'"
+    ).fetchone()
+    assert row is None
+    conn.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

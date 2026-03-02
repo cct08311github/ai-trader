@@ -46,6 +46,7 @@ def test_risk_engine_applies_correlation_guard_scaling_to_limits():
     )
 
     limits = default_limits()
+    limits["pm_review_required"] = 0  # bypass PM check in unit tests
     limits["authority_level"] = 2  # Sentinel cap => max_position_notional_pct_nav=0.05
     limits["max_symbol_weight"] = 0.20
 

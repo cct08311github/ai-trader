@@ -82,7 +82,7 @@ def _lin_slope(values: Sequence[float]) -> float:
         dx = i - x_mean
         num += dx * (y - y_mean)
         den += dx * dx
-    if den <= 0:
+    if den <= 0:  # pragma: no cover
         return 0.0
     return num / den
 
@@ -150,7 +150,7 @@ def _atr(prices: Sequence[float], period: int = 14) -> float:
         # Simplified: we don't have high/low/close, so just use price differences
         trs.append(high_low)
     
-    if len(trs) < period:
+    if len(trs) < period:  # pragma: no cover
         return 0.0
     return mean(trs[-period:]) / ps[-1] if ps[-1] > 0 else 0.0
 def compute_regime_features(

@@ -69,9 +69,10 @@ def run_portfolio_review(
 
     try:
         positions = query_db(_conn,
-            "SELECT symbol, quantity, avg_price FROM positions WHERE quantity > 0")
+            "SELECT symbol, quantity, avg_price, unrealized_pnl FROM positions WHERE quantity > 0")
         pnl_today = query_db(_conn,
-            "SELECT symbol, realized_pnl FROM daily_pnl_summary WHERE trade_date=?",
+            "SELECT realized_pnl, total_pnl, total_trades, rolling_win_rate "
+            "FROM daily_pnl_summary WHERE trade_date=?",
             (_date,))
         fills_today = query_db(_conn,
             "SELECT o.symbol, o.side, o.qty, f.price "

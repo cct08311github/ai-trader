@@ -17,8 +17,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
 # 預設模型：可透過環境變數覆寫
-DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "gemini-3.0-flash")
-COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "gemini-3.1-pro")
+DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "gemini-2.5-flash")
+COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "gemini-3.1-pro-preview")
 
 
 def open_conn(db_path: str = _DEFAULT_DB) -> sqlite3.Connection:
@@ -65,7 +65,10 @@ def write_trace(
         agent=agent,
         model=result.get("_model", DEFAULT_MODEL),
         prompt_text=prompt[:1000],
-        response_text=result.get("_raw_response", json.dumps(result, ensure_ascii=False))[:1000],
+        response_text=json.dumps(
+            {k: v for k, v in result.items() if not k.startswith("_")},
+            ensure_ascii=False,
+        ),
         input_tokens=0,
         output_tokens=0,
         latency_ms=int(result.get("_latency_ms", 0)),

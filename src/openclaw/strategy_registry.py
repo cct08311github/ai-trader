@@ -462,14 +462,14 @@ class StrategyRegistry:
         conn.commit()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     print("Strategy Version Registry (v4 #28)")
     print("Supports version control, rollback, and monthly reporting")
-    
+
     # Test
     registry = StrategyRegistry(":memory:")
     print("Tables ensured")
-    
+
     # Create a test version
     version = registry.create_version(
         strategy_config={"buy_threshold": 0.02, "sell_threshold": 0.015},
@@ -477,11 +477,11 @@ if __name__ == "__main__":
         version_tag="Test Version 1"
     )
     print(f"Created version: {version['version_id']}")
-    
+
     # Activate it
     success = registry.activate_version(version["version_id"], "admin", "Initial activation")
     print(f"Activation success: {success}")
-    
+
     # Get active version
     active = registry.get_active_version()
     print(f"Active version: {active['version_id'] if active else 'None'}")

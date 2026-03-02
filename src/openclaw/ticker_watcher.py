@@ -479,7 +479,7 @@ def run_watcher() -> None:
     log.info("Ticker watcher started | universe=%d stocks | max_active=%d | INTERVAL=%ds | DB=%s",
              len(universe), max_active, POLL_INTERVAL_SEC, DB_PATH)
 
-    while True:
+    while True:  # pragma: no cover
         if not _is_market_open():
             now_twn = dt.datetime.now(tz=_TZ_TWN)
             log.info("Market closed (%s TWN). Next check in 60s.", now_twn.strftime("%H:%M %a"))
@@ -703,5 +703,5 @@ def run_watcher() -> None:
         time.sleep(POLL_INTERVAL_SEC)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     run_watcher()

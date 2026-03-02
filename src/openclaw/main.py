@@ -481,5 +481,5 @@ def main() -> None:
     except Exception as e:
         print(f"Failed to record snapshot: {e}")
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

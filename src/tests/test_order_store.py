@@ -57,3 +57,36 @@ def test_transition_with_event_writes_order_events():
     assert status == "partially_filled"
     count = conn.execute("SELECT COUNT(*) FROM order_events WHERE order_id = 'o1'").fetchone()[0]
     assert count == 1
+
+
+def test_transition_with_event_raises_when_order_not_found():
+    """Line 56: RuntimeError raised when order_id does not exist."""
+    conn = _conn()
+    try:
+        transition_with_event(
+            conn,
+            order_id="nonexistent",
+            next_status="filled",
+            source="broker",
+            reason_code=None,
+            payload={},
+        )
+        assert False, "expected RuntimeError"
+    except RuntimeError as e:
+        assert "nonexistent" in str(e)
+
+
+def test_transition_with_event_noop_when_same_status():
+    """Line 59: early return (no DB write) when next_status == current status."""
+    conn = _conn()
+    # 'o1' starts at 'submitted'; requesting 'submitted' again is a no-op
+    transition_with_event(
+        conn,
+        order_id="o1",
+        next_status="submitted",
+        source="broker",
+        reason_code=None,
+        payload={},
+    )
+    count = conn.execute("SELECT COUNT(*) FROM order_events WHERE order_id = 'o1'").fetchone()[0]
+    assert count == 0

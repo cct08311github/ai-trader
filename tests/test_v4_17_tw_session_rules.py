@@ -56,6 +56,7 @@ def test_risk_engine_integrates_tw_session_adjustments():
     )
     now_ms = _ms(2026, 2, 28, 9, 0, 0)  # preopen auction
     limits = default_limits()
+    limits["pm_review_required"] = 0  # bypass PM check in unit tests
     original_max_orders = limits["max_orders_per_min"]
     
     # Build minimal mock objects
