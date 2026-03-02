@@ -42,5 +42,20 @@
     "summary_time": "23:30",
     "anomaly_detection": true,
     "cost_tracking": true
+  },
+  "model_pricing_usd_per_1m_tokens": {
+    "_comment": "in = input/prompt tokens, out = output/completion tokens. USD per 1M tokens.",
+    "usd_to_twd_rate": 32.5,
+    "claude-sonnet-4-6": {"in": 3.0, "out": 15.0},
+    "claude-sonnet-4-6-20250514": {"in": 3.0, "out": 15.0},
+    "claude-opus-4-6": {"in": 15.0, "out": 75.0},
+    "claude-haiku-4-5": {"in": 0.8, "out": 4.0},
+    "claude-haiku-4-5-20251001": {"in": 0.8, "out": 4.0},
+    "claude-3-5-sonnet": {"in": 3.0, "out": 15.0},
+    "gemini-3.1-pro-preview": {"in": 2.0, "out": 12.0},
+    "gemini-3-flash-preview": {"in": 0.5, "out": 3.0},
+    "deepseek-chat": {"in": 0.28, "out": 0.42},
+    "deepseek-reasoner": {"in": 0.55, "out": 2.19},
+    "_default": {"in": 1.0, "out": 3.0}
   }
 }

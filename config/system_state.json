@@ -2,9 +2,9 @@
   "system_name": "AI-Trader v1.0",
   "version": "1.0.0",
   "description": "\u7cfb\u7d71\u4e3b\u958b\u95dc\u8207\u57f7\u884c\u72c0\u614b\u914d\u7f6e",
-  "trading_enabled": true,
+  "trading_enabled": false,
   "simulation_mode": true,
-  "last_modified": "2026-03-02T09:31:14.943916",
+  "last_modified": "2026-03-02T18:55:25.406450",
   "last_modified_by": "user (via API)",
   "notes": "\u6b64\u6a94\u6848\u70ba\u7cfb\u7d71\u4e3b\u958b\u95dc\u3002trading_enabled \u5fc5\u9808\u70ba true \u4e14 .EMERGENCY_STOP \u6a94\u6848\u4e0d\u5b58\u5728\uff0c\u7cfb\u7d71\u624d\u6703\u958b\u59cb\u81ea\u52d5\u4ea4\u6613\u3002simulation_mode: true=\u6a21\u64ec\u76e4, false=\u5be6\u969b\u76e4\u3002\u5207\u63db\u81f3\u5be6\u969b\u76e4\u61c9\u81ea\u52d5\u7981\u7528\u81ea\u52d5\u4ea4\u6613\uff08\u96d9\u91cd\u4fdd\u96aa\uff09\u3002"
 }
