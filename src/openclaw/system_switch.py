@@ -57,7 +57,8 @@ def check_system_switch(
     """
 
     # Check emergency stop file
-    project_root = Path(__file__).resolve().parents[2]
+    _root_override = os.environ.get("_OPENCLAW_PROJECT_ROOT")
+    project_root = Path(_root_override) if _root_override else Path(__file__).resolve().parents[2]
     emergency_stop_file = project_root / ".EMERGENCY_STOP"
     if emergency_stop_file.exists():
         try:

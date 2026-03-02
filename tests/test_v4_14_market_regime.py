@@ -70,6 +70,7 @@ def test_risk_engine_qty_reduces_when_volatility_multiplier_decreases():
     system = SystemState(now_ms=1_000_100, trading_locked=False, broker_connected=True, db_write_p99_ms=50, orders_last_60s=0)
 
     limits = default_limits()
+    limits["pm_review_required"] = 0  # bypass PM check in unit tests
     limits["max_symbol_weight"] = 1.0
     limits["max_gross_exposure"] = 10.0
     limits["max_loss_per_trade_pct_nav"] = 0.006

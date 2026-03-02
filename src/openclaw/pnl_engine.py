@@ -143,24 +143,17 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
         """
         INSERT INTO positions (symbol, quantity, avg_price)
         SELECT
-          symbol,
-          net_qty AS quantity,
+          o.symbol,
+          SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
+        - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty,
           ROUND(
-            SUM(CASE WHEN side='buy' THEN fill_amount ELSE 0 END)
-            / MAX(SUM(CASE WHEN side='buy' THEN fill_qty ELSE 0 END), 1),
+            SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
+            / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
           4) AS avg_price
-        FROM (
-          SELECT o.symbol, o.side,
-                 SUM(f.qty)         AS fill_qty,
-                 SUM(f.qty*f.price) AS fill_amount,
-                 SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
-               - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty
-          FROM orders o
-          JOIN fills f ON f.order_id=o.order_id
-          WHERE o.status IN ('filled','partially_filled')
-          GROUP BY o.symbol, o.side
-        )
-        GROUP BY symbol
+        FROM orders o
+        JOIN fills f ON f.order_id = o.order_id
+        WHERE o.status IN ('filled', 'partially_filled')
+        GROUP BY o.symbol
         HAVING net_qty > 0
         """
     )
