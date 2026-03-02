@@ -1,6 +1,13 @@
 import sqlite3
 
-from openclaw.drawdown_guard import DrawdownPolicy, evaluate_drawdown_guard, evaluate_strategy_health_guard
+from openclaw.drawdown_guard import (
+    DrawdownPolicy,
+    DrawdownDecision,
+    evaluate_drawdown_guard,
+    evaluate_strategy_health_guard,
+    recompute_rolling_drawdown,
+    apply_drawdown_actions,
+)
 
 
 def _conn() -> sqlite3.Connection:
@@ -108,3 +115,206 @@ def test_strategy_health_normal():
     result = evaluate_strategy_health_guard(conn, policy, "breakout")
     assert result.risk_mode == "normal"
     assert result.reason_code == "RISK_STRATEGY_HEALTH_OK"
+
+
+# ---------------------------------------------------------------------------
+# New tests targeting previously uncovered lines
+# ---------------------------------------------------------------------------
+
+
+def _conn_no_pnl() -> sqlite3.Connection:
+    """Return an in-memory connection that does NOT have daily_pnl_summary."""
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        """
+        CREATE TABLE strategy_health (
+          strategy_id TEXT PRIMARY KEY,
+          as_of_ts TEXT NOT NULL,
+          rolling_trades INTEGER NOT NULL DEFAULT 0,
+          rolling_win_rate REAL NOT NULL DEFAULT 0.0,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          note TEXT
+        );
+        """
+    )
+    return conn
+
+
+def test_recompute_rolling_drawdown_early_return_no_table():
+    """Line 39: recompute_rolling_drawdown returns early when daily_pnl_summary absent."""
+    conn = _conn_no_pnl()
+    # Should not raise; just returns without doing anything
+    recompute_rolling_drawdown(conn)
+
+
+def test_evaluate_drawdown_guard_no_rows_returns_normal():
+    """Line 69: evaluate_drawdown_guard returns normal when table exists but has no rows."""
+    conn = _conn()
+    result = evaluate_drawdown_guard(conn, DrawdownPolicy())
+    assert result.risk_mode == "normal"
+    assert result.reason_code == "RISK_DRAWDOWN_OK"
+    assert result.drawdown == 0.0
+    assert result.losing_streak_days == 0
+
+
+def test_evaluate_strategy_health_guard_no_rows_returns_normal():
+    """Line 91: evaluate_strategy_health_guard returns normal when strategy row absent."""
+    conn = _conn()
+    result = evaluate_strategy_health_guard(conn, DrawdownPolicy(), "nonexistent_strategy")
+    assert result.risk_mode == "normal"
+    assert result.reason_code == "RISK_STRATEGY_HEALTH_OK"
+
+
+def test_evaluate_strategy_health_guard_disabled_suspended():
+    """Line 97: evaluate_strategy_health_guard returns suspended when enabled=0."""
+    conn = _conn()
+    conn.execute(
+        """
+        INSERT INTO strategy_health(strategy_id, as_of_ts, rolling_trades, rolling_win_rate, enabled)
+        VALUES ('disabled_strat', '2026-02-27T00:00:00Z', 10, 0.5, 0)
+        """
+    )
+    result = evaluate_strategy_health_guard(conn, DrawdownPolicy(), "disabled_strat")
+    assert result.risk_mode == "suspended"
+    assert result.reason_code == "RISK_STRATEGY_DISABLED"
+
+
+def _conn_with_locks() -> sqlite3.Connection:
+    """Return connection with trading_locks + incidents tables."""
+    conn = _conn()
+    conn.executescript(
+        """
+        CREATE TABLE trading_locks (
+          lock_id TEXT PRIMARY KEY,
+          locked INTEGER NOT NULL DEFAULT 0,
+          reason_code TEXT,
+          locked_at TEXT,
+          unlock_after TEXT,
+          note TEXT
+        );
+        CREATE TABLE incidents (
+          incident_id TEXT PRIMARY KEY,
+          ts TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          source TEXT NOT NULL,
+          code TEXT NOT NULL,
+          detail_json TEXT NOT NULL,
+          resolved INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    return conn
+
+
+def test_apply_drawdown_actions_normal_is_noop():
+    """Line 113-114: normal decision → apply_drawdown_actions does nothing."""
+    conn = _conn_with_locks()
+    decision = DrawdownDecision("normal", "RISK_DRAWDOWN_OK", 0.0, 0)
+    apply_drawdown_actions(conn, decision)
+    count = conn.execute("SELECT COUNT(*) FROM trading_locks").fetchone()[0]
+    assert count == 0
+    inc_count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert inc_count == 0
+
+
+def test_apply_drawdown_actions_suspended_upserts_lock_and_incident():
+    """Lines 116-148: suspended decision writes trading_locks (locked=1) + incidents."""
+    conn = _conn_with_locks()
+    decision = DrawdownDecision("suspended", "RISK_MONTHLY_DRAWDOWN_LIMIT", 0.17, 2)
+    apply_drawdown_actions(conn, decision)
+
+    lock_row = conn.execute(
+        "SELECT locked, reason_code FROM trading_locks WHERE lock_id = 'drawdown_guard'"
+    ).fetchone()
+    assert lock_row is not None
+    assert lock_row[0] == 1
+    assert lock_row[1] == "RISK_MONTHLY_DRAWDOWN_LIMIT"
+
+    inc_count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert inc_count == 1
+    severity = conn.execute("SELECT severity FROM incidents").fetchone()[0]
+    assert severity == "critical"
+
+
+def test_apply_drawdown_actions_reduce_only_upserts_unlocked_and_warn_incident():
+    """Lines 116-148: reduce_only decision writes trading_locks (locked=0) + warn incident."""
+    conn = _conn_with_locks()
+    decision = DrawdownDecision("reduce_only", "RISK_LOSING_STREAK_LIMIT", 0.05, 5)
+    apply_drawdown_actions(conn, decision)
+
+    lock_row = conn.execute(
+        "SELECT locked, reason_code FROM trading_locks WHERE lock_id = 'drawdown_guard'"
+    ).fetchone()
+    assert lock_row is not None
+    assert lock_row[0] == 0
+    assert lock_row[1] == "RISK_LOSING_STREAK_LIMIT"
+
+    inc_count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert inc_count == 1
+    severity = conn.execute("SELECT severity FROM incidents").fetchone()[0]
+    assert severity == "warn"
+
+
+def test_apply_drawdown_actions_without_locks_table():
+    """Lines 116-148: when trading_locks table absent, only incidents written."""
+    conn = _conn()
+    conn.executescript(
+        """
+        CREATE TABLE incidents (
+          incident_id TEXT PRIMARY KEY,
+          ts TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          source TEXT NOT NULL,
+          code TEXT NOT NULL,
+          detail_json TEXT NOT NULL,
+          resolved INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    decision = DrawdownDecision("suspended", "RISK_MONTHLY_DRAWDOWN_LIMIT", 0.20, 3)
+    apply_drawdown_actions(conn, decision)
+
+    inc_count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert inc_count == 1
+
+
+def test_apply_drawdown_actions_without_incidents_table():
+    """Lines 116-148: when incidents table absent, only trading_locks written."""
+    conn = _conn()
+    conn.executescript(
+        """
+        CREATE TABLE trading_locks (
+          lock_id TEXT PRIMARY KEY,
+          locked INTEGER NOT NULL DEFAULT 0,
+          reason_code TEXT,
+          locked_at TEXT,
+          unlock_after TEXT,
+          note TEXT
+        );
+        """
+    )
+    decision = DrawdownDecision("reduce_only", "RISK_LOSING_STREAK_LIMIT", 0.03, 4)
+    apply_drawdown_actions(conn, decision)
+
+    count = conn.execute("SELECT COUNT(*) FROM trading_locks").fetchone()[0]
+    assert count == 1
+
+
+def test_recompute_rolling_drawdown_recalculates():
+    """recompute_rolling_drawdown actually updates rows when table exists."""
+    conn = _conn()
+    conn.executemany(
+        """
+        INSERT INTO daily_pnl_summary(
+          trade_date, nav_start, nav_end, realized_pnl, unrealized_pnl, total_pnl,
+          daily_return, rolling_peak_nav, rolling_drawdown, losing_streak_days, risk_mode
+        ) VALUES (?, 1000000, ?, 0, 0, 0, 0, 0, 0, 0, 'normal')
+        """,
+        [("2026-01-01", 1000000), ("2026-01-02", 900000), ("2026-01-03", 950000)],
+    )
+    recompute_rolling_drawdown(conn)
+    row = conn.execute(
+        "SELECT rolling_peak_nav, rolling_drawdown FROM daily_pnl_summary WHERE trade_date='2026-01-02'"
+    ).fetchone()
+    assert row[0] == 1000000.0
+    assert abs(row[1] - 0.10) < 1e-6  # (1000000 - 900000) / 1000000

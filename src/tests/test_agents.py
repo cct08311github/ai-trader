@@ -358,3 +358,24 @@ class TestOrchestratorHelpers:
     def test_watcher_no_fills_3days(self, mem_db):
         from openclaw.agent_orchestrator import _watcher_no_fills_3days
         assert _watcher_no_fills_3days(mem_db) is True  # fills table 是空的
+
+
+# ── open_conn WAL pragma test ─────────────────────────────────────────────────
+
+class TestOpenConn:
+    def test_open_conn_returns_wal_connection(self, tmp_path):
+        """Lines 25-29: open_conn sets WAL journal mode and row_factory."""
+        from openclaw.agents.base import open_conn
+        db_path = str(tmp_path / "test.db")
+        conn = open_conn(db_path)
+        try:
+            # Verify WAL mode was set
+            row = conn.execute("PRAGMA journal_mode;").fetchone()
+            assert row[0] == "wal"
+            # Verify row_factory is sqlite3.Row (returned row supports key access)
+            conn.execute("CREATE TABLE t (x INTEGER)")
+            conn.execute("INSERT INTO t VALUES (42)")
+            result = conn.execute("SELECT x FROM t").fetchone()
+            assert result["x"] == 42
+        finally:
+            conn.close()
