@@ -182,7 +182,7 @@ class ShioajiAdapter:
             )
             # NOTE: Replace contract lookup strategy as needed for futures/options.
             contract = self.api.Contracts.Stocks[candidate.symbol]
-            trade = self.api.place_order(contract, order, account=self.account)
+            trade = self.api.place_order(contract, order)
 
             broker_order_id = getattr(trade.status, "id", "") or f"SHIOAJI-{order_id}"
             self._trades[broker_order_id] = trade

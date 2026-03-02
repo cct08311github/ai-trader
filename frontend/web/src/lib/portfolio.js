@@ -43,15 +43,19 @@ export async function fetchPortfolioPositions({ signal } = {}) {
   // Backend returns { status: "ok", source, simulation, positions }
   if (data.positions && Array.isArray(data.positions)) {
     // Map backend fields to frontend expected fields
-    return data.positions.map(p => ({
-      symbol: p.symbol || '',
-      name: p.name || '',
-      qty: p.qty || p.quantity || 0,
-      lastPrice: p.last_price || p.lastPrice || 0,
-      avgCost: p.avg_price || p.avgCost,
-      chip_score: p.chip_health_score || p.chip_score || p.chipHealthScore,
-      sector: p.sector
-    }))
+    return data.positions.map(p => {
+      const avgCost = p.avg_price || p.avgCost || 0
+      const lastPrice = p.last_price || p.lastPrice || avgCost  // fallback to avg_price when no live price
+      return {
+        symbol: p.symbol || '',
+        name: p.name || p.symbol || '',
+        qty: p.qty || p.quantity || 0,
+        lastPrice,
+        avgCost,
+        chip_score: p.chip_health_score || p.chip_score || p.chipHealthScore,
+        sector: p.sector
+      }
+    })
   }
   // Fallback: assume array directly
   if (!Array.isArray(data)) throw new Error('Invalid API response: expected array or object with positions')

@@ -346,24 +346,24 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
 }
 
 function SemanticMemoryTable({ data, order }) {
-  if (!data || data.length === 0) return <div className="text-xs text-slate-500"></div>
+  if (!data || data.length === 0) return <div className="text-xs text-slate-500 py-4">（尚無學習規則）</div>
   return (
     <div className="overflow-auto rounded-xl border border-slate-800">
       <table className="w-full text-left text-[11px]">
         <thead className="bg-slate-950/40 text-slate-400">
           <tr>
-            <th className="px-3 py-2"></th>
-            <th className="px-3 py-2">Rule ID</th>
-            <th className="px-3 py-2"></th>
-            <th className="px-3 py-2"></th>
+            <th className="px-3 py-2">信心</th>
+            <th className="px-3 py-2">Rule Key</th>
+            <th className="px-3 py-2">規則內容</th>
+            <th className="px-3 py-2">更新時間</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800">
           {data.map((m, idx) => (
-            <tr key={m.rule_id || idx} className="hover:bg-slate-950/30">
-              <td className="px-3 py-2 text-slate-300">{(m.confidence * 100).toFixed(0)}%</td>
-              <td className="px-3 py-2 text-slate-200 font-mono">{m.rule_id}</td>
-              <td className="px-3 py-2 text-slate-400 break-words">{m.content_summary || m.content?.slice(0, 100)}</td>
+            <tr key={m.sm_id || m.rule_key || idx} className="hover:bg-slate-950/30">
+              <td className="px-3 py-2 text-slate-300">{((m.confidence || 0) * 100).toFixed(0)}%</td>
+              <td className="px-3 py-2 text-slate-200 font-mono">{m.rule_key || m.sm_id}</td>
+              <td className="px-3 py-2 text-slate-400 break-words">{m.statement || m.content_summary || ''}</td>
               <td className="px-3 py-2 text-slate-500">{formatUnixSec(m.updated_at)}</td>
             </tr>
           ))}

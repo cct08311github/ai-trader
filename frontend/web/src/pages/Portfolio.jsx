@@ -97,7 +97,7 @@ export default function PortfolioPage() {
     }
 
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 1500)
+    const timeout = setTimeout(() => controller.abort(), 10000)
 
     try {
       const [data, kpisData] = await Promise.all([

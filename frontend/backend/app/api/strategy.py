@@ -235,19 +235,38 @@ def get_market_rating(conn: sqlite3.Connection = Depends(conn_dep)):
         # Try episodic_memory first (most recent market assessment)
         row = conn.execute(
             """
-            SELECT content, created_at FROM episodic_memory
-            WHERE content LIKE '%market%' OR content LIKE '%rating%' OR content LIKE '%市場%'
+            SELECT content_json, summary, created_at FROM episodic_memory
+            WHERE content_json LIKE '%market%' OR content_json LIKE '%rating%' OR content_json LIKE '%市場%'
+               OR summary LIKE '%市場%' OR summary LIKE '%觀望%' OR summary LIKE '%多頭%'
             ORDER BY created_at DESC LIMIT 1
             """
         ).fetchone()
         if row:
+            import json as _json
+            cj = {}
+            try:
+                cj = _json.loads(row["content_json"] or "{}")
+            except Exception:
+                pass
+            confidence = cj.get("confidence", 0)
+            approved = cj.get("approved", False)
+            action = cj.get("recommended_action", "")
+            # Map to A/B/C: approved+high conf=A, approved=B, not approved=C
+            if approved and confidence >= 0.7:
+                rating = "A"
+            elif approved:
+                rating = "B"
+            else:
+                rating = "C"
+            basis = cj.get("adjudication") or row["summary"] or action
             return {
                 "status": "ok",
                 "data": {
-                    "summary": str(row["content"])[:300],
+                    "summary": str(basis)[:300],
                     "updated_at": row["created_at"],
-                    "rating": "neutral",
+                    "rating": rating,
                     "source": "episodic_memory",
+                    "basis": str(basis)[:300],
                 }
             }
         return {"status": "ok", "data": None}
@@ -324,8 +343,10 @@ def get_debates(
         else:
             date_str = date
 
-        # created_at is Unix integer — compute day range
-        day_start = int(datetime.fromisoformat(date_str).replace(tzinfo=timezone.utc).timestamp())
+        # created_at is Unix integer — compute day range in TWN (UTC+8)
+        from datetime import timedelta
+        TWN = timezone(timedelta(hours=8))
+        day_start = int(datetime.fromisoformat(date_str).replace(tzinfo=TWN).timestamp())
         day_end = day_start + 86400
 
         rows = conn.execute(

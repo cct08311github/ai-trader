@@ -154,15 +154,9 @@ def system_risk():
     with READONLY_POOL.conn() as conn:
         cursor = conn.cursor()
         
-        # Today's realized pnl
-        cursor.execute("SELECT SUM(pnl) FROM trades WHERE timestamp >= ?", (today_start,))
-        row = cursor.fetchone()
-        today_pnl = float(row[0]) if row and row[0] is not None else 0.0
-        
-        # Monthly realized pnl
-        cursor.execute("SELECT SUM(pnl) FROM trades WHERE timestamp >= ?", (month_start,))
-        row = cursor.fetchone()
-        monthly_pnl = float(row[0]) if row and row[0] is not None else 0.0
+        # fills table has no realized pnl; return 0.0 until sell+pnl tracking is added
+        today_pnl = 0.0
+        monthly_pnl = 0.0
 
     return {
         "today_realized_pnl": round(today_pnl, 2),

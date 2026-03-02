@@ -69,6 +69,47 @@ def portfolio_positions(source: str = "shioaji", simulation: Optional[bool] = No
 
     result = get_positions(source=source, simulation=simulation)
 
+    # If broker returns no positions, compute from orders+fills in DB
+    if not result.get("positions"):
+        try:
+            with get_conn() as conn:
+                rows = conn.execute("""
+                    SELECT
+                      o.symbol,
+                      SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
+                    - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty,
+                      ROUND(
+                        SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
+                        / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
+                      2) AS avg_price
+                    FROM orders o
+                    JOIN fills f ON f.order_id = o.order_id
+                    WHERE o.status IN ('filled', 'partially_filled')
+                    GROUP BY o.symbol
+                    HAVING net_qty > 0
+                """).fetchall()
+            if rows:
+                result = {
+                    "source": "db_fills",
+                    "simulation": simulation,
+                    "positions": [
+                        {
+                            "account": "SIM",
+                            "symbol": r["symbol"],
+                            "name": r["symbol"],
+                            "qty": int(r["net_qty"]),
+                            "avg_price": float(r["avg_price"]),
+                            "last_price": None,
+                            "market_value": None,
+                            "unrealized_pnl": None,
+                            "currency": "TWD",
+                        }
+                        for r in rows
+                    ],
+                }
+        except Exception:
+            pass
+
     # Attach locked status to each position
     locked_set = set(_read_locked())
     for p in result.get("positions", []):
@@ -109,58 +150,63 @@ def list_trades(
     if status_norm and status_norm not in {"filled", "all"}:
         return {"status": "ok", "items": [], "total": 0, "limit": limit, "offset": offset}
 
+    # Build WHERE from orders+fills (orders.status already filters to filled orders)
+    base_where: List[str] = ["o.status IN ('filled', 'partially_filled')"]
+    params: List[Any] = []
+
+    if start:
+        base_where.append("o.ts_submit >= ?")
+        params.append(start)
+    if end:
+        base_where.append("o.ts_submit <= ?")
+        params.append(end)
+    if symbol_norm:
+        base_where.append("UPPER(o.symbol) = ?")
+        params.append(symbol_norm)
+    if trade_type:
+        base_where.append("LOWER(o.side) = ?")
+        params.append(trade_type)
+
+    where_sql = "WHERE " + " AND ".join(base_where)
+
     order_map = {
-        "time": "timestamp",
-        "amount": "(quantity * price)",
-        "pnl": "pnl",
+        "time": "o.ts_submit",
+        "amount": "SUM(f.qty * f.price)",
+        "pnl": "o.ts_submit",  # no realized pnl yet; fallback to time
     }
     order_expr = order_map[sort_by]
     direction = "ASC" if sort_dir == "asc" else "DESC"
 
-    where: List[str] = []
-    params: List[Any] = []
-
-    if start:
-        where.append("timestamp >= ?")
-        params.append(start)
-    if end:
-        where.append("timestamp <= ?")
-        params.append(end)
-
-    if symbol_norm:
-        where.append("UPPER(symbol) = ?")
-        params.append(symbol_norm)
-
-    if trade_type:
-        where.append("LOWER(action) = ?")
-        params.append(trade_type)
-
-    if status_norm == "filled":
-        where.append("1 = 1")
-
-    where_sql = " WHERE " + " AND ".join(where) if where else ""
+    count_sql = f"""
+        SELECT COUNT(DISTINCT o.order_id) AS cnt
+        FROM orders o
+        JOIN fills f ON f.order_id = o.order_id
+        {where_sql}
+    """
 
     select_sql = f"""
         SELECT
-          id,
-          timestamp,
-          symbol,
-          action,
-          quantity,
-          price,
-          fee,
-          tax,
-          pnl,
-          agent_id,
-          decision_id,
-          (quantity * price) AS amount
-        FROM trades
+          o.order_id                                              AS id,
+          o.ts_submit                                            AS timestamp,
+          o.symbol,
+          o.side                                                 AS action,
+          CAST(SUM(f.qty) AS INTEGER)                           AS quantity,
+          ROUND(CAST(SUM(f.qty * f.price) AS REAL)
+                / MAX(CAST(SUM(f.qty) AS REAL), 1), 2)          AS price,
+          SUM(f.fee)                                             AS fee,
+          SUM(f.tax)                                             AS tax,
+          NULL                                                   AS pnl,
+          o.strategy_version                                     AS agent_id,
+          o.decision_id,
+          ROUND(SUM(f.qty * f.price), 2)                        AS amount
+        FROM orders o
+        JOIN fills f ON f.order_id = o.order_id
         {where_sql}
+        GROUP BY o.order_id, o.ts_submit, o.symbol, o.side,
+                 o.strategy_version, o.decision_id
         ORDER BY {order_expr} {direction}
         LIMIT ? OFFSET ?
     """.strip()
-
-    count_sql = f"SELECT COUNT(1) AS cnt FROM trades{where_sql}"
 
     with get_conn() as conn:
         total_row = conn.execute(count_sql, params).fetchone()
@@ -207,7 +253,11 @@ def get_position_detail(symbol: str):
         avg_price = None
 
         trade_row = conn.execute(
-            "SELECT timestamp, price FROM trades WHERE UPPER(symbol)=? AND LOWER(action)='buy' ORDER BY timestamp DESC LIMIT 1",
+            """SELECT o.ts_submit AS timestamp,
+                      ROUND(SUM(f.qty*f.price)/MAX(SUM(f.qty),1),2) AS price
+               FROM orders o JOIN fills f ON f.order_id=o.order_id
+               WHERE UPPER(o.symbol)=? AND LOWER(o.side)='buy'
+               GROUP BY o.order_id ORDER BY o.ts_submit DESC LIMIT 1""",
             (symbol,)
         ).fetchone()
 
@@ -307,33 +357,18 @@ def get_portfolio_kpis():
 
     try:
         with get_conn() as conn:
-            # Check today's trades
+            # Today's filled orders count (orders+fills schema)
             today_count_row = conn.execute(
-                "SELECT COUNT(1) as cnt FROM trades WHERE DATE(timestamp) = ?",
+                """SELECT COUNT(DISTINCT o.order_id) AS cnt
+                   FROM orders o JOIN fills f ON f.order_id=o.order_id
+                   WHERE DATE(o.ts_submit)=?
+                     AND o.status IN ('filled','partially_filled')""",
                 (today,)
             ).fetchone()
             if today_count_row:
                 today_trades_count = today_count_row["cnt"]
 
-            # Calculate overall win rate based on realized PnL
-            # A completed trade with pnl > 0 is a win, pnl < 0 is a loss. 
-            # We ignore pnl = 0 or NULL for this simple calculation.
-            win_loss_row = conn.execute(
-                """
-                SELECT 
-                    SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as wins,
-                    SUM(CASE WHEN pnl < 0 THEN 1 ELSE 0 END) as losses
-                FROM trades
-                WHERE pnl IS NOT NULL AND pnl != 0
-                """
-            ).fetchone()
-            
-            if win_loss_row:
-                wins = int(win_loss_row["wins"] or 0)
-                losses = int(win_loss_row["losses"] or 0)
-                total = wins + losses
-                if total > 0:
-                    overall_win_rate = wins / total
+            # overall_win_rate: fills have no pnl column yet; keep 0.0 until sell+pnl tracking is added
                     
             # Try to get latest cash from position snapshots if available
             try:
@@ -385,41 +420,42 @@ def get_monthly_summary(month: str = "2026-02"):
         }
     
     with get_conn() as conn:
-        # 查询本月交易数据
+        # 查询本月交易数据 (orders JOIN fills，trades 表目前為空)
         query = """
-        SELECT 
-            SUM(quantity * price) as total_amount,
-            SUM(fee + tax) as total_fee_tax,
-            COUNT(*) as total_trades,
-            SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) as winning_trades,
-            MAX(pnl) as max_profit,
-            MIN(pnl) as max_loss
-        FROM trades 
-        WHERE timestamp >= ? AND timestamp < ?
+        SELECT
+            SUM(f.qty * f.price)  AS total_amount,
+            SUM(f.fee + f.tax)    AS total_fee_tax,
+            COUNT(DISTINCT o.order_id) AS total_trades,
+            0                     AS winning_trades,
+            NULL                  AS max_profit,
+            NULL                  AS max_loss
+        FROM orders o
+        JOIN fills f ON f.order_id = o.order_id
+        WHERE o.ts_submit >= ? AND o.ts_submit < ?
         """
-        
+
         result = conn.execute(query, (start_date, end_date)).fetchone()
-        
+
         if result and result['total_trades'] > 0:
             total_amount = result['total_amount'] or 0.0
             total_fee_tax = result['total_fee_tax'] or 0.0
             total_trades = result['total_trades']
             winning_trades = result['winning_trades'] or 0
-            max_profit = result['max_profit'] or 0.0
-            max_loss = result['max_loss'] or 0.0
+            max_profit = result['max_profit']
+            max_loss = result['max_loss']
 
             win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
 
-            # P1-7: 計算平均持倉天數 — 配對同一標的買/賣交易
+            # P1-7: 計算平均持倉天數 — 配對同一標的買/賣訂單
             avg_holding_days = 0.0
             try:
                 import datetime as _dt
                 buys = conn.execute(
-                    "SELECT symbol, timestamp FROM trades WHERE LOWER(action)='buy' AND timestamp>=? AND timestamp<?",
+                    "SELECT symbol, ts_submit AS timestamp FROM orders WHERE LOWER(side)='buy' AND ts_submit>=? AND ts_submit<?",
                     (start_date, end_date)
                 ).fetchall()
                 sells = conn.execute(
-                    "SELECT symbol, timestamp FROM trades WHERE LOWER(action)='sell' AND timestamp>=? AND timestamp<?",
+                    "SELECT symbol, ts_submit AS timestamp FROM orders WHERE LOWER(side)='sell' AND ts_submit>=? AND ts_submit<?",
                     (start_date, end_date)
                 ).fetchall()
                 buy_map: dict = {}
@@ -452,8 +488,8 @@ def get_monthly_summary(month: str = "2026-02"):
                     "total_fee_tax": float(total_fee_tax),
                     "win_rate": float(win_rate),
                     "avg_holding_days": round(float(avg_holding_days), 1),
-                    "max_profit": float(max_profit),
-                    "max_loss": float(max_loss)
+                    "max_profit": float(max_profit) if max_profit is not None else None,
+                    "max_loss": float(max_loss) if max_loss is not None else None,
                 }
             }
         else:
@@ -484,20 +520,8 @@ def get_equity_curve(days: int = 60, start_equity: float = 100000.0):
     cutoff_dt = _dt.datetime.utcnow() - _dt.timedelta(days=days)
     cutoff_str = cutoff_dt.strftime("%Y-%m-%d")
 
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-              DATE(timestamp) AS trade_date,
-              SUM(pnl) AS daily_pnl
-            FROM trades
-            WHERE pnl IS NOT NULL
-              AND timestamp >= ?
-            GROUP BY trade_date
-            ORDER BY trade_date ASC
-            """,
-            (cutoff_str,)
-        ).fetchall()
+    # fills table has no realized pnl column yet; equity curve requires sell+pnl tracking
+    rows = []
 
     if not rows:
         return {"status": "ok", "data": [], "source": "no_data"}
@@ -518,53 +542,55 @@ def get_trade_causal_chain(trade_id: str):
     決策因果鏈展開：PM 決策 → Trader 執行 → 成交回報。
     """
     with get_conn() as conn:
-        # 查询交易基本信息
-        trade_query = "SELECT * FROM trades WHERE id = ?"
-        trade_result = conn.execute(trade_query, (trade_id,)).fetchone()
-        
+        # Look up order + fills (orders+fills schema; trade_id == order_id)
+        trade_result = conn.execute(
+            """SELECT o.order_id AS id, o.ts_submit AS timestamp, o.symbol,
+                      o.side AS action, o.status, o.decision_id, o.strategy_version AS agent_id,
+                      ROUND(SUM(f.qty*f.price)/MAX(SUM(f.qty),1),2) AS price,
+                      CAST(SUM(f.qty) AS INTEGER) AS quantity,
+                      ROUND(SUM(f.qty*f.price),2) AS amount,
+                      SUM(f.fee) AS fee, SUM(f.tax) AS tax
+               FROM orders o JOIN fills f ON f.order_id=o.order_id
+               WHERE o.order_id=?
+               GROUP BY o.order_id""",
+            (trade_id,)
+        ).fetchone()
+
         if not trade_result:
             return {
                 "status": "error",
                 "message": f"Trade {trade_id} not found"
             }
-        
+
         trade_dict = dict(trade_result)
-        
-        # 查询相关的 LLM traces（如果有）
-        llm_query = """
-        SELECT agent, prompt, response, created_at 
-        FROM llm_traces 
-        WHERE created_at <= ? 
-        ORDER BY created_at DESC 
-        LIMIT 3
-        """
-        
-        # 使用交易时间戳作为参考
-        trade_timestamp = trade_dict.get('timestamp', '')
+
+        # 查询相关的 LLM traces
         llm_traces = []
+        trade_timestamp = trade_dict.get('timestamp', '')
         if trade_timestamp:
-            # 将 ISO 时间戳转换为 Unix 时间戳（简化处理）
             try:
-                # 简单解析 ISO 时间戳
                 import datetime
                 dt = datetime.datetime.fromisoformat(trade_timestamp.replace('Z', '+00:00'))
                 unix_timestamp = int(dt.timestamp())
-                
-                llm_results = conn.execute(llm_query, (unix_timestamp,)).fetchall()
+                llm_results = conn.execute(
+                    """SELECT agent, prompt, response, created_at
+                       FROM llm_traces
+                       WHERE created_at <= ? AND created_at >= ?
+                       ORDER BY created_at DESC LIMIT 3""",
+                    (unix_timestamp + 300, unix_timestamp - 300)
+                ).fetchall()
                 llm_traces = [
                     {
                         "agent": row['agent'],
-                        "prompt_text": row['prompt'][:200] + "..." if len(row['prompt']) > 200 else row['prompt'],
-                        "response_text": row['response'][:200] + "..." if len(row['response']) > 200 else row['response'],
+                        "prompt_text": (row['prompt'] or '')[:200],
+                        "response_text": (row['response'] or '')[:200],
                         "created_at": row['created_at']
                     }
                     for row in llm_results
                 ]
-            except Exception as e:
-                # 如果解析失败，返回空 traces
+            except Exception:
                 llm_traces = []
-        
-        # 构建决策信息（基于现有数据）
+
         decision_id = trade_dict.get('decision_id', f"dec_{trade_id}")
         signal_side = trade_dict.get('action', 'buy').lower()
         

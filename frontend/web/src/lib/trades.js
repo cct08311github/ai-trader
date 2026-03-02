@@ -46,18 +46,18 @@ export async function fetchTrades(
     signal
   } = {}
 ) {
-  const url = new URL(API_URL())
-  if (start) url.searchParams.set('start', start)
-  if (end) url.searchParams.set('end', end)
-  if (symbol) url.searchParams.set('symbol', symbol)
-  if (type) url.searchParams.set('type', type)
-  if (status) url.searchParams.set('status', status)
-  url.searchParams.set('limit', String(limit))
-  url.searchParams.set('offset', String(offset))
-  url.searchParams.set('sort_by', sortBy)
-  url.searchParams.set('sort_dir', sortDir)
+  const params = new URLSearchParams()
+  if (start) params.set('start', start)
+  if (end) params.set('end', end)
+  if (symbol) params.set('symbol', symbol)
+  if (type) params.set('type', type)
+  if (status) params.set('status', status)
+  params.set('limit', String(limit))
+  params.set('offset', String(offset))
+  params.set('sort_by', sortBy)
+  params.set('sort_dir', sortDir)
 
-  const res = await authFetch(url.toString(), { signal })
+  const res = await authFetch(`${API_URL()}?${params.toString()}`, { signal })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
 

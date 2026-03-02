@@ -1,7 +1,9 @@
 {
-  "total_capital_twd": 500000.0,
+  "total_capital_twd": 1000000.0,
   "max_single_position_pct": 0.33299999999999996,
   "daily_loss_limit_twd": 10000.0,
   "monthly_loss_limit_twd": 50000.0,
-  "monthly_api_budget_twd": 2000.0
+  "monthly_api_budget_twd": 2000.0,
+  "default_stop_loss_pct": 0.05,
+  "default_take_profit_pct": 0.1
 }

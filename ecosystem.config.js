@@ -26,5 +26,21 @@ module.exports = {
         NODE_ENV: "development"
       }
     }
+    ,
+    {
+      name: "ai-trader-watcher",
+      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python",
+      args: "src/openclaw/ticker_watcher.py",
+      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      interpreter: "none",
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      env: {
+        PYTHONPATH: "src:frontend/backend",
+        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
+        OPENCLAW_CURRENT_IP: "127.0.0.1"
+      }
+    }
   ]
 };

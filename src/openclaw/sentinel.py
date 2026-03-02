@@ -109,7 +109,7 @@ def sentinel_post_risk_check(
         return SentinelVerdict(False, True, "SENTINEL_REDUCE_ONLY", {"symbol": candidate.symbol})
 
     # Long-term hold protection: hard-block sell orders on locked symbols
-    if candidate.signal_side == "sell":
+    if candidate.side == "sell":
         locked = _locked_symbols()
         if candidate.symbol.upper() in locked:
             return SentinelVerdict(

@@ -14,6 +14,23 @@ function toIsoDateEnd(d) {
   return `${d}T23:59:59Z`
 }
 
+/** 將 ISO UTC 字串轉為 TWN (UTC+8) 可讀格式 */
+function toTWN(isoStr) {
+  if (!isoStr) return '-'
+  try {
+    const dt = new Date(isoStr)
+    if (isNaN(dt)) return isoStr
+    return dt.toLocaleString('zh-TW', {
+      timeZone: 'Asia/Taipei',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    })
+  } catch {
+    return isoStr
+  }
+}
+
 /** Monthly Stats Summary — design doc §4.2 */
 function MonthlySummaryPanel() {
   const now = new Date()
@@ -36,8 +53,8 @@ function MonthlySummaryPanel() {
     { label: '手續費+稅金', value: data ? formatCurrency(data.total_fee_tax) : '-' },
     { label: '勝率', value: data ? formatPercent(data.win_rate) : '-', good: data?.win_rate >= 0.5 },
     { label: '平均持倉天數', value: data ? `${Number(data.avg_holding_days).toFixed(1)} 天` : '-' },
-    { label: '最大單筆獲利', value: data ? formatCurrency(data.max_profit) : '-', good: true },
-    { label: '最大單筆虧損', value: data ? formatCurrency(data.max_loss) : '-', bad: true },
+    { label: '最大單筆獲利', value: data ? (data.max_profit != null ? formatCurrency(data.max_profit) : '-') : '-', good: true },
+    { label: '最大單筆虧損', value: data ? (data.max_loss != null ? formatCurrency(data.max_loss) : '-') : '-', bad: true },
   ]
 
   return (
@@ -355,7 +372,7 @@ export default function TradesPage() {
                     className="cursor-pointer hover:bg-slate-900/40"
                     onClick={() => handleTradeSelect(t)}
                   >
-                    <td className="px-4 py-3 font-medium text-slate-100">{t.timestamp}</td>
+                    <td className="px-4 py-3 font-medium text-slate-100">{toTWN(t.timestamp)}</td>
                     <td className="px-4 py-3 text-slate-200">{t.symbol}</td>
                     <td className={`px-4 py-3 font-medium ${sideTone}`}>{String(t.action).toUpperCase()}</td>
                     <td className="px-4 py-3 text-right text-slate-200">
@@ -363,7 +380,9 @@ export default function TradesPage() {
                     </td>
                     <td className="px-4 py-3 text-right text-slate-200">{formatCurrency(price)}</td>
                     <td className="px-4 py-3 text-right text-slate-200">{formatCurrency(amount)}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${pnlTone}`}>{formatCurrency(pnl)}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${t.pnl == null ? 'text-slate-500' : pnlTone}`}>
+                      {t.pnl == null ? '-' : formatCurrency(pnl)}
+                    </td>
                   </tr>
                 )
               })}
@@ -453,13 +472,13 @@ export default function TradesPage() {
             <div className="mt-4">
               {activeTab === 'details' ? (
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Field label="Timestamp" value={selected.timestamp} />
+                  <Field label="Timestamp (TWN)" value={toTWN(selected.timestamp)} />
                   <Field label="Symbol" value={selected.symbol} />
                   <Field label="Side" value={String(selected.action).toUpperCase()} />
                   <Field label="Quantity" value={formatNumber(Number(selected.quantity || 0))} />
                   <Field label="Price" value={formatCurrency(Number(selected.price || 0))} />
                   <Field label="Amount" value={formatCurrency(Number(selected.amount ?? 0))} />
-                  <Field label="PnL" value={formatCurrency(Number(selected.pnl || 0))} />
+                  <Field label="PnL" value={selected.pnl == null ? '-' : formatCurrency(Number(selected.pnl))} />
                   <Field label="Fee" value={formatCurrency(Number(selected.fee || 0))} />
                   <Field label="Tax" value={formatCurrency(Number(selected.tax || 0))} />
                   <Field label="Status" value={selected.status || 'filled'} />
