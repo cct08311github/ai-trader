@@ -527,7 +527,7 @@ def test_main_normal_db_path(monkeypatch, tmp_path, capsys):
     _patch_main_deps(monkeypatch, db_arg=db_path, reset=False)
 
     # Patch repo_root so SQL files are found
-    project_root = Path("/Users/openclaw/.openclaw/shared/projects/ai-trader")
+    project_root = Path(__file__).parents[3]
 
     # Patch _apply_sql_file to avoid reading real files from unexpected paths
     apply_calls = []

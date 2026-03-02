@@ -14,7 +14,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def patch_db_dir(tmp_path, monkeypatch):
     """Redirect DB_DIR to a temp directory for every test so we never touch
-    the real ~/.openclaw/db directory."""
+    the real default db directory."""
     monkeypatch.setenv("OPENCLAW_HOME", str(tmp_path))
     # Re-import the module so module-level DB_DIR picks up the new env var.
     import importlib
