@@ -253,7 +253,7 @@ def run_daily_reflection(conn: sqlite3.Connection, trade_date: str) -> Dict[str,
 
 
 # ===== 測試輔助函數 =====
-def test_reflection_flow() -> None:
+def test_reflection_flow() -> None:  # pragma: no cover
     """測試反思流程（用於開發）。"""
     import tempfile
     import os
@@ -299,5 +299,5 @@ def test_reflection_flow() -> None:
             os.unlink(db_path)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':  # pragma: no cover
     test_reflection_flow()

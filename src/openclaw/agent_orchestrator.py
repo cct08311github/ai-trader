@@ -165,5 +165,5 @@ def main() -> None:
     asyncio.run(run_orchestrator())
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

@@ -570,5 +570,5 @@ def test_layered_memory() -> None:
             os.unlink(db_path)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     test_layered_memory()

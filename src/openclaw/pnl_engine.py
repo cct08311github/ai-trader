@@ -124,7 +124,7 @@ def _compute_rolling_win_rate(
         (up_to_date,)
     ).fetchall()
     all_pnls = [r["realized_pnl"] for r in rows] + [today_pnl]
-    if not all_pnls:
+    if not all_pnls:  # pragma: no cover
         return 0.0
     wins = sum(1 for p in all_pnls if p > 0)
     return round(wins / len(all_pnls), 4)

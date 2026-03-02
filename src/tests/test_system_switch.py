@@ -139,3 +139,63 @@ def test_is_auto_trading_allowed_reads_config(tmp_path):
     with patch("openclaw.system_switch.os.path.join", return_value=str(state_path)):
         result = is_auto_trading_allowed()
     assert result is False
+
+
+# ── Additional tests for uncovered lines ────────────────────────────────────
+
+def test_api_read_generic_exception_line_36_37():
+    """Lines 36-37: generic Exception (not HTTPError/URLError) in _read_trading_enabled_from_api."""
+    with patch("openclaw.system_switch.urlopen", side_effect=RuntimeError("unexpected error")):
+        enabled, err = _read_trading_enabled_from_api("http://fake/api")
+    assert enabled is None
+    assert "Control API error" in err
+
+
+def test_emergency_stop_file_unreadable_line_67_68(tmp_path, monkeypatch):
+    """Lines 67-68: EMERGENCY_STOP file exists but raises on read_text."""
+    stop_file = tmp_path / ".EMERGENCY_STOP"
+    stop_file.write_text("halt")
+    state_file = str(tmp_path / "system_state.json")
+    _write_state(state_file, True)
+
+    monkeypatch.setenv("_OPENCLAW_PROJECT_ROOT", str(tmp_path))
+
+    # Patch Path.read_text to raise an exception so we hit the except branch
+    original_read_text = Path.read_text
+
+    def patched_read_text(self, **kwargs):
+        if self.name == ".EMERGENCY_STOP":
+            raise PermissionError("cannot read")
+        return original_read_text(self, **kwargs)
+
+    with patch.object(Path, "read_text", patched_read_text):
+        allowed, reason = check_system_switch(state_file)
+
+    assert allowed is False
+    assert reason == "EMERGENCY_STOP file exists"
+
+
+def test_bad_json_api_fallback_fails_line_89(tmp_path):
+    """Line 89: bad JSON state file + API unavailable returns combined error."""
+    state_file = str(tmp_path / "system_state.json")
+    with open(state_file, "w") as f:
+        f.write("BAD{{JSON")
+
+    with patch("openclaw.system_switch._read_trading_enabled_from_api", return_value=(None, "timeout")):
+        allowed, reason = check_system_switch(state_file)
+
+    assert allowed is False
+    assert "fallback failed" in reason
+
+
+def test_bad_json_api_returns_false_line_91(tmp_path):
+    """Line 91: bad JSON state file + API returns False."""
+    state_file = str(tmp_path / "system_state.json")
+    with open(state_file, "w") as f:
+        f.write("INVALID{")
+
+    with patch("openclaw.system_switch._read_trading_enabled_from_api", return_value=(False, None)):
+        allowed, reason = check_system_switch(state_file)
+
+    assert allowed is False
+    assert "disabled" in reason.lower()

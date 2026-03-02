@@ -379,3 +379,199 @@ class TestOpenConn:
             assert result["x"] == 42
         finally:
             conn.close()
+
+
+# ── Coverage: conn.close() paths (conn is None branch) ───────────────────────
+
+def _make_temp_db(tmp_path):
+    """Helper: create a minimal temp DB and return its path string."""
+    db_path = str(tmp_path / "trades.db")
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE llm_traces (
+            trace_id TEXT PRIMARY KEY,
+            agent TEXT,
+            model TEXT,
+            prompt TEXT,
+            response TEXT,
+            latency_ms INTEGER,
+            prompt_tokens INTEGER,
+            completion_tokens INTEGER,
+            tool_calls_json TEXT,
+            confidence REAL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE TABLE strategy_proposals (
+            proposal_id TEXT PRIMARY KEY,
+            generated_by TEXT,
+            target_rule TEXT,
+            rule_category TEXT,
+            current_value TEXT,
+            proposed_value TEXT,
+            supporting_evidence TEXT,
+            confidence REAL,
+            requires_human_approval INTEGER,
+            status TEXT,
+            expires_at INTEGER,
+            proposal_json TEXT,
+            created_at INTEGER,
+            decided_at INTEGER
+        );
+        CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY,
+            quantity INTEGER,
+            avg_price REAL,
+            unrealized_pnl REAL DEFAULT 0
+        );
+        CREATE TABLE fills (
+            fill_id TEXT PRIMARY KEY,
+            order_id TEXT,
+            ts_fill TEXT,
+            qty INTEGER,
+            price REAL
+        );
+        CREATE TABLE orders (
+            order_id TEXT PRIMARY KEY,
+            symbol TEXT,
+            side TEXT,
+            qty INTEGER,
+            price REAL,
+            status TEXT,
+            ts_submit TEXT
+        );
+        CREATE TABLE daily_pnl_summary (
+            trade_date TEXT,
+            symbol TEXT,
+            realized_pnl REAL,
+            total_pnl REAL DEFAULT 0,
+            total_trades INTEGER DEFAULT 0,
+            rolling_win_rate REAL DEFAULT 0
+        );
+        CREATE TABLE decisions (
+            decision_id TEXT,
+            ts TEXT,
+            symbol TEXT,
+            signal_side TEXT,
+            signal_score REAL
+        );
+        CREATE TABLE eod_prices (
+            trade_date TEXT,
+            market TEXT,
+            symbol TEXT,
+            name TEXT,
+            close REAL,
+            change REAL,
+            volume REAL
+        );
+    """)
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+class TestConnClosedWhenNone:
+    """Tests that verify _conn.close() is called in the finally block when conn=None."""
+
+    def test_portfolio_review_closes_conn_when_none(self, tmp_path):
+        """portfolio_review.py lines 107-108: _conn.close() when conn is None."""
+        db_path = _make_temp_db(tmp_path)
+        mock_resp = _mock_gemini("無持倉", confidence=0.9, proposals=[])
+        with patch("openclaw.agents.portfolio_review.call_agent_llm", return_value=mock_resp):
+            from openclaw.agents.portfolio_review import run_portfolio_review
+            result = run_portfolio_review(db_path=db_path)
+        assert result.action_type == "observe"
+
+    def test_portfolio_review_writes_proposals_when_non_empty(self, tmp_path):
+        """portfolio_review.py line 95: write_proposal called inside for loop."""
+        db_path = _make_temp_db(tmp_path)
+        mock_resp = _mock_gemini(
+            "持倉集中度過高，建議再平衡",
+            confidence=0.8,
+            action_type="suggest",
+            proposals=[{
+                "target_rule": "POSITION_REBALANCE",
+                "rule_category": "portfolio",
+                "proposed_value": "降低 2330 至 30%",
+                "supporting_evidence": "單一股票市值佔比 > 40%",
+                "confidence": 0.75,
+                "requires_human_approval": 0,
+            }]
+        )
+        with patch("openclaw.agents.portfolio_review.call_agent_llm", return_value=mock_resp):
+            from openclaw.agents.portfolio_review import run_portfolio_review
+            result = run_portfolio_review(db_path=db_path)
+        assert result.action_type == "suggest"
+        conn2 = sqlite3.connect(db_path)
+        row = conn2.execute("SELECT generated_by FROM strategy_proposals").fetchone()
+        conn2.close()
+        assert row[0] == "portfolio_review"
+
+    def test_market_research_closes_conn_when_none(self, tmp_path):
+        """market_research.py line 107: _conn.close() when conn is None."""
+        db_path = _make_temp_db(tmp_path)
+        mock_resp = _mock_gemini("無市場資料", confidence=0.7, proposals=[])
+        with patch("openclaw.agents.market_research.call_agent_llm", return_value=mock_resp):
+            from openclaw.agents.market_research import run_market_research
+            result = run_market_research(db_path=db_path)
+        assert result.action_type == "observe"
+
+    def test_system_optimization_closes_conn_when_none(self, tmp_path):
+        """system_optimization.py line 110: _conn.close() when conn is None."""
+        db_path = _make_temp_db(tmp_path)
+        mock_resp = _mock_gemini("績效正常，無需調整", confidence=0.8, proposals=[])
+        with patch("openclaw.agents.system_optimization.call_agent_llm", return_value=mock_resp):
+            from openclaw.agents.system_optimization import run_system_optimization
+            result = run_system_optimization(db_path=db_path)
+        assert result.action_type == "observe"
+
+    def test_strategy_committee_closes_conn_when_none(self, tmp_path):
+        """strategy_committee.py line 140: _conn.close() when conn is None."""
+        db_path = _make_temp_db(tmp_path)
+        bull_resp = _mock_gemini("看多", confidence=0.7)
+        bear_resp = _mock_gemini("看空", confidence=0.65)
+        arbiter_resp = _mock_gemini("整合建議：持平", confidence=0.6, proposals=[])
+        with patch("openclaw.agents.strategy_committee.call_agent_llm",
+                   side_effect=[bull_resp, bear_resp, arbiter_resp]):
+            from openclaw.agents.strategy_committee import run_strategy_committee
+            result = run_strategy_committee(db_path=db_path)
+        assert result.action_type == "observe"
+
+    def test_system_health_closes_conn_when_none(self, tmp_path):
+        """system_health.py line 111: _conn.close() when conn is None."""
+        db_path = _make_temp_db(tmp_path)
+        mock_resp = _mock_gemini("系統健康", confidence=0.95, proposals=[])
+        with patch("openclaw.agents.system_health.call_agent_llm", return_value=mock_resp):
+            from openclaw.agents.system_health import run_system_health
+            result = run_system_health(db_path=db_path)
+        assert result.action_type == "observe"
+
+
+# ── Coverage: system_health.py exception branches ────────────────────────────
+
+class TestSystemHealthExceptionBranches:
+    """Tests for _get_pm2_status, _get_disk_info, _get_watcher_recent_count exception paths."""
+
+    def test_get_pm2_status_exception(self):
+        """system_health.py lines 63-64: exception in subprocess.run → return error string."""
+        from openclaw.agents.system_health import _get_pm2_status
+        with patch("openclaw.agents.system_health.subprocess.run",
+                   side_effect=FileNotFoundError("pm2 not found")):
+            result = _get_pm2_status()
+        assert "PM2 查詢失敗" in result
+
+    def test_get_disk_info_exception(self):
+        """system_health.py lines 74-75: exception in subprocess.run → return error string."""
+        from openclaw.agents.system_health import _get_disk_info
+        with patch("openclaw.agents.system_health.subprocess.run",
+                   side_effect=OSError("df not found")):
+            result = _get_disk_info()
+        assert "磁碟查詢失敗" in result
+
+    def test_get_watcher_recent_count_exception(self, mem_db):
+        """system_health.py lines 85-86: DB exception → return -1."""
+        from openclaw.agents.system_health import _get_watcher_recent_count
+        # Drop the llm_traces table to force an exception
+        mem_db.execute("DROP TABLE llm_traces")
+        result = _get_watcher_recent_count(mem_db)
+        assert result == -1

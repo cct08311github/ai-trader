@@ -1,15 +1,31 @@
-"""test_ticker_watcher.py — Phase 1 基礎測試
+"""test_ticker_watcher.py — 完整測試
 
 涵蓋：
 - _is_market_open()：週末 / 非交易時段 / 正常時段 / 節假日
 - _generate_signal()：buy / sell / flat
 - _update_price_history()：累積與上限截斷
 - _evaluate_cash_mode()：資料不足保持現狀 / bull market 正常 / bear market cash mode
+- _open_conn()：DB 連線
+- _utc_now_iso()：UTC 時間格式
+- _load_universe()：watchlist.json 讀取與 fallback
+- _screen_top_movers()：篩選排行
+- _get_snapshot()：Shioaji / mock 行情取得
+- _persist_decision()/_persist_risk_check()/_persist_order()/_persist_fill()/_insert_order_event()
+- _log_trace()/_log_screen_trace()：SSE trace 寫入
+- _execute_sim_order()：模擬下單執行
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
+import sqlite3
+import tempfile
+import uuid
+from pathlib import Path
+from typing import Dict, List
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -20,6 +36,22 @@ from openclaw.ticker_watcher import (
     _generate_signal,
     _is_market_open,
     _update_price_history,
+    _utc_now_iso,
+    _open_conn,
+    _load_universe,
+    _screen_top_movers,
+    _get_snapshot,
+    _persist_decision,
+    _persist_risk_check,
+    _persist_order,
+    _persist_fill,
+    _insert_order_event,
+    _log_trace,
+    _log_screen_trace,
+    _execute_sim_order,
+    DB_PATH,
+    STRATEGY_ID,
+    STRATEGY_VERSION,
 )
 
 _TZ_TWN = dt.timezone(dt.timedelta(hours=8))
@@ -206,3 +238,876 @@ class TestEvaluateCashMode:
         hist = {"2317": prices}
         cash_mode, reason = _evaluate_cash_mode(hist, current_cash_mode=False)
         assert reason != "CASHMODE_INSUFFICIENT_DATA"  # 有資料，應能評估
+
+
+# ── Helper: in-memory DB with full schema ─────────────────────────────────────
+
+def _make_mem_db() -> sqlite3.Connection:
+    """建立完整 schema 的 in-memory SQLite DB，供 persist / trace 測試使用。"""
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        PRAGMA journal_mode=WAL;
+        PRAGMA foreign_keys=ON;
+
+        CREATE TABLE decisions (
+            decision_id TEXT PRIMARY KEY,
+            ts TEXT,
+            symbol TEXT,
+            strategy_id TEXT,
+            strategy_version TEXT,
+            signal_side TEXT,
+            signal_score REAL,
+            signal_ttl_ms INTEGER,
+            llm_ref TEXT,
+            reason_json TEXT
+        );
+
+        CREATE TABLE risk_checks (
+            check_id TEXT PRIMARY KEY,
+            decision_id TEXT,
+            ts TEXT,
+            passed INTEGER,
+            reject_code TEXT,
+            metrics_json TEXT
+        );
+
+        CREATE TABLE orders (
+            order_id TEXT PRIMARY KEY,
+            decision_id TEXT,
+            broker_order_id TEXT,
+            ts_submit TEXT,
+            symbol TEXT,
+            side TEXT,
+            qty INTEGER,
+            price REAL,
+            order_type TEXT,
+            tif TEXT,
+            status TEXT,
+            strategy_version TEXT
+        );
+
+        CREATE TABLE fills (
+            fill_id TEXT PRIMARY KEY,
+            order_id TEXT,
+            ts_fill TEXT,
+            qty INTEGER,
+            price REAL,
+            fee REAL DEFAULT 0,
+            tax REAL DEFAULT 0
+        );
+
+        CREATE TABLE order_events (
+            event_id TEXT PRIMARY KEY,
+            ts TEXT,
+            order_id TEXT,
+            event_type TEXT,
+            from_status TEXT,
+            to_status TEXT,
+            source TEXT,
+            reason_code TEXT,
+            payload_json TEXT
+        );
+
+        CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY,
+            quantity INTEGER,
+            avg_price REAL
+        );
+
+        CREATE TABLE daily_pnl_summary (
+            trade_date TEXT PRIMARY KEY,
+            realized_pnl REAL DEFAULT 0,
+            unrealized_pnl REAL DEFAULT 0,
+            total_pnl REAL DEFAULT 0,
+            total_trades INTEGER DEFAULT 0,
+            rolling_drawdown REAL DEFAULT 0,
+            consecutive_losses INTEGER DEFAULT 0,
+            losing_streak_days INTEGER DEFAULT 0,
+            rolling_win_rate REAL DEFAULT 0,
+            nav_end REAL DEFAULT 0,
+            rolling_peak_nav REAL DEFAULT 0
+        );
+
+        CREATE TABLE llm_traces (
+            trace_id TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            component TEXT NOT NULL,
+            model TEXT NOT NULL,
+            decision_id TEXT,
+            prompt_text TEXT NOT NULL,
+            response_text TEXT NOT NULL,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            latency_ms INTEGER NOT NULL DEFAULT 0,
+            tools_json TEXT NOT NULL DEFAULT '[]',
+            confidence REAL,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+    """)
+    return conn
+
+
+# ── _open_conn() ──────────────────────────────────────────────────────────────
+
+class TestOpenConn:
+    def test_opens_connection_to_env_db(self, tmp_path, monkeypatch):
+        """_open_conn() 應連到 DB_PATH 指定的資料庫並設定 row_factory"""
+        db_file = str(tmp_path / "test.db")
+        monkeypatch.setenv("DB_PATH", db_file)
+        # DB_PATH 是 module-level 常數，需要 patch ticker_watcher.DB_PATH
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "DB_PATH", db_file)
+        conn = tw._open_conn()
+        assert conn is not None
+        # row_factory 已設定
+        assert conn.row_factory is sqlite3.Row
+        conn.close()
+
+    def test_opens_in_memory_works(self, monkeypatch):
+        """_open_conn() 用 :memory: 應能正常建立連線"""
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        conn = tw._open_conn()
+        assert conn is not None
+        conn.close()
+
+
+# ── _utc_now_iso() ────────────────────────────────────────────────────────────
+
+class TestUtcNowIso:
+    def test_returns_iso_string(self):
+        """_utc_now_iso() 應回傳含 UTC offset 的 ISO 8601 字串"""
+        result = _utc_now_iso()
+        assert isinstance(result, str)
+        assert "+" in result or "Z" in result or result.endswith("+00:00")
+
+    def test_is_recent(self):
+        """_utc_now_iso() 應在近期（不超過 5 秒差）"""
+        result = _utc_now_iso()
+        parsed = dt.datetime.fromisoformat(result)
+        diff = abs((dt.datetime.now(tz=dt.timezone.utc) - parsed).total_seconds())
+        assert diff < 5.0
+
+
+# ── _load_universe() ──────────────────────────────────────────────────────────
+
+class TestLoadUniverse:
+    def test_reads_valid_watchlist(self, tmp_path, monkeypatch):
+        """有效的 watchlist.json 應正確讀取 universe 與 max_active"""
+        cfg = {"universe": ["2330", "2317", "2454"], "max_active": 2}
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        universe, max_active = tw._load_universe()
+        assert universe == ["2330", "2317", "2454"]
+        assert max_active == 2
+
+    def test_missing_file_uses_fallback(self, tmp_path, monkeypatch):
+        """watchlist.json 不存在時應使用 fallback"""
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", tmp_path / "nonexistent.json")
+        universe, max_active = tw._load_universe()
+        assert universe == tw._FALLBACK_UNIVERSE
+        assert max_active == len(tw._FALLBACK_UNIVERSE)
+
+    def test_invalid_json_uses_fallback(self, tmp_path, monkeypatch):
+        """無效 JSON 應使用 fallback"""
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text("not_json{{", encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        universe, max_active = tw._load_universe()
+        assert universe == tw._FALLBACK_UNIVERSE
+
+    def test_empty_universe_uses_fallback(self, tmp_path, monkeypatch):
+        """universe 為空陣列時應使用 fallback"""
+        cfg = {"universe": [], "max_active": 5}
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        universe, max_active = tw._load_universe()
+        assert universe == tw._FALLBACK_UNIVERSE
+
+    def test_default_max_active(self, tmp_path, monkeypatch):
+        """未設定 max_active 時預設為 5"""
+        cfg = {"universe": ["2330", "2317"]}
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        _, max_active = tw._load_universe()
+        assert max_active == 5
+
+    def test_strips_whitespace_from_symbols(self, tmp_path, monkeypatch):
+        """symbol 前後空白應被清除，空白 symbol 被濾掉"""
+        cfg = {"universe": [" 2330 ", "  ", "2317"], "max_active": 2}
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        universe, _ = tw._load_universe()
+        assert "2330" in universe
+        assert "" not in universe
+        assert " " not in universe
+
+
+# ── _get_snapshot() ───────────────────────────────────────────────────────────
+
+class TestGetSnapshot:
+    def test_returns_mock_when_api_is_none(self):
+        """api=None 時應回傳 mock 行情，包含 source='mock'"""
+        snap = _get_snapshot(None, "2330")
+        assert snap["source"] == "mock"
+        assert snap["close"] > 0
+        assert snap["bid"] > 0
+        assert snap["ask"] > snap["bid"]
+        assert snap["volume"] > 0
+        assert snap["reference"] > 0
+
+    def test_mock_uses_base_price_fallback(self):
+        """api=None 且 symbol 不在 _BASE_PRICE 時，用 100.0 作為基礎"""
+        snap = _get_snapshot(None, "UNKNOWN_SYM")
+        assert snap["close"] > 0
+        assert snap["reference"] == 100.0
+
+    def test_mock_uses_known_base_price(self):
+        """api=None 且 symbol='2330' 時，reference 應為 900.0"""
+        snap = _get_snapshot(None, "2330")
+        assert snap["reference"] == 900.0
+
+    def test_shioaji_success(self):
+        """Shioaji api 有效時應使用 snapshot 資料"""
+        mock_snap = MagicMock()
+        mock_snap.close = 920.0
+        mock_snap.buy_price = 919.0
+        mock_snap.sell_price = 921.0
+        mock_snap.reference = 900.0
+        mock_snap.volume = 5000
+
+        mock_contract = MagicMock()
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.return_value = mock_contract
+        mock_api.snapshots.return_value = [mock_snap]
+
+        snap = _get_snapshot(mock_api, "2330")
+        assert snap["close"] == 920.0
+        assert snap["bid"] == 919.0
+        assert snap["ask"] == 921.0
+        assert snap["reference"] == 900.0
+        assert snap["volume"] == 5000
+
+    def test_shioaji_zero_close_falls_back_to_mock(self):
+        """Shioaji snapshot close=0 時應 fallback 到 mock"""
+        mock_snap = MagicMock()
+        mock_snap.close = 0
+        mock_snap.buy_price = 0
+        mock_snap.sell_price = 0
+        mock_snap.reference = 0
+        mock_snap.volume = 0
+
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.return_value = MagicMock()
+        mock_api.snapshots.return_value = [mock_snap]
+
+        snap = _get_snapshot(mock_api, "2330")
+        # close=0 導致 fallback → 應有 source='mock'
+        assert snap["source"] == "mock"
+
+    def test_shioaji_empty_snapshots_falls_back(self):
+        """Shioaji 回傳空列表時應 fallback 到 mock"""
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.return_value = MagicMock()
+        mock_api.snapshots.return_value = []
+
+        snap = _get_snapshot(mock_api, "2330")
+        assert snap["source"] == "mock"
+
+    def test_shioaji_exception_falls_back(self):
+        """Shioaji 拋出例外時應 fallback 到 mock"""
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.side_effect = Exception("connection error")
+
+        snap = _get_snapshot(mock_api, "2330")
+        assert snap["source"] == "mock"
+
+
+# ── _screen_top_movers() ──────────────────────────────────────────────────────
+
+class TestScreenTopMovers:
+    def test_returns_max_active_symbols(self):
+        """應回傳 max_active 支股票"""
+        universe = ["2330", "2317", "2454", "2308"]
+        result = _screen_top_movers(None, universe, 2)
+        assert len(result) == 2
+        assert all(s in universe for s in result)
+
+    def test_returns_all_if_less_than_max(self):
+        """universe 少於 max_active 時應回傳全部"""
+        universe = ["2330", "2317"]
+        result = _screen_top_movers(None, universe, 10)
+        assert set(result) == set(universe)
+
+    def test_orders_by_price_movement(self):
+        """應依漲跌幅降序排列並取前 N 名"""
+        import openclaw.ticker_watcher as tw
+
+        def mock_snapshot(api, symbol):
+            # 讓 2330 有最大漲幅，2454 其次，2317 最小
+            return {
+                "2330": {"close": 950.0, "reference": 900.0, "bid": 949.0, "ask": 951.0, "volume": 1000},
+                "2317": {"close": 200.2, "reference": 200.0, "bid": 200.1, "ask": 200.3, "volume": 500},
+                "2454": {"close": 1300.0, "reference": 1200.0, "bid": 1299.0, "ask": 1301.0, "volume": 800},
+            }[symbol]
+
+        with patch.object(tw, "_get_snapshot", side_effect=mock_snapshot):
+            result = _screen_top_movers(None, ["2330", "2317", "2454"], 2)
+        # 2454 最大漲幅(8.33%)，2330 次之(5.56%)，2317 最小(0.1%)
+        assert result[0] == "2454"
+        assert result[1] == "2330"
+
+    def test_handles_zero_reference_price(self):
+        """reference=0 時不應除以零"""
+        import openclaw.ticker_watcher as tw
+
+        def mock_snapshot(api, symbol):
+            return {"close": 100.0, "reference": 0.0, "bid": 99.0, "ask": 101.0, "volume": 1000}
+
+        with patch.object(tw, "_get_snapshot", side_effect=mock_snapshot):
+            result = _screen_top_movers(None, ["2330"], 1)
+        assert result == ["2330"]
+
+
+# ── DB persist helpers ────────────────────────────────────────────────────────
+
+class TestPersistDecision:
+    def test_inserts_decision_row(self):
+        """_persist_decision() 應在 decisions 表插入正確的一筆資料"""
+        conn = _make_mem_db()
+        decision_id = str(uuid.uuid4())
+        _persist_decision(conn, decision_id=decision_id, symbol="2330",
+                          signal="buy", now_iso="2026-03-03T10:00:00+00:00")
+        row = conn.execute("SELECT * FROM decisions WHERE decision_id=?", (decision_id,)).fetchone()
+        assert row is not None
+        assert row["symbol"] == "2330"
+        assert row["signal_side"] == "buy"
+        assert row["strategy_id"] == STRATEGY_ID
+        assert row["strategy_version"] == STRATEGY_VERSION
+
+    def test_ignore_duplicate_decision(self):
+        """INSERT OR IGNORE：重複插入同 decision_id 應靜默忽略"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _persist_decision(conn, decision_id=did, symbol="2330",
+                          signal="buy", now_iso="2026-03-03T10:00:00+00:00")
+        _persist_decision(conn, decision_id=did, symbol="2317",  # 同 id，不同 symbol
+                          signal="sell", now_iso="2026-03-03T10:01:00+00:00")
+        rows = conn.execute("SELECT * FROM decisions WHERE decision_id=?", (did,)).fetchall()
+        assert len(rows) == 1
+        assert rows[0]["symbol"] == "2330"  # 原始記錄保留
+
+    def test_flat_signal_score_is_zero(self):
+        """signal='flat' 時 signal_score 應為 0"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _persist_decision(conn, decision_id=did, symbol="2330",
+                          signal="flat", now_iso="2026-03-03T10:00:00+00:00")
+        row = conn.execute("SELECT signal_score FROM decisions WHERE decision_id=?", (did,)).fetchone()
+        assert row["signal_score"] == 0.0
+
+    def test_non_flat_signal_score_is_07(self):
+        """signal!='flat' 時 signal_score 應為 0.7"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _persist_decision(conn, decision_id=did, symbol="2330",
+                          signal="sell", now_iso="2026-03-03T10:00:00+00:00")
+        row = conn.execute("SELECT signal_score FROM decisions WHERE decision_id=?", (did,)).fetchone()
+        assert row["signal_score"] == 0.7
+
+
+class TestPersistRiskCheck:
+    def test_inserts_risk_check_passed(self):
+        """_persist_risk_check() 應插入 passed=1"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _persist_risk_check(conn, decision_id=did, passed=True,
+                            reject_code=None, metrics={"nav": 2000000.0})
+        row = conn.execute("SELECT * FROM risk_checks WHERE decision_id=?", (did,)).fetchone()
+        assert row is not None
+        assert row["passed"] == 1
+        assert row["reject_code"] is None
+
+    def test_inserts_risk_check_failed(self):
+        """_persist_risk_check() 應插入 passed=0 及 reject_code"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _persist_risk_check(conn, decision_id=did, passed=False,
+                            reject_code="MAX_LOSS", metrics={})
+        row = conn.execute("SELECT * FROM risk_checks WHERE decision_id=?", (did,)).fetchone()
+        assert row["passed"] == 0
+        assert row["reject_code"] == "MAX_LOSS"
+
+    def test_metrics_json_serialized(self):
+        """metrics 應序列化為 JSON 字串儲存"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        metrics = {"key": "value", "num": 42}
+        _persist_risk_check(conn, decision_id=did, passed=True,
+                            reject_code=None, metrics=metrics)
+        row = conn.execute("SELECT metrics_json FROM risk_checks WHERE decision_id=?", (did,)).fetchone()
+        parsed = json.loads(row["metrics_json"])
+        assert parsed == metrics
+
+
+class TestPersistOrder:
+    def test_inserts_order(self):
+        """_persist_order() 應插入完整的訂單記錄"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        did = str(uuid.uuid4())
+        _persist_order(conn, order_id=oid, decision_id=did, broker_order_id="SIM-1",
+                       symbol="2330", side="buy", qty=100, price=890.0)
+        row = conn.execute("SELECT * FROM orders WHERE order_id=?", (oid,)).fetchone()
+        assert row is not None
+        assert row["symbol"] == "2330"
+        assert row["side"] == "buy"
+        assert row["qty"] == 100
+        assert row["price"] == 890.0
+        assert row["status"] == "submitted"
+        assert row["order_type"] == "limit"
+        assert row["tif"] == "IOC"
+
+    def test_custom_status(self):
+        """可傳入自訂 status（如 rejected）"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        did = str(uuid.uuid4())
+        _persist_order(conn, order_id=oid, decision_id=did, broker_order_id="SIM-2",
+                       symbol="2317", side="sell", qty=50, price=200.0, status="rejected")
+        row = conn.execute("SELECT status FROM orders WHERE order_id=?", (oid,)).fetchone()
+        assert row["status"] == "rejected"
+
+
+class TestPersistFill:
+    def test_inserts_fill(self):
+        """_persist_fill() 應插入成交記錄"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        _persist_fill(conn, order_id=oid, qty=100, price=890.0, fee=20.0, tax=30.0)
+        row = conn.execute("SELECT * FROM fills WHERE order_id=?", (oid,)).fetchone()
+        assert row is not None
+        assert row["qty"] == 100
+        assert row["price"] == 890.0
+        assert row["fee"] == 20.0
+        assert row["tax"] == 30.0
+
+    def test_default_fee_tax_zero(self):
+        """fee/tax 預設值應為 0"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        _persist_fill(conn, order_id=oid, qty=50, price=200.0)
+        row = conn.execute("SELECT fee, tax FROM fills WHERE order_id=?", (oid,)).fetchone()
+        assert row["fee"] == 0.0
+        assert row["tax"] == 0.0
+
+
+class TestInsertOrderEvent:
+    def test_inserts_event(self):
+        """_insert_order_event() 應插入 order_events 記錄"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        _insert_order_event(conn, order_id=oid, event_type="submitted",
+                            from_status=None, to_status="submitted",
+                            source="watcher", reason_code=None,
+                            payload={"broker_order_id": "SIM-1"})
+        row = conn.execute("SELECT * FROM order_events WHERE order_id=?", (oid,)).fetchone()
+        assert row is not None
+        assert row["event_type"] == "submitted"
+        assert row["source"] == "watcher"
+        assert row["from_status"] is None
+        assert row["to_status"] == "submitted"
+
+    def test_payload_json_serialized(self):
+        """payload 應序列化為 JSON"""
+        conn = _make_mem_db()
+        oid = str(uuid.uuid4())
+        payload = {"filled_qty": 100, "avg_price": 890.0}
+        _insert_order_event(conn, order_id=oid, event_type="filled",
+                            from_status="submitted", to_status="filled",
+                            source="broker", reason_code=None, payload=payload)
+        row = conn.execute("SELECT payload_json FROM order_events WHERE order_id=?", (oid,)).fetchone()
+        parsed = json.loads(row["payload_json"])
+        assert parsed["filled_qty"] == 100
+
+
+# ── _log_trace() / _log_screen_trace() ───────────────────────────────────────
+
+class TestLogTrace:
+    def _snap(self) -> dict:
+        return {"close": 900.0, "reference": 890.0, "bid": 899.0, "ask": 901.0, "volume": 1000}
+
+    def test_writes_approved_trace(self):
+        """approved=True 時應插入 llm_trace"""
+        conn = _make_mem_db()
+        _log_trace(conn, symbol="2330", signal="buy", snap=self._snap(),
+                   approved=True, reject_code=None)
+        count = conn.execute("SELECT COUNT(*) FROM llm_traces").fetchone()[0]
+        assert count == 1
+
+    def test_writes_rejected_trace(self):
+        """approved=False + reject_code 時應插入 llm_trace"""
+        conn = _make_mem_db()
+        _log_trace(conn, symbol="2330", signal="flat", snap=self._snap(),
+                   approved=False, reject_code="MAX_LOSS")
+        count = conn.execute("SELECT COUNT(*) FROM llm_traces").fetchone()[0]
+        assert count == 1
+
+    def test_trace_includes_order_info(self):
+        """order 不為 None 時，response_text 應含 order 資訊"""
+        conn = _make_mem_db()
+        mock_order = MagicMock()
+        mock_order.side = "buy"
+        mock_order.qty = 100
+        mock_order.price = 890.0
+        _log_trace(conn, symbol="2330", signal="buy", snap=self._snap(),
+                   approved=True, reject_code=None, order=mock_order)
+        row = conn.execute("SELECT response_text FROM llm_traces").fetchone()
+        assert row is not None
+        assert "buy" in row["response_text"]
+
+    def test_insert_failure_does_not_raise(self):
+        """insert_llm_trace 拋出例外時，_log_trace 應靜默不向上拋"""
+        conn = _make_mem_db()
+        with patch("openclaw.llm_observability.insert_llm_trace", side_effect=Exception("DB error")):
+            # 不應拋出例外
+            _log_trace(conn, symbol="2330", signal="buy", snap=self._snap(),
+                       approved=True, reject_code=None)
+
+    def test_with_decision_id(self):
+        """有 decision_id 時應能正常寫入"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        _log_trace(conn, symbol="2330", signal="sell", snap=self._snap(),
+                   approved=True, reject_code=None, decision_id=did)
+        count = conn.execute("SELECT COUNT(*) FROM llm_traces").fetchone()[0]
+        assert count == 1
+
+
+class TestLogScreenTrace:
+    def test_writes_screen_trace(self):
+        """_log_screen_trace() 應插入 llm_trace"""
+        conn = _make_mem_db()
+        _log_screen_trace(conn, universe=["2330", "2317", "2454"],
+                          active=["2330", "2317"])
+        count = conn.execute("SELECT COUNT(*) FROM llm_traces").fetchone()[0]
+        assert count == 1
+
+    def test_insert_failure_does_not_raise(self):
+        """insert_llm_trace 拋出例外時，_log_screen_trace 應靜默不向上拋"""
+        conn = _make_mem_db()
+        with patch("openclaw.llm_observability.insert_llm_trace", side_effect=Exception("fail")):
+            _log_screen_trace(conn, universe=["2330"], active=["2330"])
+
+
+# ── _execute_sim_order() ──────────────────────────────────────────────────────
+
+class TestExecuteSimOrder:
+    """測試模擬下單執行流程。"""
+
+    def _make_candidate(self, side="buy", qty=100, price=890.0):
+        from openclaw.risk_engine import OrderCandidate
+        return OrderCandidate(symbol="2330", side=side, qty=qty, price=price,
+                              order_type="limit", tif="IOC", opens_new_position=(side == "buy"))
+
+    def test_buy_order_filled(self):
+        """SimBrokerAdapter 正常成交 buy 訂單"""
+        from openclaw.broker import SimBrokerAdapter
+        conn = _make_mem_db()
+        broker = SimBrokerAdapter()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        assert ok is True
+        assert order_id is not None
+        # orders 表有記錄
+        row = conn.execute("SELECT * FROM orders WHERE order_id=?", (order_id,)).fetchone()
+        assert row is not None
+        assert row["status"] == "filled"
+        # fills 表有記錄
+        fill_count = conn.execute("SELECT COUNT(*) FROM fills WHERE order_id=?", (order_id,)).fetchone()[0]
+        assert fill_count > 0
+
+    def test_sell_order_filled(self):
+        """SimBrokerAdapter 正常成交 sell 訂單"""
+        from openclaw.broker import SimBrokerAdapter
+        conn = _make_mem_db()
+        broker = SimBrokerAdapter()
+        candidate = self._make_candidate("sell", 50, 920.0)
+        did = str(uuid.uuid4())
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=broker, decision_id=did,
+                symbol="2330", side="sell", qty=50, price=920.0, candidate=candidate
+            )
+
+        assert ok is True
+
+    def test_broker_rejection_returns_false(self):
+        """broker.submit_order 回傳 rejected → _execute_sim_order 應回傳 (False, order_id)"""
+        from openclaw.broker import BrokerSubmission
+        conn = _make_mem_db()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        mock_broker = MagicMock()
+        mock_broker.submit_order.return_value = BrokerSubmission(
+            broker_order_id="", status="rejected", reason="insufficient funds"
+        )
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=mock_broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        assert ok is False
+        # orders 表應有 rejected 記錄
+        row = conn.execute("SELECT status FROM orders WHERE order_id=?", (order_id,)).fetchone()
+        assert row["status"] == "rejected"
+
+    def test_order_events_written(self):
+        """成交後 order_events 表應有 submitted 和 filled 事件"""
+        from openclaw.broker import SimBrokerAdapter
+        conn = _make_mem_db()
+        broker = SimBrokerAdapter()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        event_types = [row["event_type"] for row in
+                       conn.execute("SELECT event_type FROM order_events WHERE order_id=?",
+                                    (order_id,)).fetchall()]
+        assert "submitted" in event_types
+        assert "filled" in event_types
+
+    def test_poll_returns_none_eventually_times_out(self):
+        """poll_order_status 持續回傳 None → 12 輪後結束，回傳 (False, order_id)"""
+        from openclaw.broker import BrokerSubmission
+        conn = _make_mem_db()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        mock_broker = MagicMock()
+        mock_broker.submit_order.return_value = BrokerSubmission(
+            broker_order_id="SIM-X", status="submitted"
+        )
+        mock_broker.poll_order_status.return_value = None  # 永遠回傳 None
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=mock_broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        assert ok is False  # 未 filled
+
+
+# ── Integration: _persist_* functions work together ──────────────────────────
+
+class TestPersistIntegration:
+    """端對端測試：decision → risk_check → order → fill → order_event"""
+
+    def test_full_order_lifecycle(self):
+        """完整訂單生命週期寫入 DB"""
+        conn = _make_mem_db()
+        did = str(uuid.uuid4())
+        oid = str(uuid.uuid4())
+        now_iso = _utc_now_iso()
+
+        # 1. persist decision
+        _persist_decision(conn, decision_id=did, symbol="2330",
+                          signal="buy", now_iso=now_iso)
+        # 2. persist risk check
+        _persist_risk_check(conn, decision_id=did, passed=True,
+                            reject_code=None, metrics={"nav": 2_000_000})
+        # 3. persist order
+        _persist_order(conn, order_id=oid, decision_id=did, broker_order_id="SIM-1",
+                       symbol="2330", side="buy", qty=100, price=890.0)
+        # 4. persist fill
+        _persist_fill(conn, order_id=oid, qty=100, price=890.0, fee=20.0, tax=10.0)
+        # 5. insert order event
+        _insert_order_event(conn, order_id=oid, event_type="filled",
+                            from_status="submitted", to_status="filled",
+                            source="broker", reason_code=None,
+                            payload={"filled_qty": 100, "avg_price": 890.0})
+
+        # Verify all rows
+        assert conn.execute("SELECT COUNT(*) FROM decisions WHERE decision_id=?",
+                            (did,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM risk_checks WHERE decision_id=?",
+                            (did,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM orders WHERE order_id=?",
+                            (oid,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM fills WHERE order_id=?",
+                            (oid,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM order_events WHERE order_id=?",
+                            (oid,)).fetchone()[0] == 1
+
+
+# ── run_watcher() initialization section (lines 428-479) ─────────────────────
+# The while True loop body has # pragma: no cover; we test the init section by
+# making _is_market_open raise StopIteration on first call (exits the loop).
+
+class TestRunWatcherInit:
+    """Tests for run_watcher() initialization (up to while True)."""
+
+    def _make_init_conn(self):
+        """Return an in-memory DB for position restore."""
+        conn = _make_mem_db()
+        return conn
+
+    def test_no_shioaji_credentials_api_none(self, monkeypatch, tmp_path):
+        """SHIOAJI_API_KEY / SECRET 未設定 → api=None（mock 模式），且能跑過 init"""
+        import openclaw.ticker_watcher as tw
+
+        mem_conn = self._make_init_conn()
+
+        monkeypatch.delenv("SHIOAJI_API_KEY", raising=False)
+        monkeypatch.delenv("SHIOAJI_SECRET_KEY", raising=False)
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+
+        # Make _open_conn return our in-memory db so positions restore works
+        monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330", "2317"], 2))
+
+        # Make _is_market_open raise StopIteration on first call to exit while loop
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()
+
+    def test_restores_positions_from_db(self, monkeypatch, tmp_path):
+        """startup 時應從 positions 表恢復持倉記錄"""
+        import openclaw.ticker_watcher as tw
+
+        mem_conn = self._make_init_conn()
+        # Pre-populate positions table
+        mem_conn.execute("INSERT INTO positions (symbol, quantity, avg_price) VALUES (?,?,?)",
+                         ("2330", 100, 900.0))
+        mem_conn.commit()
+
+        monkeypatch.delenv("SHIOAJI_API_KEY", raising=False)
+        monkeypatch.delenv("SHIOAJI_SECRET_KEY", raising=False)
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()
+        # If we got here, positions restore didn't crash (line 464-472 covered)
+
+    def test_positions_restore_exception_handled(self, monkeypatch, tmp_path):
+        """positions table 不存在時應 log warning 並繼續（不 crash）"""
+        import openclaw.ticker_watcher as tw
+
+        # Return a conn without positions table to trigger restore exception
+        bad_conn = sqlite3.connect(":memory:")
+
+        monkeypatch.delenv("SHIOAJI_API_KEY", raising=False)
+        monkeypatch.delenv("SHIOAJI_SECRET_KEY", raising=False)
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        monkeypatch.setattr(tw, "_open_conn", lambda: bad_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()  # Should not crash despite missing positions table
+
+    def test_shioaji_connect_success(self, monkeypatch, tmp_path):
+        """SHIOAJI 憑證存在且登入成功 → api 非 None"""
+        import openclaw.ticker_watcher as tw
+
+        mem_conn = self._make_init_conn()
+
+        monkeypatch.setenv("SHIOAJI_API_KEY", "fake_key")
+        monkeypatch.setenv("SHIOAJI_SECRET_KEY", "fake_secret")
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        mock_api = MagicMock()
+        mock_sj_module = MagicMock()
+        mock_sj_module.Shioaji.return_value = mock_api
+
+        import sys
+        monkeypatch.setitem(sys.modules, "shioaji", mock_sj_module)
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()
+
+        mock_api.login.assert_called_once_with(api_key="fake_key", secret_key="fake_secret")
+        mock_api.fetch_contracts.assert_called_once()
+
+    def test_shioaji_fetch_contracts_exception_handled(self, monkeypatch, tmp_path):
+        """fetch_contracts() 拋出例外時應 log warning 並繼續"""
+        import openclaw.ticker_watcher as tw
+
+        mem_conn = self._make_init_conn()
+
+        monkeypatch.setenv("SHIOAJI_API_KEY", "fake_key")
+        monkeypatch.setenv("SHIOAJI_SECRET_KEY", "fake_secret")
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        mock_api = MagicMock()
+        mock_api.fetch_contracts.side_effect = Exception("contract fetch failed")
+        mock_sj_module = MagicMock()
+        mock_sj_module.Shioaji.return_value = mock_api
+
+        import sys
+        monkeypatch.setitem(sys.modules, "shioaji", mock_sj_module)
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()  # Should not crash
+
+    def test_shioaji_login_exception_falls_back(self, monkeypatch, tmp_path):
+        """Shioaji login 拋出例外 → api=None（fallback mock 模式），init 繼續"""
+        import openclaw.ticker_watcher as tw
+
+        mem_conn = self._make_init_conn()
+
+        monkeypatch.setenv("SHIOAJI_API_KEY", "bad_key")
+        monkeypatch.setenv("SHIOAJI_SECRET_KEY", "bad_secret")
+        monkeypatch.setattr(tw, "DB_PATH", ":memory:")
+        monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
+        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+
+        mock_api = MagicMock()
+        mock_api.login.side_effect = Exception("authentication failed")
+        mock_sj_module = MagicMock()
+        mock_sj_module.Shioaji.return_value = mock_api
+
+        import sys
+        monkeypatch.setitem(sys.modules, "shioaji", mock_sj_module)
+
+        with pytest.raises(StopIteration):
+            tw.run_watcher()  # Should not crash

@@ -219,12 +219,196 @@ def test_generate_monthly_report():
 def test_get_nonexistent_version():
     """Test getting non-existent version returns None."""
     from openclaw.strategy_registry import StrategyRegistry
-    
+
     import tempfile; import os; f = tempfile.NamedTemporaryFile(suffix=".db", delete=False); db_path = f.name; f.close(); registry = StrategyRegistry(db_path); import atexit; atexit.register(lambda: os.unlink(db_path) if os.path.exists(db_path) else None)
-    
+
     version = registry.get_version("non_existent_id")
     assert version is None
 
 
+def test_create_version_auto_tag():
+    """Test that create_version auto-generates a version tag when none provided (line 64)."""
+    from openclaw.strategy_registry import StrategyRegistry
+
+    registry = StrategyRegistry(":memory:")
+    version = registry.create_version(
+        strategy_config={"k": "v"},
+        created_by="pm",
+        # No version_tag provided
+    )
+    assert "version_tag" in version
+    assert "Version" in version["version_tag"]
+
+
+def test_activate_version_exception_path():
+    """Test activate_version returns False on DB error (lines 173-175)."""
+    from openclaw.strategy_registry import StrategyRegistry
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+
+    try:
+        registry = StrategyRegistry(db_path)
+        version = registry.create_version({"k": "v"}, "pm", version_tag="V1")
+
+        # Patch get_active_version to raise so we hit except in activate_version
+        def bad_get_active():
+            raise RuntimeError("forced failure")
+
+        registry.get_active_version = bad_get_active
+        result = registry.activate_version(version["version_id"], "admin", "test")
+        assert result is False
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+
+def test_rollback_to_nonexistent_version():
+    """Test rollback returns False when target version doesn't exist (line 186)."""
+    from openclaw.strategy_registry import StrategyRegistry
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+
+    try:
+        registry = StrategyRegistry(db_path)
+        result = registry.rollback_to_version("nonexistent_id", "pm", "test")
+        assert result is False
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+
+def test_rollback_exception_path():
+    """Test rollback_to_version returns False on DB error (lines 258-260)."""
+    from openclaw.strategy_registry import StrategyRegistry
+
+    registry = StrategyRegistry(":memory:")
+    version = registry.create_version({"k": "v"}, "pm", version_tag="V1")
+    registry.activate_version(version["version_id"], "admin", "First")
+
+    # Make _get_conn fail after get_version/get_active_version succeed
+    original_get_conn = registry._get_conn
+    call_count = [0]
+
+    def counting_bad_conn():
+        call_count[0] += 1
+        # Allow first 2 calls (get_version + get_active_version inside rollback)
+        # then fail on the 3rd (the main conn for updates)
+        if call_count[0] >= 3:
+            raise RuntimeError("forced failure")
+        return original_get_conn()
+
+    registry._get_conn = counting_bad_conn
+    result = registry.rollback_to_version(version["version_id"], "pm", "test failure")
+    assert result is False
+
+
+def test_generate_monthly_report_december():
+    """Test generate_monthly_report handles December correctly (line 370)."""
+    from openclaw.strategy_registry import StrategyRegistry
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+
+    try:
+        registry = StrategyRegistry(db_path)
+        # Should not raise; December wraps to Jan of next year
+        report = registry.generate_monthly_report(2025, 12)
+        assert report["year"] == 2025
+        assert report["month"] == 12
+    finally:
+        if os.path.exists(db_path):
+            os.unlink(db_path)
+
+
+def test_get_next_version_number_fallback():
+    """Test _get_next_version_number returns 1 when count query returns nothing (lines 419-422)."""
+    from openclaw.strategy_registry import StrategyRegistry
+    import sqlite3
+
+    registry = StrategyRegistry(":memory:")
+    conn = registry._get_conn()
+    # Ensure table exists
+    registry._ensure_table_exists(conn)
+    # Normal path: 0 rows → returns 1
+    result = registry._get_next_version_number(conn)
+    assert result == 1
+    conn.close()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# Tests for src/openclaw/rl/hybrid_arch/__init__.py
+# These tests exercise the stable import-path re-export module.
+# ---------------------------------------------------------------------------
+
+class TestHybridArchInit:
+    """Verify that rl.hybrid_arch re-exports all expected symbols."""
+
+    def test_imports_without_error(self):
+        import openclaw.rl.hybrid_arch  # noqa: F401
+
+    def test_exports_llm_strategy_planner(self):
+        from openclaw.rl.hybrid_arch import LLMStrategyPlanner
+        assert LLMStrategyPlanner is not None
+
+    def test_exports_rl_parameter_optimizer(self):
+        from openclaw.rl.hybrid_arch import RLParameterOptimizer
+        assert RLParameterOptimizer is not None
+
+    def test_exports_hybrid_coordinator(self):
+        from openclaw.rl.hybrid_arch import HybridCoordinator
+        assert HybridCoordinator is not None
+
+    def test_exports_strategy_plan(self):
+        from openclaw.rl.hybrid_arch import StrategyPlan
+        assert StrategyPlan is not None
+
+    def test_exports_optimization_result(self):
+        from openclaw.rl.hybrid_arch import OptimizationResult
+        assert OptimizationResult is not None
+
+    def test_exports_hybrid_run_result(self):
+        from openclaw.rl.hybrid_arch import HybridRunResult
+        assert HybridRunResult is not None
+
+    def test_all_dunder_lists_all_exports(self):
+        import openclaw.rl.hybrid_arch as mod
+        expected = {
+            "LLMStrategyPlanner",
+            "RLParameterOptimizer",
+            "HybridCoordinator",
+            "StrategyPlan",
+            "OptimizationResult",
+            "HybridRunResult",
+        }
+        assert expected == set(mod.__all__)
+
+    def test_symbols_are_same_objects_as_hybrid_architecture(self):
+        """Re-exported symbols must be identical to those in the origin module."""
+        from openclaw.rl.hybrid_arch import (
+            HybridCoordinator,
+            HybridRunResult,
+            LLMStrategyPlanner,
+            OptimizationResult,
+            RLParameterOptimizer,
+            StrategyPlan,
+        )
+        from openclaw.rl.hybrid_architecture import (
+            HybridCoordinator as HC2,
+            HybridRunResult as HRR2,
+            LLMStrategyPlanner as LSP2,
+            OptimizationResult as OR2,
+            RLParameterOptimizer as RPO2,
+            StrategyPlan as SP2,
+        )
+        assert LLMStrategyPlanner is LSP2
+        assert RLParameterOptimizer is RPO2
+        assert HybridCoordinator is HC2
+        assert StrategyPlan is SP2
+        assert OptimizationResult is OR2
+        assert HybridRunResult is HRR2

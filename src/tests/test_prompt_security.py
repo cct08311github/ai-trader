@@ -217,5 +217,16 @@ def test_default_block_patterns():
     assert "bypass" in patterns_text
 
 
+def test_sanitize_empty_after_stripping_tags():
+    """Line 82: return EMPTY_AFTER_SANITIZE when text reduces to empty after tag stripping."""
+    # Construct text that consists solely of strippable [system prompt] wrapper
+    # _strip_instruction_like_wrappers strips '[... system prompt ...]' at word boundaries
+    # Use XML-style tags that strip to empty
+    text = "<system>"
+    result = sanitize_external_text(text)
+    assert result.safe is False
+    assert result.reason == "EMPTY_AFTER_SANITIZE"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

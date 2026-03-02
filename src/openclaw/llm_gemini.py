@@ -78,7 +78,10 @@ def gemini_call(model: str, prompt: str) -> Dict[str, Any]:
         generation_config={"response_mime_type": "application/json"},
     )
     t0 = time.time()
-    response = gen_model.generate_content(prompt)
+    response = gen_model.generate_content(
+        prompt,
+        request_options={"timeout": 120},  # 120s max per call
+    )
     latency_ms = int((time.time() - t0) * 1000)
 
     raw_text = response.text
