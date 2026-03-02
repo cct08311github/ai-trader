@@ -35,10 +35,11 @@ class EODRow:
     source_url: str
 
 
-def _fetch_text(url: str, timeout: int = 20) -> str:
+def _fetch_text(url: str, timeout: int = 20, encoding: str = "utf-8") -> str:
     req = Request(url, headers={"User-Agent": "OpenClaw/1.2.1"})
     with urlopen(req, timeout=timeout) as resp:
-        return resp.read().decode("utf-8", errors="replace")
+        raw = resp.read()
+        return raw.decode(encoding, errors="replace")
 
 
 def _to_float(value: Any) -> Optional[float]:
@@ -105,7 +106,7 @@ def _find_tpex_header(lines: Iterable[str]) -> Optional[List[str]]:
 
 
 def fetch_tpex_rows(trade_date: str) -> List[EODRow]:
-    raw = _fetch_text(TPEx_URL)
+    raw = _fetch_text(TPEx_URL, encoding="cp950")  # TPEx 回傳 MS950 (Big5 超集)
     lines = [ln for ln in raw.splitlines() if ln.strip()]
     header = _find_tpex_header(lines)
     if not header:
