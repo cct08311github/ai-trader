@@ -38,3 +38,29 @@ def test_find_support_resistance_returns_floats():
     result = find_support_resistance(highs, lows, closes)
     assert "support" in result and "resistance" in result
     assert result["support"] < result["resistance"]
+
+
+# ── 邊界分支覆蓋 ──────────────────────────────────────
+
+def test_calc_rsi_returns_all_none_when_too_few_prices():
+    """prices 數量 < period+1 時，全部回傳 None（line 32 early return）。"""
+    result = calc_rsi([100.0, 101.0, 102.0], period=14)
+    assert result == [None, None, None]
+    assert all(v is None for v in result)
+
+
+def test_find_support_resistance_empty_inputs_returns_zeros():
+    """highs 或 lows 為空時，回傳 support=0.0 resistance=0.0（line 104 early return）。"""
+    result = find_support_resistance([], [], [])
+    assert result == {"support": 0.0, "resistance": 0.0}
+
+
+def test_calc_rsi_all_none_prefix_length():
+    """RSI 結果長度必須與輸入等長（含 None prefix）。"""
+    prices = [float(i) for i in range(20)]
+    rsi = calc_rsi(prices, period=14)
+    assert len(rsi) == len(prices)
+    # 前 14 個 None
+    assert all(v is None for v in rsi[:14])
+    # 第 14 個（index 14）起有值
+    assert rsi[14] is not None
