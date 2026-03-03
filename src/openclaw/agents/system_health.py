@@ -90,7 +90,7 @@ def run_system_health(
     conn: Optional[sqlite3.Connection] = None,
     db_path: Optional[str] = None,
 ) -> AgentResult:
-    _conn = conn or open_conn(db_path or "")
+    _conn = conn or (open_conn(db_path) if db_path else open_conn())
     try:
         pm2_status = _get_pm2_status()
         disk_info = _get_disk_info()
