@@ -140,3 +140,84 @@ def get_positions(
             "source": "mock", "simulation": simulation,
             "positions": _mock_positions(), "note": f"fallback: {e}"
         }
+
+
+# ── QuoteService — BidAsk SSE bridge ─────────────────────────────────────────
+
+import asyncio as _asyncio
+import threading as _threading
+
+
+class QuoteService:
+    """Singleton: routes Shioaji BidAsk callbacks to SSE consumer queues.
+
+    Shioaji callbacks run in Shioaji's thread; SSE generators run in asyncio.
+    Bridge: asyncio.run_coroutine_threadsafe(queue.put(data), loop).
+    """
+
+    def __init__(self):
+        self._queues: dict[str, set] = {}   # symbol → set of (queue, loop)
+        self._lock = _threading.Lock()
+        self._callback_set = False
+
+    def _on_bidask(self, exchange, bidask) -> None:
+        """Shioaji BidAsk callback (Shioaji thread)."""
+        symbol = getattr(bidask, "code", None)
+        if not symbol:
+            return
+        data = {
+            "type": "bidask",
+            "symbol": symbol,
+            "bid_price":  [float(x) for x in (getattr(bidask, "bid_price",  []) or [])],
+            "bid_volume": [int(x)   for x in (getattr(bidask, "bid_volume", []) or [])],
+            "ask_price":  [float(x) for x in (getattr(bidask, "ask_price",  []) or [])],
+            "ask_volume": [int(x)   for x in (getattr(bidask, "ask_volume", []) or [])],
+        }
+        with self._lock:
+            consumers = list(self._queues.get(symbol, set()))
+        for (q, loop) in consumers:
+            if not loop.is_closed():
+                _asyncio.run_coroutine_threadsafe(q.put(data), loop)
+
+    def subscribe(self, symbol: str, queue, loop, api) -> None:
+        with self._lock:
+            first = symbol not in self._queues or not self._queues[symbol]
+            self._queues.setdefault(symbol, set()).add((queue, loop))
+            if not self._callback_set:
+                try:
+                    api.quote.set_on_bidask_stk_v1_callback(self._on_bidask)
+                    self._callback_set = True
+                except Exception:
+                    pass
+        if first:
+            try:
+                import shioaji as sj  # type: ignore
+                contract = api.Contracts.Stocks[symbol]
+                api.quote.subscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.BidAsk,
+                    version=sj.constant.QuoteVersion.v1,
+                )
+            except Exception:
+                pass
+
+    def unsubscribe(self, symbol: str, queue, api) -> None:
+        last = False
+        with self._lock:
+            s = {item for item in self._queues.get(symbol, set()) if item[0] is not queue}
+            self._queues[symbol] = s
+            last = not s
+        if last:
+            try:
+                import shioaji as sj  # type: ignore
+                contract = api.Contracts.Stocks[symbol]
+                api.quote.unsubscribe(
+                    contract,
+                    quote_type=sj.constant.QuoteType.BidAsk,
+                    version=sj.constant.QuoteVersion.v1,
+                )
+            except Exception:
+                pass
+
+
+quote_service = QuoteService()

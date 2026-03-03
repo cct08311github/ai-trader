@@ -6,7 +6,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.db import get_conn, get_conn_rw
 from app.services.shioaji_service import get_positions, _get_system_simulation_mode
@@ -868,3 +869,82 @@ def inventory_list(source: str = "shioaji", simulation: bool = True):
             "status": "正常"
         })
     return inventory
+
+
+# ── 即時報價 ──────────────────────────────────────────────────────────────────
+
+@router.get("/quote/{symbol}")
+def get_quote_snapshot(symbol: str):
+    """一次性 snapshot：收盤價、漲跌幅、成交量、金額、買1/賣1。"""
+    symbol = symbol.strip().upper()
+    try:
+        from app.services.shioaji_service import _get_api
+        api = _get_api(simulation=True)
+        contract = api.Contracts.Stocks[symbol]
+        snaps = api.snapshots([contract])
+        if snaps:
+            s = snaps[0]
+            close     = float(getattr(s, "close",        0) or 0)
+            reference = float(getattr(s, "reference",    0) or 0)
+            volume    = int(getattr(s, "total_volume",   0) or 0)
+            total_amt = int(
+                getattr(s, "total_amount", None) or getattr(s, "amount", 0) or 0
+            )
+            bid1 = float(getattr(s, "bid_price",  0) or 0)
+            ask1 = float(
+                getattr(s, "sell_price", None) or getattr(s, "ask_price", 0) or 0
+            )
+            chg_price = round(close - reference, 2) if reference else 0.0
+            chg_rate  = round((close - reference) / reference * 100, 2) if reference else 0.0
+            return {
+                "status": "ok", "symbol": symbol, "source": "shioaji",
+                "data": {
+                    "close": close, "reference": reference,
+                    "change_price": chg_price, "change_rate": chg_rate,
+                    "volume": volume, "total_amount": total_amt,
+                    "bid_price": bid1, "ask_price": ask1,
+                },
+            }
+    except Exception:
+        pass
+    return {"status": "ok", "symbol": symbol, "source": "closed", "data": None}
+
+
+@router.get("/quote-stream/{symbol}")
+async def get_quote_stream(symbol: str, request: Request):
+    """SSE：Shioaji BidAsk 即時訂閱，推送五檔行情到前端。"""
+    import asyncio as _asyncio
+    import json as _json
+
+    symbol = symbol.strip().upper()
+
+    async def generator():
+        from app.services.shioaji_service import _get_api, quote_service
+
+        queue: _asyncio.Queue = _asyncio.Queue(maxsize=30)
+        loop = _asyncio.get_event_loop()
+        api = None
+        try:
+            api = _get_api(simulation=True)
+            quote_service.subscribe(symbol, queue, loop, api)
+        except Exception:
+            pass  # Market closed or Shioaji unavailable
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await _asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {_json.dumps(data)}\n\n"
+                except _asyncio.TimeoutError:
+                    yield 'data: {"type":"ping"}\n\n'
+        finally:
+            if api:
+                quote_service.unsubscribe(symbol, queue, api)
+
+    return StreamingResponse(
+        generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
