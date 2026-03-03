@@ -7,7 +7,19 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+
+_CAPITAL_JSON = Path(__file__).resolve().parents[4] / "config" / "capital.json"
+
+
+def _read_nav() -> float:
+    """Read total_capital_twd from config/capital.json; fallback to 1_000_000."""
+    try:
+        data = json.loads(_CAPITAL_JSON.read_text())
+        return float(data.get("total_capital_twd", 1_000_000.0))
+    except Exception:
+        return 1_000_000.0
 
 
 def build_chat_context(conn) -> str:
@@ -136,7 +148,7 @@ def build_chat_context(conn) -> str:
         total_mkt = sum(
             int(r[1]) * float(r[3] or r[2] or 0) for r in pos_rows
         )
-        NAV = 500_000.0  # TODO: read from capital.json
+        NAV = _read_nav()
         gross_exp = total_mkt / NAV * 100 if NAV > 0 else 0
         sections.append(
             f"[風控狀態]\n"
