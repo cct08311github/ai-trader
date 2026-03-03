@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.agents import router as agents_router
+from app.api.analysis import router as analysis_router
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.control import router as control_router
@@ -81,6 +82,7 @@ def health_check():
 
 # Routers
 app.include_router(agents_router)
+app.include_router(analysis_router)
 app.include_router(auth_router)
 app.include_router(control_router)
 app.include_router(pm_router)

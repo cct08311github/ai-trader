@@ -11,6 +11,7 @@ import {
   mockPositions
 } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
+import { getToken } from '../lib/auth'
 
 function Panel({ title, right, children }) {
   return (
@@ -30,6 +31,7 @@ export default function DashboardPage() {
   const [preferApi, setPreferApi] = useState(true)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [analysisSnap, setAnalysisSnap] = useState(null)
 
   const equitySeries = useMemo(() => buildMockEquitySeries({ days: 30, startEquity: 100000 }), [])
 
@@ -66,6 +68,15 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    fetch('/api/analysis/latest', {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => data && setAnalysisSnap(data))
+      .catch(() => {})
+  }, [])
+
   const allocation = useMemo(() => buildAllocationData(positions), [positions])
   const kpis = useMemo(() => calcPortfolioKpis(positions, { equitySeries }), [positions, equitySeries])
 
@@ -78,6 +89,20 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Daily PM approval status — must be checked every morning before market open */}
       <PmStatusCard />
+
+      {analysisSnap && (
+        <Link to="/analysis" className="block rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.25] px-4 py-3 hover:bg-[rgb(var(--surface))/0.4] transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[rgb(var(--muted))]">
+              盤後分析 · {analysisSnap.trade_date}
+            </span>
+            <span className="text-xs text-emerald-400">查看 →</span>
+          </div>
+          <p className="mt-1 text-sm truncate">
+            {analysisSnap.strategy?.summary || '分析完成'}
+          </p>
+        </Link>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>

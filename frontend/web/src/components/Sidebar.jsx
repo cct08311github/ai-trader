@@ -2,7 +2,7 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   Briefcase, ArrowLeftRight, LineChart,
-  Settings, Package, SlidersHorizontal, LogOut, User, Bot
+  Settings, Package, SlidersHorizontal, LogOut, User, Bot, BarChart2
 } from 'lucide-react'
 import { logout, getToken } from '../lib/auth'
 
@@ -10,6 +10,7 @@ const nav = [
   { to: '/portfolio', label: 'Portfolio', icon: Briefcase },
   { to: '/trades', label: 'Trades', icon: ArrowLeftRight },
   { to: '/strategy', label: 'Strategy', icon: LineChart },
+  { to: '/analysis', label: '盤後分析', icon: BarChart2 },
   { to: '/agents', label: 'Agents', icon: Bot },
   { to: '/system', label: 'System', icon: Settings },
   { to: '/settings', label: '資金設定', icon: SlidersHorizontal },

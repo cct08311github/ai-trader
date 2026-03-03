@@ -47,3 +47,4 @@ frontend/backend/.pytest_cache/
 
 # Repo-level emergency stop sentinel
 .EMERGENCY_STOP
+.worktrees/
