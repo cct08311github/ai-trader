@@ -12,7 +12,10 @@ from __future__ import annotations
 import sys
 import os
 
+import logging
+
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # Ensure src/ is importable
@@ -28,6 +31,7 @@ from openclaw.daily_pm_review import (
 )
 
 router = APIRouter(prefix="/api/pm", tags=["pm"])
+logger = logging.getLogger("pm_api")
 
 
 @router.get("/status")
@@ -116,7 +120,14 @@ def pm_review():
     # Read model at request time (not module load) so env vars from run.sh are visible
     model = os.environ.get("PM_LLM_MODEL", "gemini-3.1-pro-preview")
     llm_call = _get_llm_call()
-    state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)
+    try:
+        state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)
+    except Exception as e:
+        logger.error("PM review LLM 呼叫失敗: %s", e, exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={"error": "LLM 暫時不可用，請稍後重試", "detail": str(e)},
+        )
 
     # Persist to episodic_memory so Strategy page debate section shows history
     _write_debate_to_db(state)

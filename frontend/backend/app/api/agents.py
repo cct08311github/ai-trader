@@ -65,7 +65,8 @@ def _run_agent_bg(agent_name: str, db_path: str) -> None:
     with _lock:
         _running.add(agent_name)
     try:
-        conn = sqlite3.connect(db_path, timeout=10)
+        from openclaw.agents.base import open_conn
+        conn = open_conn(db_path)
         try:
             today = str(date.today())
             if agent_name == "market_research":
@@ -104,7 +105,9 @@ def list_agents():
             row = conn.execute(
                 """
                 SELECT created_at, confidence,
-                       json_extract(response, '$.summary') AS summary,
+                       CASE WHEN json_valid(response)
+                            THEN json_extract(response, '$.summary')
+                            ELSE NULL END AS summary,
                        latency_ms, model
                 FROM llm_traces
                 WHERE agent = ?
@@ -137,7 +140,9 @@ def agent_history(agent_name: str, limit: int = Query(20, ge=1, le=100)):
         rows = conn.execute(
             """
             SELECT trace_id, created_at, confidence,
-                   json_extract(response, '$.summary') AS summary,
+                   CASE WHEN json_valid(response)
+                        THEN json_extract(response, '$.summary')
+                        ELSE NULL END AS summary,
                    latency_ms, model
             FROM llm_traces
             WHERE agent = ?

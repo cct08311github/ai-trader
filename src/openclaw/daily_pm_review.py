@@ -12,9 +12,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Dict, Optional
+
+_log = logging.getLogger("daily_pm_review")
 
 _STATE_PATH = os.path.join(os.path.dirname(__file__), "../../config/daily_pm_state.json")
 
@@ -140,7 +144,21 @@ def run_daily_pm_review(
     from openclaw.pm_debate import build_debate_prompt, parse_debate_response
 
     prompt = build_debate_prompt(context)
-    result = llm_call(model, prompt)
+    _retry_waits = [5, 15, 30]
+    last_exc: Exception | None = None
+    result = None
+    for attempt, wait in enumerate([0] + _retry_waits, start=1):
+        if wait:
+            _log.warning("PM review LLM 重試 %d/%d，等待 %ds…", attempt, len(_retry_waits) + 1, wait)
+            time.sleep(wait)
+        try:
+            result = llm_call(model, prompt)
+            break
+        except Exception as exc:
+            _log.error("PM review LLM 呼叫失敗（第 %d 次）: %s", attempt, exc)
+            last_exc = exc
+    if result is None:
+        raise last_exc  # type: ignore[misc]
 
     # Capture transparency metadata BEFORE parse_debate_response processes the dict,
     # since it only reads known fields and _prompt/_raw_response would be discarded.
