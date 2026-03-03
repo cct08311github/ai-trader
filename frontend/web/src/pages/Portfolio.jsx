@@ -311,8 +311,8 @@ export default function PortfolioPage() {
                 <th className="px-4 py-3">現價</th>
                 <th className="px-4 py-3">數量</th>
                 <th className="px-4 py-3">未實現損益</th>
-                <th className="px-4 py-3">持倉比例</th>
-                <th className="px-4 py-3">籌碼評分</th>
+                <th className="hidden sm:table-cell px-4 py-3">持倉比例</th>
+                <th className="hidden sm:table-cell px-4 py-3">籌碼評分</th>
                 <th className="px-4 py-3">操作</th>
               </tr>
             </thead>
@@ -351,8 +351,8 @@ export default function PortfolioPage() {
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
                     <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
-                    <td className="px-4 py-3">
+                    <td className="hidden sm:table-cell px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
+                    <td className="hidden sm:table-cell px-4 py-3">
                       <ChipScoreBar score={p.chip_score ?? p.chip_health_score ?? null} />
                     </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>

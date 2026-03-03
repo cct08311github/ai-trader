@@ -152,7 +152,7 @@ export default function LogTerminal() {
 
       {err && <div className="rounded-lg border border-rose-800 bg-rose-900/20 p-3 text-xs text-rose-300">{err}</div>}
 
-      <div ref={boxRef} className="h-96 overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 font-mono text-xs">
+      <div ref={boxRef} className="h-64 sm:h-80 md:h-96 overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 font-mono text-xs">
         {filtered.length === 0 ? (
           <div className="text-slate-500">尚無日誌（等待 SSE 推送...）</div>
         ) : (
@@ -163,11 +163,11 @@ export default function LogTerminal() {
               const meta = [l?.agent, l?.model, l?.trace_id].filter(Boolean).join(' · ')
               return (
                 <div key={`${l?.ts || idx}-${idx}`} className="flex gap-3">
-                  <div className="w-44 shrink-0 text-slate-500">{formatTs(l?.ts)}</div>
+                  <div className="w-28 sm:w-44 shrink-0 text-slate-500">{formatTs(l?.ts)}</div>
                   <div className={`w-14 shrink-0 ${color}`}>{lv}</div>
                   <div className="min-w-0 flex-1">
                     <div className={`${color} break-words`}>{l?.message || JSON.stringify(l)}</div>
-                    {meta && <div className="mt-0.5 text-[10px] text-slate-500 break-words">{meta}</div>}
+                    {meta && <div className="mt-0.5 text-[11px] text-slate-500 break-words">{meta}</div>}
                   </div>
                 </div>
               )

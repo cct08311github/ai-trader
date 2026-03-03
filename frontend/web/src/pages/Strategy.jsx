@@ -279,7 +279,7 @@ function JsonBox({ value }) {
   if (!text) return <div className="text-xs text-slate-500">（無內容）</div>
 
   return (
-    <pre className="max-h-[55vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200">
+    <pre className="max-h-[55vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200 whitespace-pre-wrap break-words">
       {text}
     </pre>
   )
@@ -294,7 +294,7 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel" onMouseDown={e => e.stopPropagation()}>
+      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel overflow-y-auto max-h-[90dvh]" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-200">提案詳情</div>
@@ -501,7 +501,7 @@ export default function StrategyPage() {
         {error && <div className="mt-4 rounded-lg border border-rose-800 bg-rose-900/20 p-3 text-xs text-rose-300">{error}</div>}
 
         <div className="mt-5 overflow-auto rounded-xl border border-slate-800">
-          <table className="min-w-[980px] w-full text-left text-xs">
+          <table className="min-w-full sm:min-w-[980px] w-full text-left text-xs">
             <thead className="bg-slate-950/40 text-slate-400">
               <tr>
                 <th className="px-4 py-3">時間</th>
