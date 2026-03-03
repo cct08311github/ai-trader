@@ -126,6 +126,7 @@ class AgentResult:
     action_type: str          # observe | suggest | config_change
     proposals: List[Dict[str, Any]]
     raw: Dict[str, Any]
+    success: bool = True
 
 
 def to_agent_result(d: Dict[str, Any]) -> AgentResult:
