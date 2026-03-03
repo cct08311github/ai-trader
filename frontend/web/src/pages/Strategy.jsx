@@ -279,7 +279,7 @@ function JsonBox({ value }) {
   if (!text) return <div className="text-xs text-slate-500">（無內容）</div>
 
   return (
-    <pre className="max-h-[55vh] overflow-auto rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200 whitespace-pre-wrap break-words">
+    <pre className="max-h-[35vh] sm:max-h-[55vh] overflow-y-auto overflow-x-hidden rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-200 whitespace-pre-wrap break-all">
       {text}
     </pre>
   )
@@ -294,7 +294,7 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel overflow-y-auto max-h-[90dvh]" onMouseDown={e => e.stopPropagation()}>
+      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-panel overflow-y-auto overflow-x-hidden max-h-[90dvh]" onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold text-slate-200">提案詳情</div>
