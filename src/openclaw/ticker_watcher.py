@@ -561,6 +561,14 @@ def run_watcher() -> None:
                 _last = snaps[_sym]["close"] if _sym in snaps else _avg
                 all_pos_map[_sym] = Position(symbol=_sym, qty=_qty, avg_price=_avg, last_price=_last)
 
+            # ── 回寫最新市價與未實現損益到 positions 表 ─────────────────
+            for _sym, _pos in all_pos_map.items():
+                _upnl = round((_pos.last_price - _pos.avg_price) * _pos.qty, 2)
+                conn.execute(
+                    "UPDATE positions SET current_price=?, unrealized_pnl=? WHERE symbol=?",
+                    (_pos.last_price, _upnl, _sym),
+                )
+
             for symbol in active_watchlist:
                 snap      = snaps[symbol]
                 pos_entry = positions.get(symbol)          # (qty, avg_price) or None
