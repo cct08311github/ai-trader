@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import ssl
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Optional
 from urllib.request import Request, urlopen
 
+# TWSE certs are missing Subject Key Identifier (RFC 5280 §4.2.1.2),
+# which Python 3.14 now enforces. TWSE is a trusted government source.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 # TWSE OpenAPI (no auth) commonly used for 3-institution flows.
 # We keep this as default, but parsing is defensive and unit tests can inject payloads.
@@ -29,7 +35,7 @@ class InstitutionFlowRow:
 
 def _fetch_text(url: str, timeout: int = 20) -> str:
     req = Request(url, headers={"User-Agent": "OpenClaw/1.2.1"})
-    with urlopen(req, timeout=timeout) as resp:
+    with urlopen(req, context=_SSL_CTX, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 

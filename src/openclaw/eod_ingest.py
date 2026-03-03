@@ -6,12 +6,22 @@ import io
 import json
 import re
 import sqlite3
+import ssl
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.request import Request, urlopen
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
+
+# TWSE/TPEx certs are missing Subject Key Identifier (RFC 5280 §4.2.1.2),
+# which Python 3.14 now enforces. These are trusted government sources.
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 
 TWSE_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -37,7 +47,7 @@ class EODRow:
 
 def _fetch_text(url: str, timeout: int = 20, encoding: str = "utf-8") -> str:
     req = Request(url, headers={"User-Agent": "OpenClaw/1.2.1"})
-    with urlopen(req, timeout=timeout) as resp:
+    with urlopen(req, context=_SSL_CTX, timeout=timeout) as resp:
         raw = resp.read()
         return raw.decode(encoding, errors="replace")
 
@@ -231,7 +241,7 @@ def apply_migration_if_needed(conn: sqlite3.Connection, sql_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest TWSE + TPEx EOD data into SQLite.")
-    parser.add_argument("--db", default="openclaw_demo.db")
+    parser.add_argument("--db", default=_DEFAULT_DB)
     parser.add_argument("--trade-date", default=datetime.now().strftime("%Y-%m-%d"))
     parser.add_argument("--apply-migration", action="store_true")
     args = parser.parse_args()
