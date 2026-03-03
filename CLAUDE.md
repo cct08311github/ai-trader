@@ -45,6 +45,8 @@ trading_enabled = true
 | `ticker_watcher.py` | 每 3 分鐘掃盤、自動選股 |
 | `sentinel.py` | 市場異常偵測 |
 | `memory_store.py` | 跨次決策記憶 |
+| `technical_indicators.py` | 技術指標純函數（MA/RSI/MACD/支撐壓力） |
+| `agents/eod_analysis.py` | 盤後分析 Agent（每交易日 16:35 TWN Cron） |
 | `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
 | `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
 
@@ -68,6 +70,7 @@ trading_enabled = true
 | stream | `/api/stream` | Log SSE 串流 |
 | control | `/api/control` | 緊急停止、模式切換 |
 | settings | `/api/settings` | 系統設定讀寫 |
+| analysis | `/api/analysis` | 盤後分析快照（latest/dates/{date}） |
 
 ### Auth Middleware
 
@@ -91,6 +94,7 @@ trading_enabled = true
 | Strategy | `/strategy` | 提案、LLM trace 透明化 |
 | Trades | `/trades` | 訂單 / 成交紀錄 |
 | System | `/system` | 主開關、設定 |
+| Analysis | `/analysis` | 盤後分析（3 Tab：市場概覽/個股技術/AI 策略） |
 
 ### 版本號
 
@@ -123,6 +127,7 @@ trading_enabled = true
 | `risk_checks` | 風控檢查紀錄 |
 | `incidents` | 異常事件 |
 | `risk_limits` | 風控參數 |
+| `eod_analysis_reports` | 盤後分析快照（market_summary/technical/strategy JSON，每日一筆） |
 
 > **注意**：舊版 `trades` 表已廢棄，API 查詢改為 `orders JOIN fills`
 
@@ -173,6 +178,8 @@ pytest -q   # 根目錄 pytest.ini
 - 兩個獨立 FastAPI 測試目錄，各有自己的 `conftest.py`：
   - `frontend/backend/tests/`
   - `tests/frontend_backend/`
+- **FastAPI `conn_dep` generator 500 路徑**：不能 patch `conn_dep` 本身；必須 `monkeypatch.setattr(db_mod, "get_conn", broken_ctx)` + `monkeypatch.setattr(aa, "db", db_mod)`
+- **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
 
 ### 前端 JavaScript（vitest）
 
@@ -186,7 +193,14 @@ cd frontend/web && npm test -- --run
 
 ---
 
-## 九、常用 CI 指令
+## 九、設計文件
+
+- `docs/plans/` — Brainstorming / Writing Plans 產出，設計文件與實作計劃
+- 命名規則：`YYYY-MM-DD-<feature>-design.md` / `YYYY-MM-DD-<feature>-plan.md`
+
+---
+
+## 十、常用 CI 指令
 
 ```bash
 gh run list --limit 5          # 查看最近 CI
@@ -196,10 +210,11 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 
 ---
 
-## 十、變更歷史摘要
+## 十一、變更歷史摘要
 
 | 版本 | 重點 |
 |------|------|
 | v4.6.x | PM review 連接 Strategy debate panel；LLM trace 透明化；PmStatusCard 移至 Portfolio |
 | v4.7.x | ticker_watcher 啟動；API 從 trades 遷移至 orders/fills；前端重構 |
 | v4.8.x | Chat 功能（浮動視窗）；CI 全面修復（auth、schema、loading 文字） |
+| v4.9.x | 盤後分析頁面（/analysis）；eod_analysis agent；technical_indicators 模組；三新模組 100% 覆蓋 |
