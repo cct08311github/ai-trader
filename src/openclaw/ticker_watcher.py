@@ -495,6 +495,7 @@ def run_watcher() -> None:
 
     # 內存持倉追蹤：symbol → (qty, avg_price)（watcher 重啟後清空，從 DB sync）
     positions: Dict[str, tuple[int, float]] = {}
+    high_water_marks: Dict[str, float] = {}  # symbol → 持倉後最高收盤價
     # 每支股票的收盤價歷史（供 market regime / cash mode 評估）
     price_history: Dict[str, List[float]] = {}
     cash_mode_state: bool = False  # True = reduce-only，不開新倉
@@ -502,8 +503,12 @@ def run_watcher() -> None:
     # 啟動時從 positions table 恢復持倉（避免重啟後遺忘已有部位）
     try:
         _conn_init = _open_conn()
-        for _row in _conn_init.execute("SELECT symbol, quantity, avg_price FROM positions WHERE quantity > 0").fetchall():
+        for _row in _conn_init.execute(
+            "SELECT symbol, quantity, avg_price, high_water_mark FROM positions WHERE quantity > 0"
+        ).fetchall():
             positions[_row[0]] = (int(_row[1]), float(_row[2]))
+            if _row[3]:
+                high_water_marks[_row[0]] = float(_row[3])
         _conn_init.close()
         if positions:
             log.info("Restored %d positions from DB: %s", len(positions), list(positions.keys()))
@@ -612,7 +617,30 @@ def run_watcher() -> None:
                 snap      = snaps[symbol]
                 pos_entry = positions.get(symbol)          # (qty, avg_price) or None
                 avg_price = pos_entry[1] if pos_entry else None
-                signal    = _generate_signal(snap, avg_price)
+
+                # 更新高水位記憶（每次掃盤）
+                cur_close = snap["close"]
+                if avg_price is not None:
+                    hwm = high_water_marks.get(symbol, cur_close)
+                    if cur_close > hwm:
+                        high_water_marks[symbol] = cur_close
+                        conn.execute(
+                            "UPDATE positions SET high_water_mark=? WHERE symbol=?",
+                            (cur_close, symbol)
+                        )
+
+                # EOD 日線驅動信號（Strangler Fig：取代舊 _generate_signal）
+                try:
+                    from openclaw.signal_generator import compute_signal as _sg_compute
+                    signal = _sg_compute(
+                        conn, symbol=symbol,
+                        position_avg_price=avg_price,
+                        high_water_mark=high_water_marks.get(symbol),
+                    )
+                except Exception as _sg_err:
+                    log.warning("[%s] signal_generator failed (%s), fallback", symbol, _sg_err)
+                    signal = _generate_signal(snap, avg_price,
+                                              high_water_mark=high_water_marks.get(symbol))
                 decision_id = str(uuid.uuid4())
 
                 # ── Mock 防護：mock 資料禁止開新倉（buy） ────────────────
