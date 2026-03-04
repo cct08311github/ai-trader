@@ -24,7 +24,8 @@ agent_orchestrator (Gemini agents)   ─┘
 - **Portfolio 管理**：持倉追蹤、未實現損益即時回寫、損益曲線
 - **AI 決策管線**：PM 辯論（Bull/Bear/Arbiter）、每日審核、風控引擎
 - **盤後分析**：每日 16:35 自動計算 MA/RSI/MACD + Gemini 策略建議 → `/analysis` 頁面
-- **即時報價**：Shioaji BidAsk SSE → 點擊持倉顯示五檔
+- **K 線圖**：點擊持倉顯示 60 日日線蠟燭圖（純 SVG）+ 成交量
+- **即時報價**：Shioaji BidAsk SSE → 五檔行情；休市時自動 fallback 至最後 EOD 收盤資料
 - **多 Agent 排程**：市場研究/Portfolio 審核/策略委員會/系統優化/健康監控
 - **Chat 助手**：浮動視窗，SSE 串流回應
 
@@ -48,6 +49,9 @@ tail -f logs/gateway.err.log
 |------|------|
 | `/api/auth` | Bearer token 登入 |
 | `/api/portfolio` | 持倉、交易紀錄 |
+| `/api/portfolio/quote/{symbol}` | 即時快照（休市時 fallback EOD） |
+| `/api/portfolio/kline/{symbol}?days=60` | K 線 OHLCV（查 eod_prices） |
+| `/api/portfolio/quote-stream/{symbol}` | BidAsk SSE 五檔即時推送 |
 | `/api/strategy` | 提案、LLM traces |
 | `/api/analysis` | 盤後分析快照（latest / dates / {date}） |
 | `/api/pm` | PM review 觸發 |
@@ -109,3 +113,4 @@ cd frontend/web && npm test -- --run
 | v4.7.x | ticker_watcher；orders/fills 遷移 |
 | v4.8.x | Chat 浮動視窗；CI 全面修復 |
 | v4.9.x | 盤後分析（/analysis）；eod_analysis agent；technical_indicators；100% 覆蓋率 |
+| v4.10.x | 持倉 Drawer K 線圖；quote EOD fallback；設定頁 dirty 修正 |

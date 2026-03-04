@@ -72,6 +72,11 @@ trading_enabled = true
 | settings | `/api/settings` | 系統設定讀寫 |
 | analysis | `/api/analysis` | 盤後分析快照（latest/dates/{date}） |
 
+**portfolio 路由重要 endpoint**：
+- `GET /api/portfolio/quote/{symbol}` — 即時快照；Shioaji 失敗時 fallback 到 `eod_prices` 最後收盤（`source: "eod"`）
+- `GET /api/portfolio/kline/{symbol}?days=60` — K 線歷史 OHLCV（查 `eod_prices`）
+- `GET /api/portfolio/quote-stream/{symbol}` — BidAsk SSE（五檔即時推送）
+
 ### Auth Middleware
 
 - `AuthMiddleware` 強制所有請求帶 `Authorization: Bearer <token>`
@@ -109,6 +114,13 @@ trading_enabled = true
 - `ChatButton`：`fixed bottom-6 right-20`（偏移至 80px，避免被 FloatingLogout 遮蓋）
 - Chat 視窗：`360×480px` 浮動，不使用 backdrop，不遮擋主畫面
 
+### PositionDetailDrawer（持倉側邊抽屜）
+
+點擊 Portfolio 持倉列觸發，包含：
+1. **即時報價（QuotePanel）**：開盤時接 Shioaji SSE 五檔；休市時 fallback 顯示 `eod_prices` 最後收盤，標籤改為「最後收盤資料（YYYY-MM-DD）」
+2. **K 線圖（KlineChart）**：純 SVG 元件，查 `/api/portfolio/kline/{symbol}` 顯示日線蠟燭 + 成交量（60 日）
+3. 持倉摘要、決策鏈、止損/止盈、籌碼趨勢
+
 ---
 
 ## 六、資料庫
@@ -128,6 +140,7 @@ trading_enabled = true
 | `incidents` | 異常事件 |
 | `risk_limits` | 風控參數 |
 | `eod_analysis_reports` | 盤後分析快照（market_summary/technical/strategy JSON，每日一筆） |
+| `eod_prices` | 每日 OHLCV（trade_date/symbol/open/high/low/close/volume），K 線來源 |
 
 > **注意**：舊版 `trades` 表已廢棄，API 查詢改為 `orders JOIN fills`
 
@@ -218,3 +231,4 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 | v4.7.x | ticker_watcher 啟動；API 從 trades 遷移至 orders/fills；前端重構 |
 | v4.8.x | Chat 功能（浮動視窗）；CI 全面修復（auth、schema、loading 文字） |
 | v4.9.x | 盤後分析頁面（/analysis）；eod_analysis agent；technical_indicators 模組；三新模組 100% 覆蓋 |
+| v4.10.x | 持倉 Drawer K 線圖（純 SVG）；quote EOD fallback；設定頁 dirty 狀態修正 |
