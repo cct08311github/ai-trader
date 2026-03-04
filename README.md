@@ -23,6 +23,9 @@ agent_orchestrator (Gemini agents)   ─┘
 
 - **Portfolio 管理**：持倉追蹤、未實現損益即時回寫、損益曲線
 - **AI 決策管線**：PM 辯論（Bull/Bear/Arbiter）、每日審核、風控引擎
+- **全自動策略審查**：Gemini 每日盤前 PM review + 盤中 pending proposals 自動核准/拒絕，Telegram 雙向通知
+- **EOD 驅動信號**：MA5/MA20 黃金交叉 + RSI 確認；Trailing Stop 動態收緊（獲利 >50% 時 5%→3%）
+- **集中度守衛**：單檔 >60% 自動減倉提案；40-60% Gemini 審查後核准
 - **盤後分析**：每日 16:35 自動計算 MA/RSI/MACD + Gemini 策略建議 → `/analysis` 頁面
 - **K 線圖**：點擊持倉顯示 60 日日線蠟燭圖（純 SVG）+ 成交量
 - **即時報價**：Shioaji BidAsk SSE → 五檔行情；休市時自動 fallback 至最後 EOD 收盤資料
@@ -114,3 +117,4 @@ cd frontend/web && npm test -- --run
 | v4.8.x | Chat 浮動視窗；CI 全面修復 |
 | v4.9.x | 盤後分析（/analysis）；eod_analysis agent；technical_indicators；100% 覆蓋率 |
 | v4.10.x | 持倉 Drawer K 線圖；quote EOD fallback；設定頁 dirty 修正 |
+| v4.11.x | EOD 信號重構（signal_generator）；Trailing Stop；T+2 追蹤；實際費率；全自動策略審查；Telegram 通知 |

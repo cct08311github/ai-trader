@@ -45,7 +45,12 @@ trading_enabled = true
 | `ticker_watcher.py` | 每 3 分鐘掃盤、自動選股 |
 | `sentinel.py` | 市場異常偵測 |
 | `memory_store.py` | 跨次決策記憶 |
-| `technical_indicators.py` | 技術指標純函數（MA/RSI/MACD/支撐壓力） |
+| `technical_indicators.py` | 技術指標純函數（MA/RSI/MACD/ATR/支撐壓力） |
+| `signal_generator.py` | EOD 日線驅動信號（MA 黃金交叉 + RSI + Trailing Stop） |
+| `concentration_guard.py` | 集中度守衛（>60% 自動減倉 / 40-60% Gemini 審查） |
+| `proposal_executor.py` | approved proposal 自動執行（建立 sell 訂單） |
+| `proposal_reviewer.py` | Gemini 自動審查 pending proposals + Telegram 通知 |
+| `tg_notify.py` | Telegram Bot API 輕量通知工具 |
 | `agents/eod_analysis.py` | 盤後分析 Agent（每交易日 16:35 TWN Cron） |
 | `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
 | `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
@@ -167,6 +172,33 @@ pm2 logs ai-trader-watcher  # 看掃盤 log
 - 目前程式碼固定 `sj.Shioaji(simulation=True)` → 永豐模擬帳戶下單，不影響真實部位
 - 切換為實際下單：修改 `ticker_watcher.py` 中 `simulation=True` → `False`
 
+### 自動策略審查流程（v4.11.x）
+
+```
+08:30 cron
+  → trigger_pm_review.py → POST /api/pm/review
+  → Gemini 多空辯論（持倉/近期交易/7日損益 作為 context）
+  → 寫 episodic_memory（審查紀錄）+ llm_traces（完整 prompt/response）
+  → Telegram 通知：✅ 授權 / 🚫 封鎖 + 多空論點
+
+盤中每 3 分鐘
+  → signal_generator（EOD MA 黃金交叉 + RSI + Trailing Stop）
+  → risk_engine 7 層風控 → 自動下單（止損單跳過滑點/偏離檢查）
+  → concentration_guard（>60% 自動減倉 / 40-60% 生成 pending）
+  → proposal_reviewer（Gemini 審查 pending）
+      → approve/reject + Telegram 通知
+  → proposal_executor（執行 approved）
+```
+
+**Telegram 通知環境變數**：
+- `TELEGRAM_BOT_TOKEN` — 從 `~/.openclaw/.env` 載入
+- `TELEGRAM_CHAT_ID` — 預設 `1017252031`（可覆蓋）
+
+**交易成本（v4.11.x）**：
+- 手續費：`price × qty × 0.1425%`（買賣雙向）
+- 證交稅：`price × qty × 0.3%`（sell only）
+- T+2 交割日：買單自動填入 `orders.settlement_date`
+
 ---
 
 ## 八、測試規範
@@ -232,3 +264,4 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 | v4.8.x | Chat 功能（浮動視窗）；CI 全面修復（auth、schema、loading 文字） |
 | v4.9.x | 盤後分析頁面（/analysis）；eod_analysis agent；technical_indicators 模組；三新模組 100% 覆蓋 |
 | v4.10.x | 持倉 Drawer K 線圖（純 SVG）；quote EOD fallback；設定頁 dirty 狀態修正 |
+| v4.11.x | Strangler Fig 信號重構；Trailing Stop；T+2 交割追蹤；實際費率；Gemini 全自動策略審查；Telegram 雙向通知 |
