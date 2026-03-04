@@ -907,6 +907,27 @@ def get_quote_snapshot(symbol: str):
             }
     except Exception:
         pass
+    # Fallback: last EOD close from eod_prices
+    try:
+        with get_conn() as conn:
+            row = conn.execute(
+                "SELECT trade_date, open, high, low, close, volume "
+                "FROM eod_prices WHERE symbol = ? ORDER BY trade_date DESC LIMIT 1",
+                (symbol,),
+            ).fetchone()
+            if row:
+                return {
+                    "status": "ok", "symbol": symbol, "source": "eod",
+                    "data": {
+                        "close": row["close"], "reference": row["close"],
+                        "change_price": 0.0, "change_rate": 0.0,
+                        "volume": int(row["volume"] or 0), "total_amount": 0,
+                        "bid_price": 0.0, "ask_price": 0.0,
+                        "trade_date": row["trade_date"],
+                    },
+                }
+    except Exception:
+        pass
     return {"status": "ok", "symbol": symbol, "source": "closed", "data": None}
 
 
@@ -948,3 +969,18 @@ async def get_quote_stream(symbol: str, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/kline/{symbol}")
+def get_kline(symbol: str, days: int = 60):
+    """K線歷史資料：查詢 eod_prices 最近 N 日 OHLCV。"""
+    symbol = symbol.strip().upper()
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT trade_date, open, high, low, close, volume "
+            "FROM eod_prices WHERE symbol = ? "
+            "ORDER BY trade_date DESC LIMIT ?",
+            (symbol, days),
+        ).fetchall()
+    data = [dict(r) for r in reversed(rows)]
+    return {"symbol": symbol, "data": data}
