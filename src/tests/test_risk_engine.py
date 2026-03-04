@@ -519,3 +519,37 @@ def test_correlation_guard_exception_captured_in_metrics():
         )
     assert "correlation_guard_error" in result.metrics
     assert "boom" in result.metrics["correlation_guard_error"]
+
+
+def test_close_position_order_skips_slippage_check():
+    """平倉 sell 單即使 slippage 超標也應通過風控（跌停板止損場景）"""
+    pf = _base_portfolio()
+    pf.positions["2330"] = Position(symbol="2330", qty=100, avg_price=700.0, last_price=500.0)
+    d = _base_decision()
+    d.signal_side = "sell"
+
+    # 跌停板：bid 極低 → slippage 天文數字
+    # 設 max_slippage_bps=1（非常嚴格），但平倉應豁免
+    limits = _test_limits()
+    limits["max_slippage_bps"] = 1   # 近乎 0 slippage 允許值
+
+    mkt = MarketState(best_bid=1.0, best_ask=510.0, volume_1m=100, feed_delay_ms=50)
+
+    result = evaluate_and_build_order(d, mkt, pf, limits, _base_system())
+    assert result.approved, f"平倉單應通過風控，但被拒絕：{result.reject_code}"
+
+
+def test_close_position_order_skips_price_deviation_check():
+    """平倉 sell 單即使 price_deviation 超標也應通過"""
+    pf = _base_portfolio()
+    pf.positions["2330"] = Position(symbol="2330", qty=100, avg_price=700.0, last_price=500.0)
+    d = _base_decision()
+    d.signal_side = "sell"
+
+    limits = _test_limits()
+    limits["max_price_deviation_pct"] = 0.0001   # 極嚴苛：0.01% 偏差
+
+    mkt = MarketState(best_bid=100.0, best_ask=110.0, volume_1m=100, feed_delay_ms=50)
+
+    result = evaluate_and_build_order(d, mkt, pf, limits, _base_system())
+    assert result.approved, f"平倉單應通過風控，但被拒絕：{result.reject_code}"

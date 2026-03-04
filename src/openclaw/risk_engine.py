@@ -270,18 +270,21 @@ def evaluate_and_build_order(
     if system_state.reduce_only_mode and candidate.opens_new_position:
         return EvaluationResult(False, "RISK_CONSECUTIVE_LOSSES", metrics=base_metrics)
 
-    mid = (market.best_bid + market.best_ask) / 2
-    price_dev_pct = abs(candidate.price - mid) / max(mid, 0.01)
-    if price_dev_pct > limits["max_price_deviation_pct"]:
-        m = dict(base_metrics)
-        m["price_dev_pct"] = price_dev_pct
-        return EvaluationResult(False, "RISK_PRICE_DEVIATION_LIMIT", metrics=m)
+    # ── 平倉單跳過 price deviation 和 slippage 檢查 ─────────────────────────
+    # 理由：跌停板時 bid 消失，slippage 計算無意義；止損必須無條件通過
+    if candidate.opens_new_position:
+        mid = (market.best_bid + market.best_ask) / 2
+        price_dev_pct = abs(candidate.price - mid) / max(mid, 0.01)
+        if price_dev_pct > limits["max_price_deviation_pct"]:
+            m = dict(base_metrics)
+            m["price_dev_pct"] = price_dev_pct
+            return EvaluationResult(False, "RISK_PRICE_DEVIATION_LIMIT", metrics=m)
 
-    slippage_bps = _estimate_slippage_bps(candidate, market)
-    if slippage_bps > limits["max_slippage_bps"]:
-        m = dict(base_metrics)
-        m["slippage_bps"] = slippage_bps
-        return EvaluationResult(False, "RISK_SLIPPAGE_ESTIMATE_LIMIT", metrics=m)
+        slippage_bps = _estimate_slippage_bps(candidate, market)
+        if slippage_bps > limits["max_slippage_bps"]:
+            m = dict(base_metrics)
+            m["slippage_bps"] = slippage_bps
+            return EvaluationResult(False, "RISK_SLIPPAGE_ESTIMATE_LIMIT", metrics=m)
 
     max_qty = int(market.volume_1m * limits["max_qty_to_1m_volume_ratio"])
     if candidate.qty > max_qty:
