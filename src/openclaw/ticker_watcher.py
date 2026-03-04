@@ -766,13 +766,21 @@ def run_watcher() -> None:
                             # Compute realized PnL and persist to daily_pnl_summary
                             try:
                                 trade_date = dt.datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+                                # 讀取實際成交費用（fills 已存入正確手續費 + 證交稅）
+                                _fill_row = conn.execute(
+                                    "SELECT COALESCE(SUM(fee),0.0), COALESCE(SUM(tax),0.0)"
+                                    " FROM fills WHERE order_id=?",
+                                    (order_id,),
+                                ).fetchone()
+                                sell_fee = float(_fill_row[0])
+                                sell_tax = float(_fill_row[1])
                                 pnl = on_sell_filled(
                                     conn,
                                     symbol=symbol,
                                     sell_qty=result.order.qty,
                                     sell_price=result.order.price,
-                                    sell_fee=0.0,
-                                    sell_tax=0.0,
+                                    sell_fee=sell_fee,
+                                    sell_tax=sell_tax,
                                     trade_date=trade_date,
                                 )
                                 log.info("[%s] realized_pnl=%.2f written to daily_pnl_summary", symbol, pnl)

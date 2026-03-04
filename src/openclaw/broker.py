@@ -80,22 +80,36 @@ class SimBrokerAdapter:
         cnt = self._poll_count.get(broker_order_id, 0) + 1
         self._poll_count[broker_order_id] = cnt
         qty = int(order["qty"])
+        price = float(order["price"])
+        side = order["side"]
+
+        # 台股實際手續費：0.1425%（買賣），證交稅：0.3%（僅 sell）
+        _COMMISSION_RATE = 0.001425
+        _TAX_RATE_SELL = 0.003
+
         if cnt == 1:
+            partial_qty = max(1, qty // 2)
+            partial_value = price * partial_qty
+            fee = round(partial_value * _COMMISSION_RATE, 2)
+            tax = round(partial_value * _TAX_RATE_SELL, 2) if side == "sell" else 0.0
             return BrokerOrderStatus(
                 broker_order_id=broker_order_id,
                 status="partially_filled",
-                filled_qty=max(1, qty // 2),
-                avg_fill_price=float(order["price"]),
-                fee=20.0,
-                tax=30.0,
+                filled_qty=partial_qty,
+                avg_fill_price=price,
+                fee=fee,
+                tax=tax,
             )
+        full_value = price * qty
+        fee = round(full_value * _COMMISSION_RATE, 2)
+        tax = round(full_value * _TAX_RATE_SELL, 2) if side == "sell" else 0.0
         return BrokerOrderStatus(
             broker_order_id=broker_order_id,
             status="filled",
             filled_qty=qty,
-            avg_fill_price=float(order["price"]),
-            fee=40.0,
-            tax=60.0,
+            avg_fill_price=price,
+            fee=fee,
+            tax=tax,
         )
 
     def cancel_order(self, broker_order_id: str) -> BrokerSubmission:

@@ -63,21 +63,23 @@ def test_sim_broker_adapter_poll_order_status():
     )
     submission = adapter.submit_order("order-123", candidate)
     
-    # First poll: partially filled
+    # First poll: partially filled — buy side: fee=0.1425%, no tax
     status1 = adapter.poll_order_status(submission.broker_order_id)
     assert isinstance(status1, BrokerOrderStatus)
     assert status1.status == "partially_filled"
     assert status1.filled_qty == 500  # half of 1000
     assert status1.avg_fill_price == 580.0
-    assert status1.fee == 20.0
-    assert status1.tax == 30.0
-    
+    # 500 * 580.0 * 0.001425 = 413.25
+    assert status1.fee == round(500 * 580.0 * 0.001425, 2)
+    assert status1.tax == 0.0   # buy 無證交稅
+
     # Second poll: filled
     status2 = adapter.poll_order_status(submission.broker_order_id)
     assert status2.status == "filled"
     assert status2.filled_qty == 1000
-    assert status2.fee == 40.0
-    assert status2.tax == 60.0
+    # 1000 * 580.0 * 0.001425 = 826.5
+    assert status2.fee == round(1000 * 580.0 * 0.001425, 2)
+    assert status2.tax == 0.0   # buy 無證交稅
     
     # Third poll: still filled (should remain filled)
     status3 = adapter.poll_order_status(submission.broker_order_id)
