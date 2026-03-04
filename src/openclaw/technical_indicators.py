@@ -111,3 +111,32 @@ def find_support_resistance(
     resistance = sum(recent_highs[-q:]) / q
     support    = sum(recent_lows[:q]) / q
     return {"support": round(support, 2), "resistance": round(resistance, 2)}
+
+
+def atr(candles: list[dict], period: int = 14) -> float | None:
+    """Average True Range (ATR) — Wilder's smoothing method.
+
+    Args:
+        candles: list of {"high": float, "low": float, "close": float}，時間由舊到新
+        period:  ATR 週期（預設 14）
+
+    Returns:
+        ATR 值（float），資料不足 period+1 根時回傳 None
+    """
+    if len(candles) < period + 1:
+        return None
+
+    true_ranges = []
+    for i in range(1, len(candles)):
+        high = candles[i]["high"]
+        low  = candles[i]["low"]
+        prev_close = candles[i - 1]["close"]
+        tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+        true_ranges.append(tr)
+
+    # Wilder's smoothing：初始值用簡單平均（前 period 根 TR）
+    atr_val = sum(true_ranges[:period]) / period
+    for tr in true_ranges[period:]:
+        atr_val = (atr_val * (period - 1) + tr) / period
+
+    return round(atr_val, 4)

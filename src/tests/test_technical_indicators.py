@@ -64,3 +64,40 @@ def test_calc_rsi_all_none_prefix_length():
     assert all(v is None for v in rsi[:14])
     # 第 14 個（index 14）起有值
     assert rsi[14] is not None
+
+
+# ── ATR(14) — Task 4 ──────────────────────────────────────────────────────────
+
+def test_atr_basic():
+    """ATR(14) 基本計算：結果為正 float"""
+    from openclaw.technical_indicators import atr
+    candles = [{"high": 100 + i, "low": 99 + i, "close": 99.5 + i} for i in range(15)]
+    result = atr(candles, period=14)
+    assert isinstance(result, float)
+    assert result > 0
+    assert result < 5  # 合理範圍（振幅約 1）
+
+
+def test_atr_insufficient_data_returns_none():
+    """資料不足 period+1 根時回傳 None"""
+    from openclaw.technical_indicators import atr
+    candles = [{"high": 100, "low": 99, "close": 99.5}] * 10
+    result = atr(candles, period=14)
+    assert result is None
+
+
+def test_atr_volatile_market():
+    """高波動市場 ATR 較大"""
+    from openclaw.technical_indicators import atr
+    candles = [{"high": 110, "low": 90, "close": 100}] * 20
+    result = atr(candles, period=14)
+    assert result is not None
+    assert result > 8  # 振幅 20，ATR 接近 20
+
+
+def test_atr_exact_period_boundary():
+    """剛好 period+1 筆資料能計算（最小有效輸入）"""
+    from openclaw.technical_indicators import atr
+    candles = [{"high": 100, "low": 99, "close": 99.5}] * 15  # 14+1
+    result = atr(candles, period=14)
+    assert result is not None
