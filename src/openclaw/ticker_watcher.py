@@ -43,13 +43,32 @@ _CASH_MODE_MIN_PRICES: int = 20  # 至少需要此筆數才能評估 market regi
 
 # 信號閾值（可透過環境變數覆寫）
 import os as _os
-_BUY_SIGNAL_PCT:      float = float(_os.environ.get("BUY_SIGNAL_PCT",  "0.002"))  # close < ref*(1-0.2%)
-_TAKE_PROFIT_PCT:     float = float(_os.environ.get("TAKE_PROFIT_PCT", "0.02"))   # +2% 止盈
-_STOP_LOSS_PCT:       float = float(_os.environ.get("STOP_LOSS_PCT",   "0.03"))   # -3% 止損
+_BUY_SIGNAL_PCT:           float = float(_os.environ.get("BUY_SIGNAL_PCT",    "0.002"))  # close < ref*(1-0.2%)
+_TAKE_PROFIT_PCT:          float = float(_os.environ.get("TAKE_PROFIT_PCT",   "0.02"))   # +2% 止盈
+_STOP_LOSS_PCT:            float = float(_os.environ.get("STOP_LOSS_PCT",     "0.03"))   # -3% 止損
+_TRAILING_PCT_BASE:        float = float(_os.environ.get("TRAILING_PCT",      "0.05"))   # Trailing Stop 基礎 5%
+_TRAILING_PCT_TIGHT:       float = float(_os.environ.get("TRAILING_PCT_TIGHT","0.03"))   # 大獲利收緊至 3%
+_TRAILING_PROFIT_THRESHOLD: float = 0.50  # 獲利超過 50% 啟用收緊 trailing
 
 # ── DB 連線（直接指向 data/sqlite/trades.db，與前端共用）────────────────────
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 DB_PATH: str = os.environ.get("DB_PATH", _DEFAULT_DB)
+
+
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    """執行 schema migration：為舊版 DB 新增缺少的欄位。
+
+    設計為冪等：若欄位已存在則靜默跳過（OperationalError "duplicate column"）。
+    """
+    migrations = [
+        "ALTER TABLE positions ADD COLUMN high_water_mark REAL",
+    ]
+    for sql in migrations:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # 欄位已存在或資料表不存在（後者在測試環境外不應發生）
 
 
 def _open_conn() -> sqlite3.Connection:
@@ -59,6 +78,7 @@ def _open_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=NORMAL;")
     conn.execute("PRAGMA busy_timeout=30000;")
     conn.execute("PRAGMA foreign_keys=ON;")
+    _ensure_schema(conn)
     return conn
 
 
@@ -190,28 +210,47 @@ def _get_snapshot(api, symbol: str) -> dict:
 
 
 # ── 訊號產生 (rule-based, no LLM) ────────────────────────────────────────────
-def _generate_signal(snap: dict, position_avg_price: Optional[float]) -> str:
+def _generate_signal(
+    snap: dict,
+    position_avg_price: Optional[float],
+    high_water_mark: Optional[float] = None,
+    trailing_pct: float = _TRAILING_PCT_BASE,
+) -> str:
     """產生交易訊號（rule-based，無 LLM）。
 
-    有持倉時：
-      - 止盈：close > avg_price * (1 + _TAKE_PROFIT_PCT)  → sell
-      - 止損：close < avg_price * (1 - _STOP_LOSS_PCT)    → sell
-      - 其他：flat（持有）
+    有持倉時（按優先順序）：
+      1. Trailing Stop：close < high_water_mark * (1 - effective_trailing)  → sell
+         - 獲利超過 _TRAILING_PROFIT_THRESHOLD 時，trailing 從 5% 收緊至 3%
+      2. 止盈：close > avg_price * (1 + _TAKE_PROFIT_PCT)  → sell
+      3. 止損：close < avg_price * (1 - _STOP_LOSS_PCT)    → sell
+      4. 其他：flat（持有）
 
     無持倉時：
       - 買訊：close < reference * (1 - _BUY_SIGNAL_PCT)   → buy
       - 其他：flat
 
-    閾值可透過環境變數 BUY_SIGNAL_PCT / TAKE_PROFIT_PCT / STOP_LOSS_PCT 調整。
+    閾值可透過環境變數覆寫（BUY_SIGNAL_PCT / TAKE_PROFIT_PCT / STOP_LOSS_PCT / TRAILING_PCT）。
     """
     close = snap["close"]
     ref   = snap["reference"]
+
     if position_avg_price is not None:
+        # Trailing Stop：動態收緊（大獲利時保護更多利潤）
+        if high_water_mark and position_avg_price > 0:
+            effective_trailing = trailing_pct
+            profit_pct = (high_water_mark - position_avg_price) / position_avg_price
+            if profit_pct >= _TRAILING_PROFIT_THRESHOLD:
+                effective_trailing = _TRAILING_PCT_TIGHT
+            if close < high_water_mark * (1 - effective_trailing):
+                return "sell"   # trailing stop
+
+        # 止盈 / 止損
         if close > position_avg_price * (1 + _TAKE_PROFIT_PCT):
             return "sell"   # 止盈
         if close < position_avg_price * (1 - _STOP_LOSS_PCT):
             return "sell"   # 止損
         return "flat"
+
     return "buy" if close < ref * (1 - _BUY_SIGNAL_PCT) else "flat"
 
 

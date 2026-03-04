@@ -33,6 +33,7 @@ from openclaw.ticker_watcher import (
     _CASH_MODE_MIN_PRICES,
     _PRICE_HISTORY_MAX,
     _evaluate_cash_mode,
+    _ensure_schema,
     _generate_signal,
     _is_market_open,
     _update_price_history,
@@ -156,6 +157,100 @@ class TestGenerateSignal:
         snap = self._snap(close=891.0, reference=900.0)
         # 891 > 900 * 0.97 = 873，且 891 < 918 → flat
         assert _generate_signal(snap, position_avg_price=900.0) == "flat"
+
+
+# ── _ensure_schema() — Task 1 ─────────────────────────────────────────────────
+
+def test_positions_table_has_high_water_mark(tmp_path, monkeypatch):
+    """positions 表必須有 high_water_mark 欄位"""
+    db = str(tmp_path / "trades.db")
+    monkeypatch.setenv("DB_PATH", db)
+    conn = sqlite3.connect(db)
+    # 建立基本 positions 表（模擬舊 schema 沒有 high_water_mark）
+    conn.execute("""CREATE TABLE positions (
+        symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+        current_price REAL, unrealized_pnl REAL
+    )""")
+    conn.commit()
+    _ensure_schema(conn)
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(positions)").fetchall()]
+    assert "high_water_mark" in cols
+    conn.close()
+
+
+def test_ensure_schema_idempotent(tmp_path, monkeypatch):
+    """重複呼叫 _ensure_schema 不應拋錯"""
+    db = str(tmp_path / "trades.db")
+    conn = sqlite3.connect(db)
+    conn.execute("""CREATE TABLE positions (
+        symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL
+    )""")
+    conn.commit()
+    _ensure_schema(conn)
+    _ensure_schema(conn)  # 第二次不應拋 OperationalError
+    conn.close()
+
+
+# ── TestTrailingStop — Task 2 ────────────────────────────────────────────────
+
+class TestTrailingStop:
+    def _snap(self, close, ref=100.0):
+        return {"close": close, "reference": ref, "volume": 1000,
+                "bid": close * 0.999, "ask": close * 1.001}
+
+    def test_trailing_stop_triggers_when_price_drops_from_peak(self):
+        """從高水位下跌 5% 應觸發 trailing sell"""
+        # avg_price=100, high_water=150, close=142 → drop 5.3% from peak → sell
+        result = _generate_signal(
+            self._snap(142.0), position_avg_price=100.0, high_water_mark=150.0,
+            trailing_pct=0.05
+        )
+        assert result == "sell", f"Expected sell, got {result}"
+
+    def test_trailing_stop_does_not_trigger_near_peak(self):
+        """距高水位只跌 2% 不觸發（trailing 5%）
+        avg=145, high_water=150, close=147 → drop 2% from peak < 5% → flat
+        close=147 < avg*1.02=147.9 → 不觸發止盈，故為 flat
+        """
+        result = _generate_signal(
+            self._snap(147.0), position_avg_price=145.0, high_water_mark=150.0,
+            trailing_pct=0.05
+        )
+        assert result == "flat"
+
+    def test_no_trailing_when_no_position(self):
+        """無持倉時不做 trailing 計算"""
+        result = _generate_signal(
+            self._snap(80.0), position_avg_price=None, high_water_mark=None,
+            trailing_pct=0.05
+        )
+        assert result == "buy"  # close < ref*(1-0.2%)
+
+    def test_original_stop_loss_still_works(self):
+        """原有止損邏輯（-3%）不受影響"""
+        # avg=100, close=96 → -4% → stop loss
+        result = _generate_signal(
+            self._snap(96.0), position_avg_price=100.0, high_water_mark=100.0,
+            trailing_pct=0.05
+        )
+        assert result == "sell"
+
+    def test_trailing_tighter_for_large_profit(self):
+        """獲利超過 50% 時 trailing 收緊為 3%"""
+        # avg=100, high_water=160（+60%），close=155（下跌 3.1% from peak）
+        # trailing_pct base=5%，但獲利>50%收緊為 3%
+        # 155 < 160*(1-0.03)=155.2 → sell
+        result = _generate_signal(
+            self._snap(155.0), position_avg_price=100.0, high_water_mark=160.0,
+            trailing_pct=0.05
+        )
+        assert result == "sell"
+
+    def test_existing_signals_backward_compatible(self):
+        """舊的呼叫方式（無 high_water_mark）仍能正常運作"""
+        snap = self._snap(close=104.0, ref=100.0)
+        # 104 > 100 * 1.02 = 102 → sell（止盈）
+        assert _generate_signal(snap, position_avg_price=100.0) == "sell"
 
 
 # ── _update_price_history() ──────────────────────────────────────────────────
