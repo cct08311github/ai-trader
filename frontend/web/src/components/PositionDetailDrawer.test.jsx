@@ -75,9 +75,9 @@ describe('PositionDetailDrawer', () => {
     expect(screen.getByText('即時報價')).toBeInTheDocument()
   })
 
-  it('shows 行情休市 when SSE not live', () => {
+  it('shows 等待開盤 when SSE not live', () => {
     renderDrawer()
-    expect(screen.getByText('行情休市')).toBeInTheDocument()
+    expect(screen.getByText('等待開盤')).toBeInTheDocument()
   })
 
   it('shows lock button', () => {
