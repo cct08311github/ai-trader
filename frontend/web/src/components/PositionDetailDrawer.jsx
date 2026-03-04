@@ -1,22 +1,126 @@
 import React, { useEffect, useState } from 'react'
-import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle, Lock, Unlock, GitBranch, CheckCircle2, XCircle } from 'lucide-react'
+import { X, TrendingUp, TrendingDown, Shield, BarChart3, FileText, AlertTriangle, Lock, Unlock, GitBranch, CheckCircle2, XCircle, RefreshCw } from 'lucide-react'
 import { authFetch, getApiBase, getToken } from '../lib/auth'
 import { lockSymbol, unlockSymbol } from '../lib/portfolio'
 import { formatCurrency, formatNumber } from '../lib/format'
 
+/* ── K線圖（純 SVG） ────────────────────────────────────── */
+const VB_W = 400, VB_H = 200
+const PAD = { top: 8, right: 6, bottom: 22, left: 44 }
+const PRICE_H = 126, VOL_H = 28, VOL_Y = PAD.top + PRICE_H + 10
+
+function KlineChart({ symbol }) {
+    const [data, setData] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (!symbol) return
+        setLoading(true)
+        authFetch(`${getApiBase()}/api/portfolio/kline/${encodeURIComponent(symbol)}?days=60`)
+            .then(r => r.json())
+            .then(d => { setData(d.data || []); setLoading(false) })
+            .catch(() => { setData([]); setLoading(false) })
+    }, [symbol])
+
+    if (loading) return (
+        <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 flex items-center justify-center" style={{ height: 120 }}>
+            <RefreshCw className="h-4 w-4 animate-spin text-slate-500" />
+        </div>
+    )
+    if (!data || data.length === 0) return (
+        <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 flex items-center justify-center" style={{ height: 80 }}>
+            <span className="text-xs text-slate-500">無 K 線歷史資料</span>
+        </div>
+    )
+
+    const chartW = VB_W - PAD.left - PAD.right
+    const n = data.length
+    const xStep = chartW / n
+    const cw = Math.max(2, Math.min(10, Math.floor(xStep * 0.65)))
+    const cx = i => PAD.left + (i + 0.5) * xStep
+
+    const minP = Math.min(...data.map(d => d.low))
+    const maxP = Math.max(...data.map(d => d.high))
+    const pPad = (maxP - minP) * 0.04
+    const pMin = minP - pPad, pMax = maxP + pPad
+    const py = price => PAD.top + PRICE_H - ((price - pMin) / (pMax - pMin)) * PRICE_H
+
+    const maxVol = Math.max(...data.map(d => d.volume || 0))
+
+    const pTicks = [0, 1, 2, 3].map(i => pMin + (pMax - pMin) * (i / 3))
+    const labelStep = Math.max(1, Math.floor(n / 5))
+    const dLabels = data.map((d, i) => ({ i, date: d.trade_date })).filter(({ i }) => i % labelStep === 0 || i === n - 1)
+
+    return (
+        <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-3">
+            <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-semibold text-slate-200">K 線圖（日線）</span>
+                {data.length > 0 && (
+                    <span className="text-[11px] text-slate-500">
+                        {data[0].trade_date} ~ {data[data.length - 1].trade_date}
+                    </span>
+                )}
+            </div>
+            <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="w-full" style={{ height: 170 }}>
+                {/* Grid */}
+                {pTicks.map((tick, i) => (
+                    <line key={i} x1={PAD.left} y1={py(tick)} x2={PAD.left + chartW} y2={py(tick)}
+                        stroke="rgba(148,163,184,0.08)" strokeWidth="1" />
+                ))}
+                {/* Price labels */}
+                {pTicks.map((tick, i) => (
+                    <text key={i} x={PAD.left - 3} y={py(tick) + 3.5}
+                        textAnchor="end" fill="rgba(148,163,184,0.55)" fontSize="9">
+                        {tick.toFixed(1)}
+                    </text>
+                ))}
+                {/* Vol separator */}
+                <line x1={PAD.left} y1={VOL_Y - 4} x2={PAD.left + chartW} y2={VOL_Y - 4}
+                    stroke="rgba(148,163,184,0.06)" strokeWidth="1" />
+                {/* Candles + Volume */}
+                {data.map((d, i) => {
+                    const isUp = d.close >= d.open
+                    const color = isUp ? '#10b981' : '#f43f5e'
+                    const x = cx(i)
+                    const bodyTop = Math.min(py(d.open), py(d.close))
+                    const bodyH = Math.max(1, Math.abs(py(d.close) - py(d.open)))
+                    const volBarH = maxVol > 0 ? ((d.volume || 0) / maxVol) * VOL_H : 0
+                    return (
+                        <g key={i}>
+                            <line x1={x} y1={py(d.high)} x2={x} y2={py(d.low)} stroke={color} strokeWidth="0.8" />
+                            <rect x={x - cw / 2} y={bodyTop} width={cw} height={bodyH} fill={color} />
+                            <rect x={x - cw / 2} y={VOL_Y + VOL_H - volBarH}
+                                width={cw} height={Math.max(1, volBarH)}
+                                fill={isUp ? 'rgba(16,185,129,0.35)' : 'rgba(244,63,94,0.35)'} />
+                        </g>
+                    )
+                })}
+                {/* Date labels */}
+                {dLabels.map(({ i, date }) => (
+                    <text key={i} x={cx(i)} y={VB_H - 4}
+                        textAnchor="middle" fill="rgba(148,163,184,0.55)" fontSize="9">
+                        {date ? date.slice(5) : ''}
+                    </text>
+                ))}
+            </svg>
+        </div>
+    )
+}
+
 /** 五檔即時報價面板 */
 function QuotePanel({ symbol }) {
     const [snap, setSnap] = useState(null)
+    const [source, setSource] = useState(null)
     const [bidask, setBidask] = useState(null)
     const [live, setLive] = useState(false)
 
-    // 初始 snapshot
+    // 初始 snapshot（含 EOD fallback）
     useEffect(() => {
         if (!symbol) return
         const base = getApiBase()
         authFetch(`${base}/api/portfolio/quote/${encodeURIComponent(symbol)}`)
             .then(r => r.json())
-            .then(d => { if (d?.data) setSnap(d.data) })
+            .then(d => { if (d?.data) { setSnap(d.data); setSource(d.source) } })
             .catch(() => {})
     }, [symbol])
 
@@ -47,10 +151,16 @@ function QuotePanel({ symbol }) {
             {/* 標題列 */}
             <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-slate-200">即時報價</span>
-                <span className={`flex items-center gap-1 text-[11px] ${live ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-                    {live ? '即時連線' : '行情休市'}
-                </span>
+                {source === 'eod'
+                    ? <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-500" />
+                        最後收盤資料（{snap?.trade_date || ''}）
+                    </span>
+                    : <span className={`flex items-center gap-1 text-[11px] ${live ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                        {live ? '即時連線' : '等待開盤'}
+                    </span>
+                }
             </div>
 
             {/* KPI 四格 */}
@@ -222,6 +332,8 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {/* 即時報價（五檔）— 始終顯示 */}
                     <QuotePanel symbol={symbol} />
+                    {/* K 線圖 */}
+                    <KlineChart symbol={symbol} />
 
                     {loading && (
                         <div className="flex items-center justify-center py-20">

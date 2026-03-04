@@ -331,6 +331,7 @@ export default function SettingsPage() {
         try {
             await apiFetch('/api/settings/authority', { method: 'PUT', body: JSON.stringify(authorityInput) })
             setAuthSaved(true); setTimeout(() => setAuthSaved(false), 4000)
+            setAuthorityInput(p => ({ ...p, reason: '' }))
             auth.refresh()
         } catch (e) { setAuthError(e.message) }
         finally { setAuthSaving(false) }
