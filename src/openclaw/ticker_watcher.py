@@ -738,6 +738,23 @@ def run_watcher() -> None:
                     except Exception:
                         pass
 
+            # ── 每輪掃盤後：執行 approved proposals + 集中度守衛 ─────────────
+            try:
+                from openclaw.proposal_executor import execute_pending_proposals
+                n_exec = execute_pending_proposals(conn, dry_run=False)
+                if n_exec > 0:
+                    log.info("[proposals] Executed %d approved proposals", n_exec)
+            except Exception as _pe:
+                log.warning("[proposals] executor error: %s", _pe)
+
+            try:
+                from openclaw.concentration_guard import check_concentration
+                c_proposals = check_concentration(conn)
+                if c_proposals:
+                    log.info("[concentration] Generated %d concentration proposals", len(c_proposals))
+            except Exception as _ce:
+                log.warning("[concentration] guard error: %s", _ce)
+
         except Exception as e:
             log.error("Scan cycle error: %s", e, exc_info=True)
         finally:
