@@ -818,6 +818,15 @@ def run_watcher() -> None:
             except Exception as _ce:
                 log.warning("[concentration] guard error: %s", _ce)
 
+            # ── Gemini 自動審查 pending proposals → 核准/拒絕 + Telegram 通知 ──
+            try:
+                from openclaw.proposal_reviewer import auto_review_pending_proposals
+                n_reviewed = auto_review_pending_proposals(conn)
+                if n_reviewed > 0:
+                    log.info("[reviewer] Auto-reviewed %d pending proposals", n_reviewed)
+            except Exception as _rv:
+                log.warning("[reviewer] proposal reviewer error: %s", _rv)
+
         except Exception as e:
             log.error("Scan cycle error: %s", e, exc_info=True)
         finally:

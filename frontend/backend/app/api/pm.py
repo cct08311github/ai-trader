@@ -135,7 +135,34 @@ def pm_review():
     # Write prompt + raw response to llm_traces for full transparency
     _write_llm_trace(state, model)
 
+    # Telegram 通知 PM review 結果（不阻塞 API 回應）
+    _notify_pm_review(state)
+
     return {"status": "ok", "data": state}
+
+
+def _notify_pm_review(state: dict) -> None:
+    """PM review 結果送 Telegram（不拋例外）。"""
+    try:
+        from openclaw.tg_notify import send_message
+        approved = state.get("approved", False)
+        conf = state.get("confidence", 0)
+        reason = state.get("reason", "")
+        bull = state.get("bull_case", "")
+        bear = state.get("bear_case", "")
+        icon = "✅" if approved else "🚫"
+        msg = (
+            f"{icon} <b>[每日 PM 審核]</b> {state.get('date', '')}\n"
+            f"決定：<b>{'授權交易' if approved else '封鎖交易'}</b>（信心 {conf:.0%}）\n"
+            f"理由：{reason}\n"
+        )
+        if bull:
+            msg += f"\n📈 多方：{bull}"
+        if bear:
+            msg += f"\n📉 空方：{bear}"
+        send_message(msg)
+    except Exception:
+        pass
 
 
 def _write_llm_trace(state: dict, model: str) -> None:

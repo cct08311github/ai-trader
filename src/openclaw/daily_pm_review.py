@@ -76,28 +76,48 @@ def build_daily_context(conn=None) -> Dict[str, Any]:
         "date": _today(),
         "recent_trades": [],
         "recent_pnl": [],
+        "open_positions": [],
         "note": "",
     }
 
     if conn is None:
         return context
 
+    # 近期成交（orders JOIN fills，取最近 20 筆 filled）
     try:
         rows = conn.execute(
-            """SELECT symbol, action, quantity, price, pnl, timestamp
-               FROM trades ORDER BY timestamp DESC LIMIT 20"""
+            """SELECT o.symbol, o.side, o.qty, f.price,
+                      COALESCE(f.fee,0)+COALESCE(f.tax,0) AS cost,
+                      f.ts_fill
+               FROM orders o
+               JOIN fills f ON f.order_id = o.order_id
+               WHERE o.status = 'filled'
+               ORDER BY f.ts_fill DESC LIMIT 20"""
         ).fetchall()
         context["recent_trades"] = [dict(r) for r in rows]
     except Exception:
         pass
 
+    # 近 7 日每日損益（daily_pnl_summary）
     try:
         rows = conn.execute(
-            """SELECT DATE(timestamp) as trade_date, SUM(pnl) as daily_pnl
-               FROM trades WHERE pnl IS NOT NULL
-               GROUP BY trade_date ORDER BY trade_date DESC LIMIT 7"""
+            """SELECT trade_date, realized_pnl, unrealized_pnl, total_pnl,
+                      total_trades, rolling_win_rate, consecutive_losses
+               FROM daily_pnl_summary
+               ORDER BY trade_date DESC LIMIT 7"""
         ).fetchall()
         context["recent_pnl"] = [dict(r) for r in rows]
+    except Exception:
+        pass
+
+    # 目前持倉（positions）
+    try:
+        rows = conn.execute(
+            """SELECT symbol, quantity, avg_price, current_price,
+                      unrealized_pnl, high_water_mark
+               FROM positions WHERE quantity > 0"""
+        ).fetchall()
+        context["open_positions"] = [dict(r) for r in rows]
     except Exception:
         pass
 

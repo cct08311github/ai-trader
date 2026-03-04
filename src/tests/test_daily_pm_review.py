@@ -139,24 +139,48 @@ def test_build_daily_context_with_conn_no_trades_table():
 
 
 def test_build_daily_context_with_trades_data():
-    """DB with trades table returns populated context."""
+    """DB with orders/fills/positions/daily_pnl_summary returns populated context."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE orders (
+            order_id TEXT PRIMARY KEY, decision_id TEXT, broker_order_id TEXT,
+            ts_submit TEXT, symbol TEXT, side TEXT, qty INTEGER, price REAL,
+            order_type TEXT, tif TEXT, status TEXT, strategy_version TEXT,
+            settlement_date TEXT
+        );
+        CREATE TABLE fills (
+            fill_id TEXT PRIMARY KEY, order_id TEXT, ts_fill TEXT,
+            qty INTEGER, price REAL, fee REAL, tax REAL
+        );
+        CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+            current_price REAL, unrealized_pnl REAL, high_water_mark REAL
+        );
+        CREATE TABLE daily_pnl_summary (
+            trade_date TEXT PRIMARY KEY, realized_pnl REAL, unrealized_pnl REAL,
+            total_pnl REAL, total_trades INTEGER, rolling_win_rate REAL,
+            consecutive_losses INTEGER
+        );
+    """)
     conn.execute(
-        """CREATE TABLE trades (
-            symbol TEXT, action TEXT, quantity INTEGER,
-            price REAL, pnl REAL, timestamp TEXT
-        )"""
+        "INSERT INTO orders VALUES ('o1','d1','b1','2025-01-01T10:00:00','2330.TW','buy',1000,580.0,'limit','IOC','filled','v1',NULL)"
     )
     conn.execute(
-        "INSERT INTO trades VALUES (?,?,?,?,?,?)",
-        ("2330.TW", "buy", 1000, 580.0, 200.0, "2025-01-01T10:00:00"),
+        "INSERT INTO fills VALUES ('f1','o1','2025-01-01T10:00:01',1000,580.0,8.27,0.0)"
+    )
+    conn.execute(
+        "INSERT INTO positions VALUES ('2330.TW',1000,580.0,620.0,40000.0,620.0)"
+    )
+    conn.execute(
+        "INSERT INTO daily_pnl_summary VALUES ('2025-01-01',200.0,40000.0,40200.0,1,0.6,0)"
     )
     conn.commit()
     ctx = dpr.build_daily_context(conn=conn)
     assert len(ctx["recent_trades"]) == 1
     assert ctx["recent_trades"][0]["symbol"] == "2330.TW"
     assert len(ctx["recent_pnl"]) == 1
+    assert len(ctx["open_positions"]) == 1
     conn.close()
 
 
