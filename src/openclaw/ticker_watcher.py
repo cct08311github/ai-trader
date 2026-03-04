@@ -62,6 +62,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     """
     migrations = [
         "ALTER TABLE positions ADD COLUMN high_water_mark REAL",
+        "ALTER TABLE orders ADD COLUMN settlement_date TEXT",
     ]
     for sql in migrations:
         try:
@@ -84,6 +85,21 @@ def _open_conn() -> sqlite3.Connection:
 
 def _utc_now_iso() -> str:
     return dt.datetime.now(tz=dt.timezone.utc).isoformat()
+
+
+def _t2_settlement_date(trade_date: "dt.date") -> str:
+    """計算台股 T+2 交割日（跳過週六、週日）。
+
+    台灣股市無公眾假日邏輯（依 trading calendar），這裡簡化為僅跳過週末。
+    Returns: YYYY-MM-DD 字串
+    """
+    d = trade_date
+    added = 0
+    while added < 2:
+        d += dt.timedelta(days=1)
+        if d.weekday() < 5:  # 0=Mon … 4=Fri
+            added += 1
+    return d.strftime("%Y-%m-%d")
 
 
 # ── Logging ──────────────────────────────────────────────────────────────────
@@ -281,14 +297,17 @@ def _persist_risk_check(conn: sqlite3.Connection, *, decision_id: str, passed: b
 
 def _persist_order(conn: sqlite3.Connection, *, order_id: str, decision_id: str,
                     broker_order_id: str, symbol: str, side: str, qty: int,
-                    price: float, status: str = "submitted") -> None:
+                    price: float, status: str = "submitted",
+                    settlement_date: Optional[str] = None) -> None:
     conn.execute(
         """INSERT INTO orders
            (order_id, decision_id, broker_order_id, ts_submit,
-            symbol, side, qty, price, order_type, tif, status, strategy_version)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            symbol, side, qty, price, order_type, tif, status, strategy_version,
+            settlement_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (order_id, decision_id, broker_order_id, _utc_now_iso(),
-         symbol, side, qty, price, "limit", "IOC", status, STRATEGY_VERSION),
+         symbol, side, qty, price, "limit", "IOC", status, STRATEGY_VERSION,
+         settlement_date),
     )
 
 
@@ -416,16 +435,24 @@ def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
     order_id = str(uuid.uuid4())
     submission = broker.submit_order(order_id, candidate)
 
+    # T+2 交割日：買單才需計算；賣單交割款項 T+2 入帳，無需追蹤
+    settlement_date = (
+        _t2_settlement_date(dt.datetime.now(tz=_TZ_TWN).date())
+        if side == "buy" else None
+    )
+
     if submission.status != "submitted":
         _persist_order(conn, order_id=order_id, decision_id=decision_id,
                        broker_order_id=submission.broker_order_id or "",
-                       symbol=symbol, side=side, qty=qty, price=price, status="rejected")
+                       symbol=symbol, side=side, qty=qty, price=price, status="rejected",
+                       settlement_date=settlement_date)
         log.warning("[%s] broker rejected: %s", symbol, submission.reason)
         return False, order_id
 
     _persist_order(conn, order_id=order_id, decision_id=decision_id,
                    broker_order_id=submission.broker_order_id,
-                   symbol=symbol, side=side, qty=qty, price=price, status="submitted")
+                   symbol=symbol, side=side, qty=qty, price=price, status="submitted",
+                   settlement_date=settlement_date)
     _insert_order_event(conn, order_id=order_id, event_type="submitted",
                         from_status=None, to_status="submitted",
                         source="watcher", reason_code=None,

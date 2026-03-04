@@ -38,6 +38,7 @@ from openclaw.ticker_watcher import (
     _is_market_open,
     _update_price_history,
     _utc_now_iso,
+    _t2_settlement_date,
     _open_conn,
     _load_universe,
     _screen_top_movers,
@@ -379,7 +380,8 @@ def _make_mem_db() -> sqlite3.Connection:
             order_type TEXT,
             tif TEXT,
             status TEXT,
-            strategy_version TEXT
+            strategy_version TEXT,
+            settlement_date TEXT
         );
 
         CREATE TABLE fills (
@@ -1206,3 +1208,64 @@ class TestRunWatcherInit:
 
         with pytest.raises(StopIteration):
             tw.run_watcher()  # Should not crash
+
+
+# ── T+2 交割日計算 ────────────────────────────────────────────────────────────
+
+class TestT2SettlementDate:
+    """_t2_settlement_date() — 跳過週末計算 T+2 交割日"""
+
+    def test_monday_buy_settles_wednesday(self):
+        """週一買入 → 週三交割"""
+        mon = dt.date(2026, 3, 2)  # 週一
+        assert mon.weekday() == 0
+        assert _t2_settlement_date(mon) == "2026-03-04"
+
+    def test_thursday_buy_settles_monday(self):
+        """週四買入 → 下週一交割（跳過週六日）"""
+        thu = dt.date(2026, 3, 5)  # 週四
+        assert thu.weekday() == 3
+        assert _t2_settlement_date(thu) == "2026-03-09"
+
+    def test_friday_buy_settles_tuesday(self):
+        """週五買入 → 下週二交割（跳過週六日）"""
+        fri = dt.date(2026, 3, 6)  # 週五
+        assert fri.weekday() == 4
+        assert _t2_settlement_date(fri) == "2026-03-10"
+
+    def test_buy_order_has_settlement_date(self):
+        """_execute_sim_order buy → orders.settlement_date 已填入"""
+        from openclaw.broker import SimBrokerAdapter
+        conn = _make_mem_db()
+        broker = SimBrokerAdapter()
+        from openclaw.risk_engine import OrderCandidate
+        candidate = OrderCandidate(symbol="2330", side="buy", qty=100, price=890.0,
+                                   order_type="limit", tif="IOC", opens_new_position=True)
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=broker, decision_id=str(uuid.uuid4()),
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate,
+            )
+        assert ok is True
+        row = conn.execute("SELECT settlement_date FROM orders WHERE order_id=?",
+                           (order_id,)).fetchone()
+        assert row is not None
+        assert row["settlement_date"] is not None  # T+2 日期已填入
+
+    def test_sell_order_no_settlement_date(self):
+        """_execute_sim_order sell → orders.settlement_date 為 NULL"""
+        from openclaw.broker import SimBrokerAdapter
+        conn = _make_mem_db()
+        broker = SimBrokerAdapter()
+        from openclaw.risk_engine import OrderCandidate
+        candidate = OrderCandidate(symbol="2330", side="sell", qty=50, price=920.0,
+                                   order_type="limit", tif="IOC", opens_new_position=False)
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=broker, decision_id=str(uuid.uuid4()),
+                symbol="2330", side="sell", qty=50, price=920.0, candidate=candidate,
+            )
+        assert ok is True
+        row = conn.execute("SELECT settlement_date FROM orders WHERE order_id=?",
+                           (order_id,)).fetchone()
+        assert row["settlement_date"] is None
