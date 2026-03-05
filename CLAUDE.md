@@ -54,6 +54,10 @@ trading_enabled = true
 | `agents/eod_analysis.py` | 盤後分析 Agent（每交易日 16:35 TWN Cron） |
 | `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
 | `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
+| `signal_aggregator.py` | Regime-based 動態權重信號融合（技術/LLM/市況） |
+| `trading_engine.py` | 持倉狀態機 + 時間止損（EOD日計：虧損10日/獲利30日） |
+| `lm_signal_cache.py` | LLM 信號快取層（TTL/fallback/purge） |
+| `strategy_optimizer.py` | 策略自主優化（StrategyMetricsEngine/OptimizationGateway/ReflectionAgent） |
 
 ---
 
@@ -267,3 +271,4 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 | v4.9.x | 盤後分析頁面（/analysis）；eod_analysis agent；technical_indicators 模組；三新模組 100% 覆蓋 |
 | v4.10.x | 持倉 Drawer K 線圖（純 SVG）；quote EOD fallback；設定頁 dirty 狀態修正 |
 | v4.11.x | Strangler Fig 信號重構；Trailing Stop；T+2 交割追蹤；實際費率；Gemini 全自動策略審查；Telegram 雙向通知 |
+| v4.12.x | Sprint 2：signal_aggregator Regime-based 動態權重；trading_engine 持倉狀態機 + 時間止損；lm_signal_cache LLM 快取；strategy_optimizer 自主優化三層架構 |
