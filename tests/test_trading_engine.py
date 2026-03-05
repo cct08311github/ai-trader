@@ -80,12 +80,14 @@ class TestTimeStop:
         from openclaw.trading_engine import tick
         tick(eng_db, "2330")
 
-        p = eng_db.execute("SELECT status, proposal_json FROM strategy_proposals").fetchone()
+        p = eng_db.execute("SELECT status, proposal_json, requires_human_approval FROM strategy_proposals").fetchone()
         assert p is not None
         assert p["status"] == "approved"
         pj = json.loads(p["proposal_json"])
         assert pj["type"] == "time_stop"
         assert pj["symbol"] == "2330"
+        assert pj["reduce_pct"] == 1.0  # 虧損全出場
+        assert p["requires_human_approval"] == 0  # 虧損 → 自動核准
 
     def test_time_stop_profit_at_30_days(self, eng_db):
         """獲利持倉持有 30 個交易日應觸發時間止損 proposal（pending，需人工審核）"""
@@ -96,9 +98,12 @@ class TestTimeStop:
         from openclaw.trading_engine import tick
         tick(eng_db, "2330")
 
-        p = eng_db.execute("SELECT status FROM strategy_proposals").fetchone()
+        p = eng_db.execute("SELECT status, proposal_json, requires_human_approval FROM strategy_proposals").fetchone()
         assert p is not None
         assert p["status"] == "pending"  # 獲利持倉需人工審核
+        pj = json.loads(p["proposal_json"])
+        assert pj["reduce_pct"] == 0.5  # 獲利出 50%
+        assert p["requires_human_approval"] == 1  # 獲利 → 需人工審核
 
     def test_state_updated_to_exiting_after_time_stop(self, eng_db):
         """時間止損觸發後持倉 state 改為 EXITING"""

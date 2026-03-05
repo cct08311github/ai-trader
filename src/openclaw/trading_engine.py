@@ -29,14 +29,6 @@ def _get_latest_trading_day(conn: sqlite3.Connection) -> Optional[str]:
     return row[0] if row else None
 
 
-def _get_yesterday_trading_day(conn: sqlite3.Connection) -> Optional[str]:
-    """取 eod_prices 倒數第二筆 trade_date（昨日，用於清除過期 CANDIDATE）"""
-    row = conn.execute(
-        "SELECT trade_date FROM eod_prices ORDER BY trade_date DESC LIMIT 1 OFFSET 1"
-    ).fetchone()
-    return row[0] if row else None
-
-
 def _count_hold_days(conn: sqlite3.Connection, symbol: str, entry_day: str) -> int:
     """計算 entry_day 之後的 eod_prices 筆數（= 交易日數）"""
     row = conn.execute(
@@ -54,12 +46,15 @@ def _record_event(
     reason: str,
 ) -> None:
     today = _get_latest_trading_day(conn)
+    if today is None:
+        today = "unknown"  # fallback for empty eod_prices (trading_day is NOT NULL)
+        log.warning("[trading_engine] eod_prices is empty; using 'unknown' for trading_day")
     conn.execute(
         """INSERT INTO position_events
            (event_id, symbol, from_state, to_state, reason, trading_day, ts)
            VALUES (?,?,?,?,?,?,?)""",
         (str(uuid.uuid4()), symbol, from_state, to_state, reason, today,
-         int(time.time() * 1000)),
+         int(time.time())),
     )
 
 
@@ -98,10 +93,11 @@ def _create_time_stop_proposal(
 def tick(conn: sqlite3.Connection, symbol: str) -> None:
     """每次掃盤呼叫：清理過期 CANDIDATE、檢查時間止損。
 
-    所有 DB 寫入在同一個隱式 transaction（SQLite isolation_level=None 時
-    請在呼叫端確保 conn 處於 autocommit 模式，或在此函數內管理 transaction）。
+    注意：ticker_watcher 使用 isolation_level=None（autocommit），因此
+    三個寫入（proposal + event + positions update）使用 BEGIN/COMMIT 確保原子性。
     """
-    # 1. 清理過期 CANDIDATE（今日之前的都清除，含只有一筆 eod_prices 的情況）
+    # 1. 清理過期 CANDIDATE（今日之前的都清除，保留當日 CANDIDATE 供本輪掃盤使用）
+    # 邊界為 today（非昨日）：今日產生的 CANDIDATE 須存活到下一交易日才清除
     today = _get_latest_trading_day(conn)
     if today:
         conn.execute(
@@ -130,6 +126,12 @@ def tick(conn: sqlite3.Connection, symbol: str) -> None:
 
     hold_days = _count_hold_days(conn, symbol, entry_day)
     avg_price     = pos["avg_price"] or 0
+    if avg_price <= 0:
+        log.warning(
+            "[trading_engine] %s has avg_price=%s, skipping time stop",
+            symbol, pos["avg_price"],
+        )
+        return
     current_price = pos["current_price"] or avg_price
     is_losing     = current_price < avg_price
     threshold     = _LOSING_THRESHOLD_DAYS if is_losing else _PROFIT_THRESHOLD_DAYS
@@ -142,13 +144,31 @@ def tick(conn: sqlite3.Connection, symbol: str) -> None:
         symbol, hold_days, is_losing,
     )
 
-    # 3. 同一 transaction：建立 proposal + 記錄 event + 更新 state
-    _create_time_stop_proposal(conn, symbol, hold_days, is_losing,
-                               pos["quantity"])
-    _record_event(conn, symbol, from_state=state, to_state="EXITING",
-                  reason=f"time_stop:{hold_days}d")
-    conn.execute(
-        "UPDATE positions SET state='EXITING' WHERE symbol=?",
-        (symbol,),
-    )
-    conn.commit()
+    # 3. 原子寫入：建立 proposal + 記錄 event + 更新 state
+    # 使用 conn.in_transaction 相容 isolation_level=None（autocommit）與預設模式
+    if conn.in_transaction:
+        # 已在 transaction 內（預設 isolation_level）
+        _create_time_stop_proposal(conn, symbol, hold_days, is_losing,
+                                   pos["quantity"])
+        _record_event(conn, symbol, from_state=state, to_state="EXITING",
+                      reason=f"time_stop:{hold_days}d")
+        conn.execute(
+            "UPDATE positions SET state='EXITING' WHERE symbol=?",
+            (symbol,),
+        )
+    else:
+        # autocommit 模式（isolation_level=None）— 手動管理 transaction
+        conn.execute("BEGIN")
+        try:
+            _create_time_stop_proposal(conn, symbol, hold_days, is_losing,
+                                       pos["quantity"])
+            _record_event(conn, symbol, from_state=state, to_state="EXITING",
+                          reason=f"time_stop:{hold_days}d")
+            conn.execute(
+                "UPDATE positions SET state='EXITING' WHERE symbol=?",
+                (symbol,),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
