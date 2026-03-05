@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from openclaw.market_regime import classify_market_regime
-from openclaw.signal_generator import compute_signal, _fetch_candles
+from openclaw.signal_generator import compute_signal, fetch_candles
 from openclaw.lm_signal_cache import read_cache_with_fallback
 
 REGIME_WEIGHTS: dict[str, dict[str, float]] = {
@@ -42,7 +42,7 @@ def _get_regime(conn: sqlite3.Connection, symbol: str) -> tuple[str, float]:
     """從 eod_prices 取收盤價序列，判斷 market regime。
     回傳 (regime_str, volatility_multiplier)。
     """
-    candles = _fetch_candles(conn, symbol, days=60)
+    candles = fetch_candles(conn, symbol, days=60)
     if len(candles) < 20:
         return "range", 1.0
     prices  = [c["close"]  for c in candles]
@@ -75,7 +75,7 @@ def aggregate(
 
     # 2. Technical signal（無資料時 compute_signal 回傳 flat，不拋例外）
     tech_str = compute_signal(conn, symbol, position_avg_price, high_water_mark)
-    tech_score = SIGNAL_TO_SCORE[tech_str]
+    tech_score = SIGNAL_TO_SCORE.get(tech_str, 0.5)  # default to neutral on unknown
     reasons.append(f"technical={tech_str}({tech_score:.2f})")
 
     # 3. LLM cache（個股 fallback 全市場；miss → neutral 0.5）

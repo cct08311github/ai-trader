@@ -92,3 +92,7 @@ def compute_signal(
                 return "buy"
 
     return "flat"
+
+
+# Public alias — preferred import for external callers
+fetch_candles = _fetch_candles
