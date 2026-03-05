@@ -140,15 +140,16 @@ trading_enabled = true
 
 | 表名 | 說明 |
 |------|------|
-| `orders` | 訂單（symbol, side, qty, price, status, ts_submit…） |
+| `orders` | 訂單（**order_id** PK TEXT, symbol, side, qty, price, status, **ts_submit TEXT ISO**, settlement_date） |
 | `fills` | 成交明細（order_id FK, qty, price, fee, tax） |
+| `positions` | 持倉（symbol PK, **quantity**, **avg_price**, current_price, unrealized_pnl, state, high_water_mark, entry_trading_day） |
 | `decisions` | AI 決策紀錄 |
-| `llm_traces` | LLM 呼叫 trace（v4 schema：created_at INTEGER NOT NULL） |
-| `strategy_proposals` | 策略提案 |
+| `llm_traces` | LLM 呼叫 trace（v4 schema：created_at INTEGER ms NOT NULL） |
+| `strategy_proposals` | 策略提案（proposal_id, generated_by, target_rule, rule_category, status, confidence, created_at INTEGER ms）— **無 symbol 欄** |
 | `risk_checks` | 風控檢查紀錄 |
 | `incidents` | 異常事件 |
 | `risk_limits` | 風控參數 |
-| `eod_analysis_reports` | 盤後分析快照（market_summary/technical/strategy JSON，每日一筆） |
+| `eod_analysis_reports` | 盤後分析快照（**trade_date** PK TEXT, generated_at INTEGER ms, market_summary/technical/strategy JSON） |
 | `eod_prices` | 每日 OHLCV（trade_date/symbol/open/high/low/close/volume），K 線來源 |
 
 > **注意**：舊版 `trades` 表已廢棄，API 查詢改為 `orders JOIN fills`
@@ -272,3 +273,13 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 | v4.10.x | 持倉 Drawer K 線圖（純 SVG）；quote EOD fallback；設定頁 dirty 狀態修正 |
 | v4.11.x | Strangler Fig 信號重構；Trailing Stop；T+2 交割追蹤；實際費率；Gemini 全自動策略審查；Telegram 雙向通知 |
 | v4.12.x | Sprint 2：signal_aggregator Regime-based 動態權重；trading_engine 持倉狀態機 + 時間止損；lm_signal_cache LLM 快取；strategy_optimizer 自主優化三層架構 |
+
+---
+
+## 十二、Google Gemini SDK（v4.12.x+）
+
+- 套件：`google-genai>=1.0`（已移除舊版 `google.generativeai`）
+- API：`Client(api_key=...).models.generate_content(model=..., contents=..., config=GenerateContentConfig(...))`
+- 測試 mock：需 mock `google.genai` 模組，含 `Client`、`types.GenerateContentConfig`（見 `src/tests/test_llm_gemini.py`）
+- PM Review 診斷：`daily_pm_state.json` 顯示「LLM 未配置」不代表 API 故障，需直接 `curl -X POST https://127.0.0.1:8080/api/pm/review` 驗證
+- `pm2 env <name>` 看不到 `run.sh` 透過 `source .env` 載入的變數，需重啟後直接呼叫 API 測試
