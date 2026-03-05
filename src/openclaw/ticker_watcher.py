@@ -617,6 +617,17 @@ def run_watcher() -> None:
         if not _is_market_open():
             now_twn = dt.datetime.now(tz=_TZ_TWN)
             log.info("Market closed (%s TWN). Next check in 60s.", now_twn.strftime("%H:%M %a"))
+            # 非交易時段仍處理 Telegram 提案通知與按鈕回應
+            try:
+                _conn = _open_conn()
+                from openclaw.tg_approver import notify_pending_proposals, poll_approval_callbacks
+                notify_pending_proposals(_conn)
+                n_cb = poll_approval_callbacks(_conn)
+                if n_cb > 0:
+                    log.info("[tg_approver] Off-hours: processed %d callbacks", n_cb)
+                _conn.close()
+            except Exception as _tge:
+                log.debug("[tg_approver] off-hours error: %s", _tge)
             time.sleep(60)
             continue
 

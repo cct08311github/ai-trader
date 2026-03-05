@@ -102,6 +102,46 @@ def _answer_callback(token: str, callback_query_id: str, text: str) -> None:
 
 # ── 公開 API ──────────────────────────────────────────────────────────────────
 
+def _extract_symbol(proposed_value: str, proposal_json_str: str) -> str:
+    """從 proposal_json 或 proposed_value 文字中提取股票代號。"""
+    # 先試 proposal_json
+    try:
+        pj = json.loads(proposal_json_str or "{}")
+        sym = pj.get("symbol", "")
+        if sym:
+            return sym
+    except Exception:
+        pass
+    # 從純文字用 regex 找 4 位數字代號
+    import re
+    m = re.search(r"\b(\d{4})\b", proposed_value or "")
+    return m.group(1) if m else ""
+
+
+def _get_position_context(conn: sqlite3.Connection, symbol: str) -> str:
+    """查 positions 表，回傳持倉摘要文字（比重 + 損益）。"""
+    if not symbol:
+        return ""
+    try:
+        row = conn.execute(
+            "SELECT quantity, avg_price, current_price, unrealized_pnl "
+            "FROM positions WHERE symbol=? AND quantity>0",
+            (symbol,),
+        ).fetchone()
+        if not row:
+            return ""
+        total_val = conn.execute(
+            "SELECT SUM(quantity*current_price) FROM positions WHERE quantity>0"
+        ).fetchone()[0] or 1
+        pos_val = (row["quantity"] or 0) * (row["current_price"] or 0)
+        weight = pos_val / total_val * 100
+        pnl = row["unrealized_pnl"] or 0
+        pnl_sign = "+" if pnl >= 0 else ""
+        return f"持倉 {weight:.1f}%　損益 {pnl_sign}{pnl:,.0f}"
+    except Exception:
+        return ""
+
+
 def notify_pending_proposals(conn: sqlite3.Connection) -> int:
     """掃描 pending 提案，對尚未通知的發送 Telegram inline 訊息。
 
@@ -116,7 +156,8 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
     notified: set = set(_wm_get(conn, "notified_ids") or [])
     rows = conn.execute(
-        """SELECT proposal_id, target_rule, proposed_value, confidence
+        """SELECT proposal_id, target_rule, proposed_value,
+                  supporting_evidence, confidence, proposal_json
              FROM strategy_proposals
             WHERE status='pending'
               AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS')
@@ -131,32 +172,36 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
         rule = row["target_rule"]
         conf = row["confidence"] or 0.0
+        proposed_value = (row["proposed_value"] or "").strip()
+        evidence = (row["supporting_evidence"] or "").strip()
 
-        # 解析 proposed_value
-        try:
-            pv = json.loads(row["proposed_value"])
-        except Exception:
-            pv = {}
-
-        symbol   = pv.get("symbol", "")
-        action   = pv.get("action", "")
-        qty      = pv.get("quantity", "")
-        price    = pv.get("target_price", "")
-
+        # 提取標的代號
+        symbol = _extract_symbol(proposed_value, row["proposal_json"] or "")
         sym_display = _fmt_symbol(conn, symbol) if symbol else ""
 
+        # 持倉現況
+        pos_ctx = _get_position_context(conn, symbol) if symbol else ""
+
         emoji = "🔄" if rule == "POSITION_REBALANCE" else "🎯"
-        lines = [f"{emoji} <b>策略提案審查</b>", f"類型：{rule}"]
+        lines = [
+            f"{emoji} <b>策略提案審查</b>",
+            f"<b>類型</b>：{rule}",
+        ]
         if sym_display:
-            lines.append(f"標的：{sym_display}")
-        if action:
-            lines.append(f"動作：{action}")
-        if qty:
-            lines.append(f"數量：{qty} 股")
-        if price:
-            lines.append(f"目標價：{price}")
-        lines.append(f"信心度：{conf:.0%}")
-        lines.append(f"\n<i>ID：{pid[:8]}…</i>")
+            lines.append(f"<b>標的</b>：{sym_display}")
+        if pos_ctx:
+            lines.append(f"<b>現況</b>：{pos_ctx}")
+
+        # 建議動作（proposed_value 直接顯示，最多 120 字）
+        action_text = proposed_value[:120] + ("…" if len(proposed_value) > 120 else "")
+        lines.append(f"\n📋 <b>建議</b>：{action_text}")
+
+        # 理由（supporting_evidence，最多 200 字）
+        if evidence:
+            ev_text = evidence[:200] + ("…" if len(evidence) > 200 else "")
+            lines.append(f"\n💡 <b>理由</b>：{ev_text}")
+
+        lines.append(f"\n信心度：{conf:.0%}　<i>ID：{pid[:8]}…</i>")
 
         buttons = [[
             {"text": "✅ 核准", "callback_data": f"approve:{pid}"},
