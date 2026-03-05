@@ -199,14 +199,17 @@ export default function AnalysisPage() {
   const [report, setReport] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [noData, setNoData] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setNoData(false)
     try {
       const r = await fetch('/api/analysis/latest', {
         headers: { Authorization: `Bearer ${getToken()}` }
       })
+      if (r.status === 404) { setNoData(true); return }
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setReport(await r.json())
     } catch (e) {
@@ -230,6 +233,11 @@ export default function AnalysisPage() {
       </div>
 
       {loading && <div className="text-sm text-[rgb(var(--muted))]">讀取中…</div>}
+      {noData && !loading && (
+        <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-6 text-center text-sm text-[rgb(var(--muted))]">
+          📊 今日盤後分析尚未產生（每交易日 22:00 自動執行）
+        </div>
+      )}
       {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-400">無法載入盤後分析：{error}</div>}
 
       {report && !loading && (

@@ -117,8 +117,8 @@ async def run_orchestrator() -> None:
                 if _should_run_now("14:30", now_twn):
                     asyncio.create_task(_run_agent("PortfolioReviewAgent", run_portfolio_review))
 
-                # 每交易日 16:35 TWN → 盤後分析
-                if _should_run_now("16:35", now_twn):
+                # 每交易日 22:00 TWN → 盤後分析（資料最晚 21:14 入庫，22:00 安全）
+                if _should_run_now("22:00", now_twn):
                     asyncio.create_task(_run_agent("EODAnalysisAgent", run_eod_analysis))
 
                 # 每 30 分鐘系統健康（市場時段）
