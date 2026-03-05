@@ -1269,3 +1269,38 @@ class TestT2SettlementDate:
         row = conn.execute("SELECT settlement_date FROM orders WHERE order_id=?",
                            (order_id,)).fetchone()
         assert row["settlement_date"] is None
+
+
+def test_schema_has_sprint2_tables(tmp_path, monkeypatch):
+    """_ensure_schema 必須建立 Sprint 2 所有新表與新欄位"""
+    import sqlite3, os
+    os.makedirs(str(tmp_path / "data" / "sqlite"), exist_ok=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTH_TOKEN", "test")
+
+    db = tmp_path / "data" / "sqlite" / "trades.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute("""CREATE TABLE positions (
+        symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+        current_price REAL, unrealized_pnl REAL, high_water_mark REAL
+    )""")
+    conn.execute("""CREATE TABLE orders (
+        order_id TEXT PRIMARY KEY, symbol TEXT, side TEXT,
+        qty INTEGER, price REAL, status TEXT, ts_submit TEXT
+    )""")
+    conn.commit()
+
+    from openclaw.ticker_watcher import _ensure_schema
+    _ensure_schema(conn)
+
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(positions)").fetchall()]
+    assert "state" in cols
+    assert "entry_trading_day" in cols
+
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "lm_signal_cache" in tables
+    assert "position_events" in tables
+    assert "position_candidates" in tables
+    assert "optimization_log" in tables
+    assert "param_bounds" in tables
+    conn.close()

@@ -63,13 +63,74 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     migrations = [
         "ALTER TABLE positions ADD COLUMN high_water_mark REAL",
         "ALTER TABLE orders ADD COLUMN settlement_date TEXT",
+        # Sprint 2
+        "ALTER TABLE positions ADD COLUMN state TEXT DEFAULT 'HOLDING'",
+        "ALTER TABLE positions ADD COLUMN entry_trading_day TEXT",
     ]
     for sql in migrations:
         try:
             conn.execute(sql)
             conn.commit()
         except sqlite3.OperationalError:
-            pass  # 欄位已存在或資料表不存在（後者在測試環境外不應發生）
+            pass  # 欄位已存在或資料表不存在
+
+    # Sprint 2 新表
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS lm_signal_cache (
+            cache_id    TEXT PRIMARY KEY,
+            symbol      TEXT,
+            score       REAL NOT NULL,
+            source      TEXT NOT NULL,
+            direction   TEXT,
+            raw_json    TEXT,
+            created_at  INTEGER NOT NULL,
+            expires_at  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_lm_cache_lookup
+            ON lm_signal_cache (symbol, expires_at);
+
+        CREATE TABLE IF NOT EXISTS position_events (
+            event_id    TEXT PRIMARY KEY,
+            symbol      TEXT NOT NULL,
+            from_state  TEXT,
+            to_state    TEXT NOT NULL,
+            reason      TEXT,
+            trading_day TEXT,
+            ts          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_pos_events_symbol
+            ON position_events (symbol, ts);
+
+        CREATE TABLE IF NOT EXISTS position_candidates (
+            symbol      TEXT PRIMARY KEY,
+            trading_day TEXT NOT NULL,
+            reason      TEXT,
+            created_at  INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS optimization_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts              INTEGER NOT NULL,
+            trigger_type    TEXT NOT NULL,
+            param_key       TEXT NOT NULL,
+            old_value       REAL,
+            new_value       REAL,
+            is_auto         INTEGER DEFAULT 0,
+            sample_n        INTEGER,
+            confidence      REAL,
+            rationale       TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS param_bounds (
+            param_key           TEXT PRIMARY KEY,
+            min_val             REAL NOT NULL,
+            max_val             REAL NOT NULL,
+            weekly_max_delta    REAL NOT NULL,
+            last_auto_change_ts INTEGER,
+            frozen_until_ts     INTEGER
+        );
+    """)
+    conn.commit()
 
 
 def _open_conn() -> sqlite3.Connection:
