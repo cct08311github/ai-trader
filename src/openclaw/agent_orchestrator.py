@@ -87,6 +87,16 @@ async def _run_agent(name: str, fn, *args, **kwargs) -> None:
         log.error("[ORCHESTRATOR] %s failed: %s", name, e, exc_info=True)
 
 
+def _run_reflection_agent(conn: sqlite3.Connection) -> None:
+    """同步包裝：在 executor 執行 ReflectionAgent.reflect_weekly()。"""
+    try:
+        from openclaw.strategy_optimizer import ReflectionAgent
+        proposals = ReflectionAgent(conn).reflect_weekly()
+        log.info("[orchestrator] ReflectionAgent 建議 %d 項", len(proposals))
+    except Exception as e:
+        log.warning("[orchestrator] ReflectionAgent 失敗：%s", e)
+
+
 # ── 主排程迴圈 ────────────────────────────────────────────────────────────────
 
 async def run_orchestrator() -> None:
@@ -108,6 +118,7 @@ async def run_orchestrator() -> None:
         now_twn = datetime.now(tz=_TZ_TWN)
         now_utc = datetime.now(tz=timezone.utc)
         conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.row_factory = sqlite3.Row
         try:
             # ── 定時任務 ──────────────────────────────────────────────────
             if _is_weekday_twn(now_twn):
@@ -139,13 +150,8 @@ async def run_orchestrator() -> None:
                 if _should_run_now("07:00", now_twn):
                     asyncio.create_task(
                         _run_agent("SystemOptimizationAgent", run_system_optimization))
-                    # 週一 07:00 深度反思
-                    try:
-                        from openclaw.strategy_optimizer import ReflectionAgent
-                        proposals = ReflectionAgent(conn).reflect_weekly()
-                        log.info("[orchestrator] ReflectionAgent 建議 %d 項", len(proposals))
-                    except Exception as e:
-                        log.warning("[orchestrator] ReflectionAgent 失敗：%s", e)
+                    # 週一 07:00 深度反思（非阻塞）
+                    asyncio.create_task(asyncio.to_thread(_run_reflection_agent, conn))
                 if _should_run_now("07:30", now_twn):
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))

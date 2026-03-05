@@ -395,7 +395,8 @@ def _insert_order_event(conn: sqlite3.Connection, *, order_id: str, event_type: 
 # ── SSE 可視 trace (agent='watcher') ─────────────────────────────────────────
 def _log_trace(conn: sqlite3.Connection, *, symbol: str, signal: str, snap: dict,
                approved: bool, reject_code: Optional[str],
-               order=None, decision_id: Optional[str] = None) -> None:
+               order=None, decision_id: Optional[str] = None,
+               extra_meta: Optional[dict] = None) -> None:
     from openclaw.llm_observability import LLMTrace, insert_llm_trace
 
     summary = (
@@ -409,6 +410,12 @@ def _log_trace(conn: sqlite3.Connection, *, symbol: str, signal: str, snap: dict
         response += f" | order: {order.side} {order.qty}@{order.price}"
 
     import time as _time
+    meta: dict = {
+        "symbol": symbol, "signal": signal, "snap": snap, "outcome": outcome,
+        "created_at_ms": int(_time.time() * 1000),
+    }
+    if extra_meta:
+        meta.update(extra_meta)
     trace = LLMTrace(
         component="watcher",
         agent="watcher",
@@ -419,10 +426,7 @@ def _log_trace(conn: sqlite3.Connection, *, symbol: str, signal: str, snap: dict
         output_tokens=0,
         latency_ms=0,
         decision_id=decision_id,
-        metadata={
-            "symbol": symbol, "signal": signal, "snap": snap, "outcome": outcome,
-            "created_at_ms": int(_time.time() * 1000),
-        },
+        metadata=meta,
     )
     try:
         insert_llm_trace(conn, trace, auto_commit=True)
@@ -747,14 +751,13 @@ def run_watcher() -> None:
                         position_avg_price=avg_price,
                         high_water_mark=high_water_marks.get(symbol),
                     )
-                    _agg_meta = {}
                 decision_id = str(uuid.uuid4())
 
                 # ── Mock 防護：mock 資料禁止開新倉（buy） ────────────────
                 if data_is_mock and signal == "buy":
                     _log_trace(conn, symbol=symbol, signal=signal, snap=snap,
                                approved=False, reject_code="RISK_MOCK_DATA_FORBIDDEN",
-                               decision_id=decision_id)
+                               decision_id=decision_id, extra_meta=_agg_meta)
                     log.info("[%s] signal=buy BLOCKED — mock data mode", symbol)
                     continue
 
@@ -790,7 +793,8 @@ def run_watcher() -> None:
 
                 _log_trace(conn, symbol=symbol, signal=signal, snap=snap,
                            approved=result.approved, reject_code=result.reject_code,
-                           order=result.order, decision_id=decision_id)
+                           order=result.order, decision_id=decision_id,
+                           extra_meta=_agg_meta)
 
                 log.info("[%s] signal=%-4s close=%.1f → %s",
                          symbol, signal, snap["close"],
