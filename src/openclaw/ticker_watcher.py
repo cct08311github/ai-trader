@@ -911,6 +911,18 @@ def run_watcher() -> None:
             except Exception as _rv:
                 log.warning("[reviewer] proposal reviewer error: %s", _rv)
 
+            # ── Telegram 提案通知 + 老闆 inline 核准 ──────────────────────────
+            try:
+                from openclaw.tg_approver import notify_pending_proposals, poll_approval_callbacks
+                n_notify = notify_pending_proposals(conn)
+                if n_notify > 0:
+                    log.info("[tg_approver] Sent %d proposal notifications", n_notify)
+                n_cb = poll_approval_callbacks(conn)
+                if n_cb > 0:
+                    log.info("[tg_approver] Processed %d approval callbacks", n_cb)
+            except Exception as _ta:
+                log.warning("[tg_approver] error: %s", _ta)
+
         except Exception as e:
             log.error("Scan cycle error: %s", e, exc_info=True)
         finally:
