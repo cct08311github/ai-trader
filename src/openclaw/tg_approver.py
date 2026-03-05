@@ -1,13 +1,19 @@
-"""tg_approver.py — Telegram 策略提案通知與 inline 核准
+"""tg_approver.py — Telegram 策略提案通知（URL 按鈕版）
 
 功能：
-    - notify_pending_proposals(conn)  : 掃描 pending 提案，發 Telegram inline 按鈕
-    - poll_approval_callbacks(conn)   : 處理 ✅/🚫 按鈕按下，更新 DB 狀態
+    - notify_pending_proposals(conn)  : 掃描 pending 提案，發 Telegram URL 按鈕通知
+    - poll_approval_callbacks(conn)   : no-op（保留介面相容性，URL 按鈕不需要 polling）
+
+URL 按鈕方案說明：
+    inline keyboard 的 callback_data 按鈕會產生 callback_query update，
+    與 OpenClaw gateway 的 getUpdates 競爭同一個 bot token，導致 gateway
+    優先消費並路由給 LLM agent，tg_approver 永遠無法收到。
+    改用 url 按鈕：點擊直接在瀏覽器開啟 ai-trader API（Tailscale 可達），
+    API 端點更新 DB 並透過 Telegram 回送確認，完全繞過 callback_query。
 
 狀態持久化：
     working_memory 表，scope='tg_approver'
       key='notified_ids'   → JSON 陣列，已發通知的 proposal_id
-      key='update_offset'  → int，Telegram getUpdates offset
 """
 from __future__ import annotations
 
@@ -203,9 +209,12 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
         lines.append(f"\n信心度：{conf:.0%}　<i>ID：{pid[:8]}…</i>")
 
+        # URL 按鈕：點擊開瀏覽器呼叫 api 端點，不產生 callback_query
+        base = os.environ.get("AI_TRADER_API_URL", "https://100.109.189.69:8080")
+        auth = os.environ.get("AUTH_TOKEN", "")
         buttons = [[
-            {"text": "✅ 核准", "callback_data": f"approve:{pid}"},
-            {"text": "🚫 拒絕", "callback_data": f"reject:{pid}"},
+            {"text": "✅ 核准", "url": f"{base}/api/strategy/proposals/{pid}/approve?token={auth}"},
+            {"text": "🚫 拒絕", "url": f"{base}/api/strategy/proposals/{pid}/reject?token={auth}"},
         ]]
 
         ok = send_message_with_buttons("\n".join(lines), buttons)
@@ -221,97 +230,9 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
 
 def poll_approval_callbacks(conn: sqlite3.Connection) -> int:
-    """Poll Telegram getUpdates，處理 ✅/🚫 callback_query，更新提案狀態。
+    """No-op — URL 按鈕方案不需要 polling。
 
-    Returns:
-        處理的 callback 數量
+    保留此函式介面以維持 ticker_watcher 相容性。
+    核准/拒絕由 api/strategy/proposals/{id}/approve|reject 端點處理。
     """
-    from openclaw.tg_notify import send_message  # lazy import
-
-    tok = _token()
-    if not tok:
-        return 0
-
-    offset = int(_wm_get(conn, "update_offset") or 0)
-    url = (
-        f"https://api.telegram.org/bot{tok}/getUpdates"
-        f"?offset={offset}&limit=10&timeout=1"
-        f'&allowed_updates=["callback_query"]'
-    )
-
-    try:
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            data = json.loads(resp.read())
-    except Exception as e:
-        log.debug("Telegram getUpdates error: %s", e)
-        return 0
-
-    if not data.get("ok"):
-        log.warning("getUpdates not ok: %s", data)
-        return 0
-
-    updates = data.get("result", [])
-    processed = 0
-    new_offset = offset
-
-    for upd in updates:
-        uid = upd["update_id"]
-        new_offset = uid + 1
-        cb = upd.get("callback_query")
-        if not cb:
-            continue
-
-        cb_id = cb["id"]
-        cb_data = cb.get("data", "")
-
-        if ":" not in cb_data:
-            _answer_callback(tok, cb_id, "無效指令")
-            continue
-
-        action, proposal_id = cb_data.split(":", 1)
-        if action == "approve":
-            new_status, reply = "approved", "✅ 已核准"
-        elif action == "reject":
-            new_status, reply = "rejected", "🚫 已拒絕"
-        else:
-            _answer_callback(tok, cb_id, "未知指令")
-            continue
-
-        cur = conn.execute(
-            "SELECT proposal_id, target_rule, proposed_value"
-            " FROM strategy_proposals WHERE proposal_id=?",
-            (proposal_id,),
-        ).fetchone()
-
-        if not cur:
-            _answer_callback(tok, cb_id, "找不到提案")
-            continue
-
-        conn.execute(
-            "UPDATE strategy_proposals SET status=? WHERE proposal_id=?",
-            (new_status, proposal_id),
-        )
-        conn.commit()
-
-        rule = cur["target_rule"]
-        try:
-            pv = json.loads(cur["proposed_value"])
-            symbol = pv.get("symbol", "")
-            sym_display = _fmt_symbol(conn, symbol) if symbol else ""
-        except Exception:
-            sym_display = ""
-
-        confirm = f"{reply} — {rule}"
-        if sym_display:
-            confirm += f"（{sym_display}）"
-        send_message(confirm)
-
-        _answer_callback(tok, cb_id, reply)
-        log.info("[tg_approver] %s proposal %s (%s)", new_status, proposal_id[:8], rule)
-        processed += 1
-
-    if new_offset > offset:
-        _wm_set(conn, "update_offset", new_offset)
-
-    return processed
+    return 0

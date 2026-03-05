@@ -349,3 +349,62 @@ def get_debates(
         return {"status": "ok", "data": [], "date": date, "total": 0}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+from fastapi import Query
+from fastapi.responses import HTMLResponse
+
+@router.get("/proposals/{proposal_id}/approve", response_class=HTMLResponse)
+def approve_proposal_url(proposal_id: str, token: str = Query(...)):
+    """URL 按鈕核准提案（Telegram URL button 用）。"""
+    import os
+    if token != os.environ.get("AUTH_TOKEN", ""):
+        return HTMLResponse("<h2>❌ 無效 token</h2>", status_code=403)
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT proposal_id, target_rule, status FROM strategy_proposals WHERE proposal_id=?",
+            (proposal_id,)
+        ).fetchone()
+        if not row:
+            return HTMLResponse("<h2>❌ 找不到提案</h2>", status_code=404)
+        if row["status"] != "pending":
+            return HTMLResponse(f"<h2>⚠️ 提案已處理（狀態：{row['status']}）</h2>")
+        conn.execute(
+            "UPDATE strategy_proposals SET status='approved', decided_at=? WHERE proposal_id=?",
+            (int(time.time()), proposal_id)
+        )
+        conn.commit()
+    try:
+        from openclaw.tg_notify import send_message
+        send_message(f"✅ 已核准 — {row['target_rule']}（{proposal_id[:8]}…）")
+    except Exception:
+        pass
+    return HTMLResponse("<h2>✅ 提案已核准</h2><p>可關閉此頁面。</p>")
+
+
+@router.get("/proposals/{proposal_id}/reject", response_class=HTMLResponse)
+def reject_proposal_url(proposal_id: str, token: str = Query(...)):
+    """URL 按鈕拒絕提案（Telegram URL button 用）。"""
+    import os
+    if token != os.environ.get("AUTH_TOKEN", ""):
+        return HTMLResponse("<h2>❌ 無效 token</h2>", status_code=403)
+    with db.get_conn() as conn:
+        row = conn.execute(
+            "SELECT proposal_id, target_rule, status FROM strategy_proposals WHERE proposal_id=?",
+            (proposal_id,)
+        ).fetchone()
+        if not row:
+            return HTMLResponse("<h2>❌ 找不到提案</h2>", status_code=404)
+        if row["status"] != "pending":
+            return HTMLResponse(f"<h2>⚠️ 提案已處理（狀態：{row['status']}）</h2>")
+        conn.execute(
+            "UPDATE strategy_proposals SET status='rejected', decided_at=? WHERE proposal_id=?",
+            (int(time.time()), proposal_id)
+        )
+        conn.commit()
+    try:
+        from openclaw.tg_notify import send_message
+        send_message(f"🚫 已拒絕 — {row['target_rule']}（{proposal_id[:8]}…）")
+    except Exception:
+        pass
+    return HTMLResponse("<h2>🚫 提案已拒絕</h2><p>可關閉此頁面。</p>")

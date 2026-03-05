@@ -219,7 +219,12 @@ def test_notify_skips_strategy_direction(conn, monkeypatch):
     assert mock_send.call_count == 0
 
 
-# ── poll_approval_callbacks ───────────────────────────────────────────────────
+# ── poll_approval_callbacks (no-op in URL-button mode) ───────────────────────
+
+def test_poll_is_noop(conn):
+    """poll_approval_callbacks is a no-op in URL-button mode."""
+    assert poll_approval_callbacks(conn) == 0
+
 
 def _make_callback_update(update_id: int, cb_id: str, data: str) -> dict:
     return {
@@ -233,119 +238,28 @@ def _make_callback_update(update_id: int, cb_id: str, data: str) -> dict:
     }
 
 
-def test_poll_no_token(conn, monkeypatch):
-    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
-    assert poll_approval_callbacks(conn) == 0
-
-
-def test_poll_approve_updates_status(conn_with_data, monkeypatch):
+def test_notify_uses_url_buttons(conn_with_data, monkeypatch):
+    """Notification buttons must use 'url' (not 'callback_data') to avoid OpenClaw gateway conflict."""
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("AUTH_TOKEN", "secret")
+    monkeypatch.setenv("AI_TRADER_API_URL", "https://100.0.0.1:8080")
     c, pid1, _ = conn_with_data
 
-    updates_resp = {"ok": True, "result": [
-        _make_callback_update(100, "cb1", f"approve:{pid1}"),
-    ]}
+    _wm_set(c, "notified_ids", [_])  # only pid1 is unnotified
 
-    with patch("urllib.request.urlopen") as mock_urlopen, \
-         patch("openclaw.tg_notify.send_message", return_value=True):
-        resp_mock = MagicMock()
-        resp_mock.read.return_value = json.dumps(updates_resp).encode()
-        resp_mock.__enter__ = lambda s: s
-        resp_mock.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = resp_mock
+    call_args = []
 
-        n = poll_approval_callbacks(c)
+    def capture(text, buttons, chat_id=None):
+        call_args.append(buttons)
+        return True
 
-    assert n == 1
-    row = c.execute("SELECT status FROM strategy_proposals WHERE proposal_id=?", (pid1,)).fetchone()
-    assert row["status"] == "approved"
+    with patch("openclaw.tg_notify.send_message_with_buttons", side_effect=capture):
+        notify_pending_proposals(c)
 
-
-def test_poll_reject_updates_status(conn_with_data, monkeypatch):
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    c, _, pid2 = conn_with_data
-
-    updates_resp = {"ok": True, "result": [
-        _make_callback_update(200, "cb2", f"reject:{pid2}"),
-    ]}
-
-    with patch("urllib.request.urlopen") as mock_urlopen, \
-         patch("openclaw.tg_notify.send_message", return_value=True):
-        resp_mock = MagicMock()
-        resp_mock.read.return_value = json.dumps(updates_resp).encode()
-        resp_mock.__enter__ = lambda s: s
-        resp_mock.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = resp_mock
-
-        n = poll_approval_callbacks(c)
-
-    assert n == 1
-    row = c.execute("SELECT status FROM strategy_proposals WHERE proposal_id=?", (pid2,)).fetchone()
-    assert row["status"] == "rejected"
-
-
-def test_poll_advances_offset(conn_with_data, monkeypatch):
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    c, pid1, _ = conn_with_data
-
-    updates_resp = {"ok": True, "result": [
-        _make_callback_update(300, "cb3", f"approve:{pid1}"),
-    ]}
-
-    with patch("urllib.request.urlopen") as mock_urlopen, \
-         patch("openclaw.tg_notify.send_message", return_value=True):
-        resp_mock = MagicMock()
-        resp_mock.read.return_value = json.dumps(updates_resp).encode()
-        resp_mock.__enter__ = lambda s: s
-        resp_mock.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = resp_mock
-
-        poll_approval_callbacks(c)
-
-    assert _wm_get(c, "update_offset") == 301
-
-
-def test_poll_empty_updates(conn, monkeypatch):
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    updates_resp = {"ok": True, "result": []}
-
-    with patch("urllib.request.urlopen") as mock_urlopen:
-        resp_mock = MagicMock()
-        resp_mock.read.return_value = json.dumps(updates_resp).encode()
-        resp_mock.__enter__ = lambda s: s
-        resp_mock.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = resp_mock
-
-        n = poll_approval_callbacks(conn)
-
-    assert n == 0
-
-
-def test_poll_network_error(conn, monkeypatch):
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-
-    with patch("urllib.request.urlopen", side_effect=Exception("timeout")):
-        n = poll_approval_callbacks(conn)
-
-    assert n == 0
-
-
-def test_poll_unknown_proposal_id(conn, monkeypatch):
-    """Callback referencing non-existent proposal returns 0 processed."""
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    fake_id = str(uuid.uuid4())
-    updates_resp = {"ok": True, "result": [
-        _make_callback_update(400, "cb4", f"approve:{fake_id}"),
-    ]}
-
-    with patch("urllib.request.urlopen") as mock_urlopen, \
-         patch("openclaw.tg_approver._answer_callback"):
-        resp_mock = MagicMock()
-        resp_mock.read.return_value = json.dumps(updates_resp).encode()
-        resp_mock.__enter__ = lambda s: s
-        resp_mock.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = resp_mock
-
-        n = poll_approval_callbacks(conn)
-
-    assert n == 0
+    assert call_args, "should have sent at least one notification"
+    row_buttons = call_args[0][0]  # first row of first message
+    for btn in row_buttons:
+        assert "url" in btn, "button must use 'url' not 'callback_data'"
+        assert "callback_data" not in btn
+        assert "/api/strategy/proposals/" in btn["url"]
+        assert "token=secret" in btn["url"]
