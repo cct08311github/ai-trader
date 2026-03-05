@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/auth.py
+# hypothesis_version: 6.151.9
+
+[401, 503, '/api/auth', '/check', '/login', 'AUTH_PASSWORD', 'AUTH_TOKEN', 'AUTH_USERNAME', 'admin', 'auth', 'authenticated', 'ok', 'status', '帳號或密碼錯誤', '登入成功']

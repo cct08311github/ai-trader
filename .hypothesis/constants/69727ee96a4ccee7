@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/resume_protocol.py
+# hypothesis_version: 6.151.9
+
+[300, 'Self check passed', 'available_cash', 'clean', 'details', 'halt', 'message', 'mode', 'needs_resume', 'ok', 'periodic', 'positions', 'positions_json', 'reason', 'resume_protocol', 'status', 'suspended', 'system_state', 'system_state_json', 'timestamp', 'trades']

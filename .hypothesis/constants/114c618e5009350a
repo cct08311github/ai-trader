@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/drawdown_guard.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.15, 0.4, 'RISK_DRAWDOWN_OK', 'RISK_LOW_WIN_RATE', 'critical', 'daily_pnl_summary', 'incidents', 'normal', 'reduce_only', 'suspended', 'trading_locks', 'warn']

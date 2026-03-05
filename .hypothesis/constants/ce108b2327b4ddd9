@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/proposal_engine.py
+# hypothesis_version: 6.151.9
+
+[0.85, 1000, '%Y-%m-%d', 'AUTH_AUTO_APPROVED', 'AUTH_MANUAL_REQUIRED', 'AUTH_NOT_PENDING', 'Approved', 'NONE', 'PROPOSAL_EXPIRED', 'PROPOSAL_NOT_FOUND', '__main__', 'allowed', 'approved', 'auto_approved', 'confidence', 'created_at', 'current_value', 'decided_at', 'decided_by', 'decision_reason', 'expired', 'expires_at', 'generated_by', 'live_mode_switch', 'pending', 'position_sizing', 'proposal not found', 'proposal_id', 'proposal_json', 'proposed_value', 'reason', 'reason_code', 'rejected', 'risk_parameters', 'rollback_version', 'rule_category', 'source_episodes', 'source_episodes_json', 'status', 'stop_loss_logic', 'success', 'supporting_evidence', 'symbol_universe', 'target_rule', '{}', '⏰', '⏳', '✅', '❌', '❓']

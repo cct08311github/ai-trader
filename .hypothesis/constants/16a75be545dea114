@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/token_budget.py
+# hypothesis_version: 6.151.9
+
+[0.0, 100.0, 1000, 'TWD', 'action', 'adjustments', 'base_monthly_budget', 'critical_halt', 'currency', 'halt', 'message', 'ok', 'system_name', 'threshold_pct', 'throttle', 'throttling', 'tiers', 'token_budget_events', 'token_usage_monthly', 'utf-8', 'version', 'warn', 'warning']

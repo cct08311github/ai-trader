@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/rl/hybrid_architecture.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.1, 0.2, 0.25, 0.75, 0.78, 1.0, 'LLM planner', '_noop', 'action', 'baseline_reward', 'best_reward', 'can_auto_approve', 'can_propose', 'candidate_count', 'confidence', 'constraints', 'current_strategy', 'current_value', 'decision', 'epsilon', 'get_current_level', 'hybrid_llm_rl', 'issues_found', 'market_context', 'max_drawdown', 'max_leverage', 'maximize_reward', 'meta', 'objective', 'optimizer', 'parameter_bounds', 'parameter_space', 'patterns', 'planner_rationale', 'proposal', 'proposal_id', 'proposed_value', 'rationale', 'reflection_runs', 'risk_budget', 'rl_optimization', 'root_cause_code', 'rule_category', 'rule_text', 'seed', 'semantic_memory', 'steps', 'supporting_evidence', 'target_rule', 'tunable_params', 'version_id']

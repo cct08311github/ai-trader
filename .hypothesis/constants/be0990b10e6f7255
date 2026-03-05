@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/core/config.py
+# hypothesis_version: 6.151.9
+
+[120, ',', '.env', '4.6.1', 'CORS_ORIGINS', 'DB_PATH', 'ENABLE_RW_ENDPOINTS', 'RATE_LIMIT_RPM', 'STRATEGY_OPS_TOKEN', 'ignore', 'utf-8']

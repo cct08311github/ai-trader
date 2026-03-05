@@ -232,6 +232,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
     const [error, setError] = useState(null)
     const [lockLoading, setLockLoading] = useState(false)
     const [lockError, setLockError] = useState(null)
+    const contentRef = React.useRef(null)
 
     async function handleToggleLock() {
         setLockLoading(true)
@@ -256,6 +257,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
         setLoading(true)
         setError(null)
         setDetail(null)
+        if (contentRef.current) contentRef.current.scrollTop = 0
 
         const base = getApiBase()
         authFetch(`${base}/api/portfolio/position-detail/${encodeURIComponent(symbol)}`)
@@ -329,7 +331,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                 )}
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div ref={contentRef} className="flex-1 overflow-y-auto p-6 space-y-4">
                     {/* 即時報價（五檔）— 始終顯示 */}
                     <QuotePanel symbol={symbol} />
                     {/* K 線圖 */}

@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/risk_engine.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.005, 0.01, 0.015, 0.02, 0.05, 0.15, 0.2, 0.5, 0.6, 1.0, 1.2, 2.0, 9999.0, 200, 1000, 10000, 30000, 'IOC', 'RISK_DATA_STALENESS', 'RISK_LIQUIDITY_LIMIT', 'RISK_PM_NOT_APPROVED', 'RISK_SYMBOL_LOCKED', 'RISK_TRADING_LOCKED', 'approved', 'authority_level', 'buy', 'correlation_guard_ok', 'date', 'day_pnl', 'db_write_p99_ms', 'decision_id', 'default_stop_pct', 'feed_delay_ms', 'fixed_fractional', 'gross_after', 'gross_exposure', 'limit', 'locked', 'low_confidence_scale', 'max_daily_loss_pct', 'max_db_write_p99_ms', 'max_feed_delay_ms', 'max_gross_exposure', 'max_orders_per_min', 'max_slippage_bps', 'max_symbol_weight', 'orders_last_60s', 'pm_review_required', 'price_dev_pct', 'r', 'sell', 'sentinel_policy_path', 'slippage_bps', 'symbol', 'symbol_weight_after']

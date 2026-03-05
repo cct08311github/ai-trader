@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/control.py
+# hypothesis_version: 6.151.9
+
+[500, '/api/control', '/disable', '/enable', '/live', '/resume', '/simulation', '/status', '/stop', 'Control', 'REAL MONEY AT RISK', 'Simulation (safe)', 'auto_trading_enabled', 'emergency_reason', 'emergency_stop', 'last_modified', 'last_modified_by', 'message', 'mode_warning', 'ok', 'r', 'simulation_mode', 'status', 'trading_enabled', 'user (via API)', 'user (via API: live)', 'w', 'warning']

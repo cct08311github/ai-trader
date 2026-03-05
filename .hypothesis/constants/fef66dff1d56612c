@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/position_sizing.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.001, 0.003, 0.005, 0.01, 0.05, 0.1, 0.5, 0.6, 1.0, 2.0, 'atr', 'atr_based', 'atr_risk', 'fixed_fractional', 'levels', 'position_limits', 'utf-8']

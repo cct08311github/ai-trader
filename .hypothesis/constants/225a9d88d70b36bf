@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/news_guard.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.1, 0.15, 0.2, 0.6, 0.7, 1.0, 2.0, 8000, 'LOBSTER_GOLD_REJECT', 'ai_giants', 'alphabet', 'amazon', 'apple', 'brave', 'china', 'description', 'export control', 'gas', 'geopolitics', 'google', 'houthi', 'http', 'iran', 'israel', 'link', 'meta', 'microsoft', 'msft', 'nvda', 'nvidia', 'oil', 'openai', 'red sea', 'russia', 'sanction', 'ship', 'shipping', 'site', 'snippet', 'source', 'taiwan', 'tariff', 'title', 'trump', 'trump_policy', 'tsmc', 'twitter', 'ukraine', 'url', '中國', '以色列', '伊朗', '俄羅斯', '出口管制', '制裁', '原油', '台灣', '台積電', '天然氣', '川普', '烏克蘭', '特朗普', '紅海', '胡塞', '航運', '關稅', '關税']

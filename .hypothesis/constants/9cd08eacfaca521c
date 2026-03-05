@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/middleware/rate_limit.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1.0, 60.0, 120, 429, '/api/health', '/docs', '/openapi.json', '/redoc', 'application/json', 'unknown']

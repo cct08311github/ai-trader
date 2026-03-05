@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/agents/base.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.5, 1000, 'AGENT_LLM_MODEL', '_', '_error', '_latency_ms', '_model', 'action_type', 'confidence', 'created_at_ms', 'data', 'gemini-2.5-flash', 'generated_by', 'observe', 'proposals', 'proposed_value', 'sqlite', 'suggest', 'summary', 'target_rule', 'trades.db', 'type']

@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/edge_metrics.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1e-12, 1e-09, 0.2, 0.3, 0.35, 0.4, 0.45, 0.8, 1.0, 1.2, 100.0, 'avg_loss', 'avg_pnl', 'avg_return_pct', 'avg_win', 'edge_metrics', 'edge_metrics_updated', 'edge_score', 'expectancy', 'inf', 'n_trades', 'net_pnl', 'notes', 'payoff_ratio', 'pnl', 'profit', 'profit_factor', 'r', 'realized_pnl', 'ret', 'return_pct', 'total_pnl', 'win_rate']

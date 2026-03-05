@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/memory_store.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.015, 0.02, 0.1, 0.6, 0.8, 0.85, 0.95, 0.97, 1.0, '%', '.db', '2026-02-28', '2330', '__main__', 'active', 'breakout', 'bull', 'buy', 'confidence', 'content', 'created_at', 'current_strategy', 'decay_score', 'ep1', 'ep2', 'episode_id', 'episodic', 'episodic_active', 'episodic_archived', 'episodic_avg_decay', 'episodic_memory', 'key', 'market_regime', 'mem_key', 'mem_value_json', 'name', 'outcome_pnl', 'params', 'root_cause_code', 'rule_id', 'rule_text', 'sample_count', 'score', 'semantic', 'semantic_active', 'semantic_archived', 'semantic_expired', 'source', 'source_episodes', 'source_episodes_json', 'strategy_v1', 'success', 'symbol', 'test', 'trade_date', 'updated_at', 'value', 'working', 'working_count', 'working_deleted']

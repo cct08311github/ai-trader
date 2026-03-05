@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/services/chat_context.py
+# hypothesis_version: 6.151.9
+
+[0.0, 1000000.0, 100, 500000, '%H:%M', '%Y-%m', '%Y-%m-%d', '%m/%d %H:%M', '+', '-', '?', '[持倉摘要]', '[持倉摘要]\n目前無持倉。', '[最近成交記錄]', 'action', 'buy', 'capital.json', 'close', 'config', 'price', 'qty', 'sell', 'signal', 'symbol', 'total_capital_twd', '買入']

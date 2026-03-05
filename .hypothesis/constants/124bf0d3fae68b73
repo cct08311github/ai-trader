@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/network_allowlist.py
+# hypothesis_version: 6.151.9
+
+[3.0, ',', '/', 'OPENCLAW_CURRENT_IP', 'OPENCLAW_DB_PATH', 'allowlist', 'critical', 'current_ip', 'ignore', 'incidents', 'network_security', 'prefixlen', 'utf-8', 'version']

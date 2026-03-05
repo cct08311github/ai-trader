@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/orders.py
+# hypothesis_version: 6.151.9
+
+['cancelled', 'expired', 'filled', 'new', 'partially_filled', 'rejected', 'submitted']

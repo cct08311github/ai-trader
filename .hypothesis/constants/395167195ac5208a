@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/agents/eod_analysis.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.7, 500, 1000, 2000, '%Y-%m-%d', 'action_type', 'active_watchlist', 'close', 'confidence', 'config', 'data', 'eod_analysis', 'high', 'histogram', 'institution_flows', 'low', 'ma20', 'ma5', 'ma60', 'macd', 'market_outlook', 'neutral', 'observe', 'proposals', 'resistance', 'rsi14', 'sentiment', 'signal', 'sqlite', 'suggest', 'summary', 'support', 'symbol', 'top_movers', 'trade_date', 'trades.db', 'watchlist.json', '盤後分析完成', '（無三大法人資料）']

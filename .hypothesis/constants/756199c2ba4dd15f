@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/db_router.py
+# hypothesis_version: 6.151.9
+
+[30.0, 'OPENCLAW_HOME', 'db', 'execution', 'main', 'main.db', 'market_data', 'memory', 'memory.db', 'ticks', 'ticks.db', 'trades', 'trades.db', '~/.openclaw']

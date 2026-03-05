@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/daily_pm_review.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.65, 1.0, 'LLM 未配置，請使用人工覆蓋', '_latency_ms', '_model', '_prompt', '_raw_response', 'approved', 'bear_case', 'bull_case', 'buy', 'confidence', 'consensus_points', 'daily_pm_review', 'date', 'divergence_points', 'gpt-4', 'is_today', 'llm', 'long', 'manual', 'manual_override', 'neutral_case', 'none', 'note', 'open_positions', 'pending', 'pending_manual', 'r', 'reason', 'recent_pnl', 'recent_trades', 'recommended_action', 'reviewed_at', 'sell', 'short', 'source', 'w', '人工封鎖交易', '人工授權交易', '保守', '停止', '加碼', '尚未執行今日 PM 審核', '暫停', '樂觀', '正向', '減碼', '看多', '積極', '等待', '觀望', '買', '賣', '避險']

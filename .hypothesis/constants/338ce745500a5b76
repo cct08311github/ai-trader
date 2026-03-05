@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/services/shioaji_service.py
+# hypothesis_version: 6.151.9
+
+[5.0, 20.0, 140.0, 142.0, 600.0, 620.0, 1420.0, 2000.0, 62000.0, 100, '0050', '2330', 'SHIOAJI', 'SHIOAJI_API_KEY', 'SHIOAJI_SECRET_KEY', 'SIMULATION', 'Shioaji API timeout', 'TSMC', 'TW50 ETF', 'TWD', 'account', 'account_id', 'ask_price', 'ask_volume', 'avg_price', 'bid_price', 'bid_volume', 'bidask', 'chip_health_score', 'code', 'currency', 'error', 'last_price', 'market_value', 'message', 'mock', 'name', 'note', 'positions', 'price', 'qty', 'quantity', 'r', 'shioaji', 'simulation', 'simulation_mode', 'source', 'status', 'stock_id', 'symbol', 'timeout_fallback', 'type', 'unrealized_pnl']

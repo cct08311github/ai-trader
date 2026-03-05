@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/eod_ingest.py
+# hypothesis_version: 6.151.9
+
+['"', '%Y-%m-%d', '+', ',', '--', '---', '--apply-migration', '--db', '--trade-date', 'BEGIN IMMEDIATE', 'Change', 'ClosingPrice', 'Code', 'Date', 'HighestPrice', 'LowestPrice', 'N/A', 'Name', 'OpenClaw/1.2.1', 'OpeningPrice', 'TPEx', 'TWSE', 'TradeValue', 'TradeVolume', 'Transaction', 'User-Agent', 'X', '\\d{4}', '^\\d{4,6}$', '__main__', 'cp950', 'data', 'date', 'error', 'failed', 'replace', 'sql', 'sqlite', 'status', 'store_true', 'success', 'tpex_rows', 'trade_date', 'trades.db', 'twse_rows', 'utf-8', 'x', '交易日期', '代號', '名稱', '成交筆數', '成交股數', '成交金額', '收盤', '收盤價', '最低價', '最高價', '漲跌價差', '證券代號', '證券名稱', '資料日期', '開盤價', '除權息']

@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/reflection_loop.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.5, 0.7, 0.85, 100, 500, 1000, '.db', '0.02', '0.025', '2026-02-28', '__main__', 'action', 'confidence', 'created_at', 'current_value', 'daily_reflection', 'day', 'decision', 'entry_parameters', 'episode_id', 'generalization', 'issues_found', 'patterns', 'proposal', 'proposal_id', 'propose', 'proposed_value', 'raw', 'reflection_loop', 'reflection_runs', 'root_cause_code', 'rule_category', 'rule_text', 'run_id', 'sample_diagnosis', 'sample_issue', 'stage1_diagnosis', 'stage2_abstraction', 'stage3_refinement', 'strategy_proposals', 'supporting_evidence', 'threshold_passed', 'unknown']

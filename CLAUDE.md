@@ -240,7 +240,9 @@ cd frontend/web && npm test -- --run
 
 ## 九、設計文件
 
-- `docs/plans/` — Brainstorming / Writing Plans 產出，設計文件與實作計劃
+- `doc/` — 所有文件統一歸檔目錄
+  - `doc/plans/` — Brainstorming / Writing Plans 產出，設計文件與實作計劃
+  - `doc/tailscale/` — Tailscale 部署與客戶端指南
 - 命名規則：`YYYY-MM-DD-<feature>-design.md` / `YYYY-MM-DD-<feature>-plan.md`
 
 ---

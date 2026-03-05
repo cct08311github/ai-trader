@@ -1,0 +1,4 @@
+# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/chat.py
+# hypothesis_version: 6.151.9
+
+[300, 400, 500, 1000, 4000, '/api/chat', '/create-proposal', '/history', '/message', 'AI 回應中未偵測到明確的交易建議', 'ANTHROPIC_API_KEY', 'CHAT_LLM_MODEL', 'Cache-Control', 'Chat', 'GEMINI_API_KEY', 'X-Accel-Buffering', 'action', 'assistant', 'chat', 'claude-sonnet-4-6', 'content', 'created_at', 'gemini', 'history', 'id', 'intent', 'latency_ms', 'max_output_tokens', 'message', 'model', 'no', 'no-cache', 'none', 'ok', 'parts', 'price', 'prompt', 'proposal_id', 'qty', 'response', 'role', 'source', 'status', 'symbol', 'text/event-stream', 'trace_id', 'user', 'user_message']
