@@ -91,6 +91,20 @@ trading_enabled = true
 - `AuthMiddleware` 強制所有請求帶 `Authorization: Bearer <token>`
 - **AUTH_TOKEN 未設定時**：middleware 自動生成隨機 token（並不是停用驗證）
 - 測試必須明確設定 `AUTH_TOKEN` 環境變數
+- **SSE / URL 按鈕路徑**：`/api/stream/` 和 `/proposals/` 額外接受 `?token=` query param（瀏覽器無法帶 header）
+
+### DB 連線
+
+- `db.get_conn()` = **readonly pool**（`mode=ro`）—— 僅供 SELECT
+- `db.get_conn_rw()` = read-write 連線 —— INSERT/UPDATE/DELETE 必須用此
+- 常見陷阱：`approve/reject` endpoint 用了 `get_conn()` → `OperationalError: attempt to write a readonly database`
+
+### Telegram 提案審查（tg_approver）
+
+- 提案通知發送至 `TELEGRAM_CHAT_ID`（預設 `-1003772422881` 群組）
+- URL 按鈕方案（非 callback_data）：點擊直接打 API，繞過 OpenClaw gateway 競爭
+- approve/reject HTML endpoint：`GET /api/strategy/proposals/{id}/approve?token=...`
+- 修改後需 `pm2 restart ai-trader-api` 才能生效（middleware 是 import-time 載入）
 
 ---
 
@@ -286,6 +300,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.11.x | Strangler Fig 信號重構；Trailing Stop；T+2 交割追蹤；實際費率；Gemini 全自動策略審查；Telegram 雙向通知 |
 | v4.12.x | Sprint 2：signal_aggregator Regime-based 動態權重；trading_engine 持倉狀態機 + 時間止損；lm_signal_cache LLM 快取；strategy_optimizer 自主優化三層架構 |
 | v4.12.1 | google-genai SDK 遷移（棄用 google.generativeai）；strategy_proposals.created_at 毫秒修正 |
+| v4.12.2 | tg_approver 端對端修復：auth middleware proposals 路徑、get_conn_rw、chat_id=-1003772422881；test fixture 補 eod_prices |
 
 ---
 
