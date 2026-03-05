@@ -66,21 +66,20 @@ def gemini_call(model: str, prompt: str) -> Dict[str, Any]:
         ValueError: Response is not valid JSON.
     """
     import time
-    import google.generativeai as genai  # lazy import
+    from google import genai  # lazy import — google-genai SDK
 
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set in environment or .env")
 
-    genai.configure(api_key=api_key)
-    gen_model = genai.GenerativeModel(
-        model,
-        generation_config={"response_mime_type": "application/json"},
-    )
+    client = genai.Client(api_key=api_key)
     t0 = time.time()
-    response = gen_model.generate_content(
-        prompt,
-        request_options={"timeout": 120},  # 120s max per call
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=genai.types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
     )
     latency_ms = int((time.time() - t0) * 1000)
 

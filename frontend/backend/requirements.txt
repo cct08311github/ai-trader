@@ -12,7 +12,7 @@ psutil>=5.9
 sse-starlette>=2.1
 
 # Google Gemini (for daily PM review)
-google-generativeai>=0.8
+google-genai>=1.0
 
 # Anthropic Claude (for chat feature — optional, falls back to Gemini)
 anthropic>=0.84

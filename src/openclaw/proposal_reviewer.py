@@ -68,22 +68,24 @@ def _gemini_review(symbol: str, weight: float, reduce_pct: float,
                    evidence: str, position_summary: str) -> dict:
     """呼叫 Gemini 審查提案，回傳 {decision, confidence, reason}。"""
     import re, os
-    import google.generativeai as genai
+    from google import genai
 
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY 未設定")
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
-        _MODEL,
-        generation_config={"response_mime_type": "application/json"},
-    )
+    client = genai.Client(api_key=api_key)
     prompt = _REVIEW_PROMPT_TMPL.format(
         symbol=symbol, weight=weight, reduce_pct=reduce_pct,
         evidence=evidence, position_summary=position_summary,
     )
-    resp = model.generate_content(prompt, request_options={"timeout": 30})
+    resp = client.models.generate_content(
+        model=_MODEL,
+        contents=prompt,
+        config=genai.types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
+    )
     text = resp.text.strip()
 
     # 嘗試解析 JSON（容錯 markdown code fence）
