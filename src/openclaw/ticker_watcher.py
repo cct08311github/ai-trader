@@ -715,18 +715,39 @@ def run_watcher() -> None:
                             (cur_close, symbol)
                         )
 
-                # EOD 日線驅動信號（Strangler Fig：取代舊 _generate_signal）
+                # Sprint 2：呼叫 trading_engine.tick 後改用 signal_aggregator
                 try:
+                    from openclaw.trading_engine import tick as _te_tick
+                    _te_tick(conn, symbol)
+                except Exception as _te_err:
+                    log.warning("[%s] trading_engine.tick 失敗：%s", symbol, _te_err)
+
+                _agg_meta: dict = {}
+                try:
+                    from openclaw.signal_aggregator import aggregate as _agg
+                    _agg_signal = _agg(
+                        conn, symbol, snap,
+                        position_avg_price=avg_price,
+                        high_water_mark=high_water_marks.get(symbol),
+                    )
+                    signal = _agg_signal.action
+                    # 將 aggregator 結果記入 trace metadata
+                    _agg_meta = {
+                        "regime": _agg_signal.regime,
+                        "score": _agg_signal.score,
+                        "weights": _agg_signal.weights_used,
+                        "reasons": _agg_signal.reasons,
+                    }
+                except Exception as _agg_err:
+                    log.warning("[%s] signal_aggregator 失敗 (%s), fallback to signal_generator",
+                                symbol, _agg_err)
                     from openclaw.signal_generator import compute_signal as _sg_compute
                     signal = _sg_compute(
                         conn, symbol=symbol,
                         position_avg_price=avg_price,
                         high_water_mark=high_water_marks.get(symbol),
                     )
-                except Exception as _sg_err:
-                    log.warning("[%s] signal_generator failed (%s), fallback", symbol, _sg_err)
-                    signal = _generate_signal(snap, avg_price,
-                                              high_water_mark=high_water_marks.get(symbol))
+                    _agg_meta = {}
                 decision_id = str(uuid.uuid4())
 
                 # ── Mock 防護：mock 資料禁止開新倉（buy） ────────────────

@@ -1303,4 +1303,13 @@ def test_schema_has_sprint2_tables(tmp_path, monkeypatch):
     assert "position_candidates" in tables
     assert "optimization_log" in tables
     assert "param_bounds" in tables
-    conn.close()
+
+
+def test_watcher_imports_sprint2_modules(monkeypatch):
+    """確認 sprint 2 模組可被 ticker_watcher 引入"""
+    import openclaw.trading_engine as te
+    import openclaw.signal_aggregator as sa
+    import openclaw.lm_signal_cache as lc
+    assert callable(te.tick)
+    assert callable(sa.aggregate)
+    assert callable(lc.read_cache)
