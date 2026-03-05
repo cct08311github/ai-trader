@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import { downloadTextFile, fetchTrades, fetchTradeCausalChain, mockTrades, tradesToCsv, tradesToExcelXml } from '../lib/trades'
 import { authFetch, getApiBase } from '../lib/auth'
+import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
 
 function toIsoDate(d) {
   if (!d) return ''
@@ -89,6 +90,7 @@ function MonthlySummaryPanel() {
 }
 
 export default function TradesPage() {
+  const symbolNames = useSymbolNames()
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [source, setSource] = useState('loading')
@@ -373,7 +375,7 @@ export default function TradesPage() {
                     onClick={() => handleTradeSelect(t)}
                   >
                     <td className="px-4 py-3 font-medium text-slate-100">{toTWN(t.timestamp)}</td>
-                    <td className="px-4 py-3 text-slate-200">{t.symbol}</td>
+                    <td className="px-4 py-3 text-slate-200">{formatSymbol(t.symbol, symbolNames)}</td>
                     <td className={`px-4 py-3 font-medium ${sideTone}`}>{String(t.action).toUpperCase()}</td>
                     <td className="px-4 py-3 text-right text-slate-200">
                       {formatNumber(qty, { maximumFractionDigits: 4 })}

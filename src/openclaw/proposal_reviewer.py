@@ -143,10 +143,12 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
             conn.commit()
 
             # Telegram 通知
+            from openclaw.tg_approver import _fmt_symbol
+            sym_display = _fmt_symbol(conn, symbol)
             icon = "✅" if new_status == "approved" else "🚫"
             msg = (
                 f"{icon} <b>[盤中策略審查]</b>\n"
-                f"標的：<b>{symbol}</b> | 規則：{target_rule}\n"
+                f"標的：<b>{sym_display}</b> | 規則：{target_rule}\n"
                 f"決定：<b>{'核准減倉' if new_status == 'approved' else '拒絕'}</b>"
                 f"（信心 {confidence:.0%}）\n"
                 f"建議減倉：{reduce_pct:.1%}　目前比重：{weight:.1%}\n"

@@ -3,11 +3,14 @@ import { useStreamApiBase, useStrategyData } from '../lib/strategyApi'
 import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu, Copy, Check } from 'lucide-react'
 import { authFetch, getApiBase, getToken } from '../lib/auth'
 import { useToast } from '../components/ToastProvider'
+import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
 
 function formatUnixSec(sec) {
   const n = Number(sec)
   if (!Number.isFinite(n) || n <= 0) return ''
-  return new Date(n * 1000).toLocaleString('zh-TW', { hour12: false })
+  // If n > 1e12 it's already milliseconds; otherwise treat as seconds
+  const ms = n > 1e12 ? n : n * 1000
+  return new Date(ms).toLocaleString('zh-TW', { hour12: false })
 }
 
 function safeJsonParse(s) {
@@ -109,7 +112,7 @@ function PmTracePanel() {
               {/* Header row */}
               <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-slate-950/50 text-[11px] text-slate-400">
                 <span className="font-mono text-slate-300">{t.trace_id}</span>
-                <span>{new Date((t.created_at || 0) * 1000).toLocaleString('zh-TW', { hour12: false })}</span>
+                <span>{formatUnixSec(t.created_at)}</span>
                 <span className="text-indigo-300">{t.model}</span>
                 {t.latency_ms != null && <span>{t.latency_ms} ms</span>}
               </div>
@@ -218,7 +221,7 @@ function DebatePanel() {
             <div key={d.id || i} className="rounded-xl border border-slate-800 overflow-hidden">
               {d.summary && (
                 <div className="px-4 py-2 bg-slate-950/50 text-[11px] text-slate-400 border-b border-slate-800">
-                  {new Date((d.timestamp || 0) * 1000).toLocaleString('zh-TW', { hour12: false })}
+                  {formatUnixSec(d.timestamp)}
                   {' — '}{d.summary}
                 </div>
               )}
@@ -393,6 +396,7 @@ function SemanticMemoryTable({ data }) {
 export default function StrategyPage() {
   const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
+  const symbolNames = useSymbolNames()
 
   const toast = useToast()
   const [selected, setSelected] = useState(null)
@@ -440,12 +444,12 @@ export default function StrategyPage() {
       const side = payload?.side || payload?.direction || payload?.action || ''
       return {
         ...p,
-        _symbol: symbol || '-',
+        _symbol: symbol ? formatSymbol(symbol, symbolNames) : '-',
         _side: side || '-',
         _ts: formatUnixSec(p?.created_at) || '-'
       }
     })
-  }, [proposals])
+  }, [proposals, symbolNames])
 
   const openDetail = p => {
     setSelected(p)

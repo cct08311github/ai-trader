@@ -82,7 +82,9 @@ function ClosePositionModal({ position, onConfirm, onCancel, busy }) {
         <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-2 text-xs mb-5">
           <div className="flex justify-between">
             <span className="text-slate-400">標的</span>
-            <span className="text-slate-100 font-mono font-semibold">{position.symbol}</span>
+            <span className="text-slate-100 font-mono font-semibold">
+              {position.symbol}{position.name && position.name !== position.symbol ? ` ${position.name}` : ''}
+            </span>
           </div>
           <div className="flex justify-between">
             <span className="text-slate-400">賣出數量</span>

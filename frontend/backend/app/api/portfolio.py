@@ -70,16 +70,22 @@ def portfolio_positions(simulation: Optional[bool] = None):
     try:
         with get_conn() as conn:
             rows = conn.execute(
-                "SELECT symbol, quantity, avg_price, current_price, "
-                "unrealized_pnl, chip_health_score, sector "
-                "FROM positions WHERE quantity > 0 ORDER BY symbol"
+                "SELECT p.symbol, p.quantity, p.avg_price, p.current_price, "
+                "p.unrealized_pnl, p.chip_health_score, p.sector, "
+                "e.name AS stock_name "
+                "FROM positions p "
+                "LEFT JOIN (SELECT symbol, name FROM eod_prices "
+                "           WHERE name IS NOT NULL "
+                "           GROUP BY symbol HAVING trade_date=MAX(trade_date)) e "
+                "ON p.symbol = e.symbol "
+                "WHERE p.quantity > 0 ORDER BY p.symbol"
             ).fetchall()
         if rows:
             locked_set = set(_read_locked())
             positions = [
                 {
                     "symbol": r["symbol"],
-                    "name": r["symbol"],
+                    "name": r["stock_name"] if r["stock_name"] and r["stock_name"] != r["symbol"] else None,
                     "qty": int(r["quantity"]),
                     "avg_price": float(r["avg_price"] or 0),
                     "last_price": float(r["current_price"]) if r["current_price"] else None,
@@ -984,3 +990,15 @@ def get_kline(symbol: str, days: int = 60):
         ).fetchall()
     data = [dict(r) for r in reversed(rows)]
     return {"symbol": symbol, "data": data}
+
+
+@router.get("/symbol-names")
+def get_symbol_names():
+    """回傳所有已知股票代號→名稱對照表（來源：eod_prices 最新一筆）。"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT symbol, name FROM eod_prices "
+            "WHERE name IS NOT NULL "
+            "GROUP BY symbol HAVING trade_date=MAX(trade_date)"
+        ).fetchall()
+    return {"names": {r["symbol"]: r["name"] for r in rows if r["name"]}}
