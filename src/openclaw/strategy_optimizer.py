@@ -88,7 +88,8 @@ class StrategyMetricsEngine:
         """配對 buy + sell（FIFO），計算每筆交易 P&L。"""
         rows = self.conn.execute(
             """SELECT o.order_id, o.symbol, o.side, o.ts_submit,
-                      SUM(f.qty) as qty, AVG(f.price) as avg_price,
+                      SUM(f.qty) as qty,
+                      SUM(f.price * f.qty) / SUM(f.qty) as avg_price,
                       SUM(f.fee + f.tax) as cost
                FROM orders o JOIN fills f ON o.order_id = f.order_id
                WHERE o.ts_submit > ? AND o.status = 'filled'
@@ -97,22 +98,16 @@ class StrategyMetricsEngine:
             (cutoff_ts,),
         ).fetchall()
 
-        # FIFO pairing: buys queue per symbol
+        # Single-pass chronological FIFO pairing
         buy_queues: dict[str, deque] = defaultdict(deque)
+        trades = []
         for r in rows:
             if r["side"] == "buy":
                 buy_queues[r["symbol"]].append(r)
-
-        trades = []
-        for r in rows:
-            if r["side"] != "sell":
-                continue
-            sym = r["symbol"]
-            if not buy_queues[sym]:
-                continue
-            buy = buy_queues[sym].popleft()  # FIFO match
-            pnl = (r["avg_price"] - buy["avg_price"]) * r["qty"] - r["cost"]
-            trades.append({"symbol": sym, "pnl": pnl})
+            elif r["side"] == "sell" and buy_queues[r["symbol"]]:
+                buy = buy_queues[r["symbol"]].popleft()
+                pnl = (r["avg_price"] - buy["avg_price"]) * r["qty"] - r["cost"] - buy["cost"]
+                trades.append({"symbol": r["symbol"], "pnl": pnl})
         return trades
 
 

@@ -143,7 +143,7 @@ class TestOptimizationGateway:
         OptimizationGateway(opt_db).on_eod(metrics)
 
         log_count = opt_db.execute("SELECT COUNT(*) FROM optimization_log").fetchone()[0]
-        assert log_count >= 0  # 若有調整則 > 0
+        assert log_count > 0
 
     def test_frozen_param_not_adjusted(self, opt_db):
         """frozen_until_ts 未到期的參數不被調整"""
