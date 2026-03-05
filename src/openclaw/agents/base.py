@@ -108,7 +108,7 @@ def write_proposal(
             current_value, proposed_value, supporting_evidence,
             confidence, requires_human_approval, status,
             proposal_json, created_at)
-           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, 'pending', ?, strftime('%s','now'))""",
+           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, 'pending', ?, CAST(strftime('%s','now') AS INTEGER) * 1000)""",
         (
             proposal_id, generated_by, target_rule, rule_category,
             proposed_value, supporting_evidence,

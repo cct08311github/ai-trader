@@ -63,21 +63,26 @@ def test_extract_json_invalid_fence_falls_through_to_embedded():
 # ── gemini_call ───────────────────────────────────────────────────────────────
 
 def _make_google_modules(response_text: str) -> dict:
-    """Build proper mock google/google.generativeai modules returning response_text."""
+    """Build proper mock google/google.genai modules returning response_text."""
     mock_response = MagicMock()
     mock_response.text = response_text
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
 
-    # Use a real module type so attribute access works correctly
-    genai_mod = types.ModuleType("google.generativeai")
-    genai_mod.configure = MagicMock()
-    genai_mod.GenerativeModel = MagicMock(return_value=mock_model)
+    mock_models = MagicMock()
+    mock_models.generate_content.return_value = mock_response
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.models = mock_models
+
+    # Use real module types so attribute access works correctly
+    genai_mod = types.ModuleType("google.genai")
+    genai_mod.Client = MagicMock(return_value=mock_client_instance)
+    genai_mod.types = MagicMock()
+    genai_mod.types.GenerateContentConfig = MagicMock()
 
     google_mod = types.ModuleType("google")
-    google_mod.generativeai = genai_mod
+    google_mod.genai = genai_mod
 
-    return {"google": google_mod, "google.generativeai": genai_mod}
+    return {"google": google_mod, "google.genai": genai_mod}
 
 
 def test_gemini_call_happy_path(monkeypatch):
