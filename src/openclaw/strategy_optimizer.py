@@ -169,15 +169,28 @@ class OptimizationGateway:
             return None
         old_val = current["value"]
 
-        # 計算新值（受 delta 和邊界限制）
-        raw_new = old_val + delta
-        new_val = max(bounds["min_val"], min(bounds["max_val"], raw_new))
+        # 本週累積 delta 檢查（確保 7 日內累積調整量不超過 weekly_max_delta）
+        one_week_ago = now - 7 * 86400
+        week_delta_row = self.conn.execute(
+            """SELECT COALESCE(SUM(ABS(new_value - old_value)), 0) AS total_delta
+               FROM optimization_log
+               WHERE param_key=? AND ts > ? AND is_auto=1""",
+            (param_key, one_week_ago),
+        ).fetchone()
+        week_delta_used = float(week_delta_row["total_delta"]) if week_delta_row else 0.0
+        remaining_budget = bounds["weekly_max_delta"] - week_delta_used
+        if remaining_budget <= 1e-6:
+            log.info(
+                "[optimizer] %s 本週累積調整已達 %.4f >= weekly_max_delta %.4f，跳過",
+                param_key, week_delta_used, bounds["weekly_max_delta"],
+            )
+            return None
+        # 本次調整量以剩餘預算為上限
+        capped_delta = min(abs(delta), remaining_budget) * (1 if delta > 0 else -1)
 
-        # weekly_max_delta 檢查
-        actual_delta = abs(new_val - old_val)
-        if actual_delta > bounds["weekly_max_delta"]:
-            new_val = old_val + (bounds["weekly_max_delta"] * (1 if delta > 0 else -1))
-            new_val = max(bounds["min_val"], min(bounds["max_val"], new_val))
+        # 計算新值（受 capped_delta 和邊界限制）
+        raw_new = old_val + capped_delta
+        new_val = max(bounds["min_val"], min(bounds["max_val"], raw_new))
 
         if abs(new_val - old_val) < 1e-6:
             return None  # 無實質變化
@@ -195,6 +208,12 @@ class OptimizationGateway:
                VALUES (?,?,?,?,?,?,?,?,?)""",
             (now, "eod_stats", param_key, old_val, new_val, 1,
              metrics.sample_n, metrics.confidence, rationale),
+        )
+        self.conn.commit()
+        # 更新 last_auto_change_ts（記錄最後自動調整時間，供本週累積 delta 查詢使用）
+        self.conn.execute(
+            "UPDATE param_bounds SET last_auto_change_ts=? WHERE param_key=?",
+            (now, param_key),
         )
         self.conn.commit()
         log.info("[optimizer] %s: %.4f → %.4f (%s)", param_key, old_val, new_val, rationale)
@@ -249,7 +268,7 @@ class ReflectionAgent:
         perf_summary = (
             f"  樣本數={metrics.sample_n}, 勝率={metrics.win_rate:.1%}, "
             f"損益比={metrics.profit_factor:.2f}"
-            if metrics.win_rate is not None
+            if metrics.win_rate is not None and metrics.profit_factor is not None
             else "  （樣本不足）"
         )
 

@@ -164,6 +164,54 @@ class TestOptimizationGateway:
         trailing_adjs = [a for a in adjustments if a["param_key"] == "trailing_pct"]
         assert trailing_adjs == []  # 凍結期間不調整
 
+    def test_weekly_max_delta_cumulative_blocks_second_adjustment(self, opt_db):
+        """本週累積調整已達 weekly_max_delta 時，第二次調整被跳過"""
+        now = int(time.time())
+        opt_db.execute(
+            "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
+            ("trailing_pct", 0.03, 0.10, 0.005, None, None)
+        )
+        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (now,))
+        # 插入一筆本週已發生的自動調整，delta=0.005（達到 weekly_max_delta）
+        opt_db.execute(
+            """INSERT INTO optimization_log
+               (ts, trigger_type, param_key, old_value, new_value, is_auto, sample_n, confidence, rationale)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (now - 3600, "eod_stats", "trailing_pct", 0.050, 0.055, 1, 30, 1.0, "prior_auto"),
+        )
+        opt_db.commit()
+        for i in range(30):
+            _insert_matched_trade(opt_db, "2330", 100, 95)
+
+        from openclaw.strategy_optimizer import OptimizationGateway, StrategyMetricsEngine
+        metrics = StrategyMetricsEngine(opt_db).compute()
+        adjustments = OptimizationGateway(opt_db).on_eod(metrics)
+
+        trailing_adjs = [a for a in adjustments if a["param_key"] == "trailing_pct"]
+        assert trailing_adjs == []  # 本週預算耗盡，不應再調整
+
+    def test_last_auto_change_ts_updated_after_adjustment(self, opt_db):
+        """自動調整成功後 param_bounds.last_auto_change_ts 應被更新"""
+        now = int(time.time())
+        opt_db.execute(
+            "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
+            ("trailing_pct", 0.03, 0.10, 0.005, None, None)
+        )
+        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (now,))
+        opt_db.commit()
+        for i in range(30):
+            _insert_matched_trade(opt_db, "2330", 100, 95)
+
+        from openclaw.strategy_optimizer import OptimizationGateway, StrategyMetricsEngine
+        metrics = StrategyMetricsEngine(opt_db).compute()
+        OptimizationGateway(opt_db).on_eod(metrics)
+
+        row = opt_db.execute(
+            "SELECT last_auto_change_ts FROM param_bounds WHERE param_key='trailing_pct'"
+        ).fetchone()
+        assert row is not None and row["last_auto_change_ts"] is not None
+        assert row["last_auto_change_ts"] >= now
+
 
 class TestReflectionAgent:
     def test_reflect_returns_list(self, opt_db, monkeypatch):

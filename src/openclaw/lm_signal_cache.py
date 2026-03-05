@@ -23,6 +23,7 @@ def write_cache(
     direction: str,              # 'bull' | 'bear' | 'neutral'
     raw_json: str,
     ttl_seconds: int = 3600,
+    autocommit: bool = True,     # False = 呼叫方自行管理 transaction
 ) -> str:
     """寫入 LLM 快取，回傳 cache_id。"""
     cache_id = str(uuid.uuid4())
@@ -33,7 +34,8 @@ def write_cache(
            VALUES (?,?,?,?,?,?,?,?)""",
         (cache_id, symbol, score, source, direction, raw_json, now, now + ttl_seconds),
     )
-    conn.commit()
+    if autocommit:
+        conn.commit()
     return cache_id
 
 

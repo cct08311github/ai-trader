@@ -22,8 +22,10 @@ REGIME_WEIGHTS: dict[str, dict[str, float]] = {
 
 SIGNAL_TO_SCORE: dict[str, float] = {"buy": 0.8, "flat": 0.5, "sell": 0.2}
 
-_LIMIT_UP_THRESHOLD  = 0.095   # 漲幅 >= 9.5% 視為漲停
-_BUY_SCORE_LIMIT_UP  = 0.30    # 漲停時壓低 buy score 上限
+_LIMIT_UP_THRESHOLD   = 0.095   # 漲幅 >= 9.5% 視為漲停
+_BUY_SCORE_LIMIT_UP   = 0.30    # 漲停時壓低 buy score 上限
+_LIMIT_DOWN_THRESHOLD = -0.095  # 跌幅 <= -9.5% 視為跌停
+_SELL_SCORE_LIMIT_DOWN = 0.70   # 跌停時壓高 sell score 下限（不追殺）
 _BUY_ACTION_THRESHOLD  = 0.65
 _SELL_ACTION_THRESHOLD = 0.35
 
@@ -92,14 +94,20 @@ def aggregate(
     risk_adj = max(0.1, min(0.9, 0.5 / vol_mult))
     reasons.append(f"risk_adj={risk_adj:.2f}(vol_mult={vol_mult:.2f})")
 
-    # 5. 漲停板過濾
+    # 5. 漲停板 / 跌停板過濾
     close = snap.get("close", 0.0)
     ref   = snap.get("reference", close) or close
     limit_filtered = False
     if ref > 0 and close >= ref * (1 + _LIMIT_UP_THRESHOLD):
+        # 漲停：流動性風險，不追漲，buy score 壓低上限
         tech_score = min(tech_score, _BUY_SCORE_LIMIT_UP)
         limit_filtered = True
         reasons.append("limit_up:buy_score_capped_to_0.3")
+    elif ref > 0 and close <= ref * (1 + _LIMIT_DOWN_THRESHOLD):
+        # 跌停：流動性風險，不追殺，sell score 壓至 0.7（防止恐慌賣出）
+        tech_score = max(tech_score, _SELL_SCORE_LIMIT_DOWN)
+        limit_filtered = True
+        reasons.append("limit_down:sell_score_floored_to_0.7")
 
     # 6. 加權融合
     final_score = (

@@ -100,3 +100,17 @@ def test_unknown_symbol_returns_flat(agg_db, snap_normal):
     result = aggregate(agg_db, "9999", snap_normal,
                        position_avg_price=None, high_water_mark=None)
     assert result.action == "flat"
+
+
+@pytest.fixture
+def snap_limit_down():
+    return {"close": 99.0, "reference": 110.0, "bid": 99.0, "ask": 99.0, "volume": 500}
+
+
+def test_limit_down_floors_sell_score(agg_db, snap_limit_down):
+    """跌停板時 sell score 不低於 0.7（不追殺），limit_filtered=True"""
+    from openclaw.signal_aggregator import aggregate
+    result = aggregate(agg_db, "2330", snap_limit_down,
+                       position_avg_price=None, high_water_mark=None)
+    assert result.limit_filtered is True
+    assert any("limit_down" in r for r in result.reasons)

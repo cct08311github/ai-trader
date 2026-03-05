@@ -75,12 +75,13 @@ def _create_time_stop_proposal(
     conn.execute(
         """INSERT INTO strategy_proposals
            (proposal_id, generated_by, target_rule, rule_category,
-            proposed_value, supporting_evidence, confidence,
+            proposed_value, current_value, supporting_evidence, confidence,
             requires_human_approval, status, proposal_json, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (
             proposal_id, "trading_engine", "POSITION_REBALANCE", "portfolio",
             f"時間止損：{symbol} {pnl_label}持倉超過 {threshold} 交易日",
+            None,  # current_value: 時間止損不需要當前數值
             f"{pnl_label}持倉 {hold_days} 交易日，觸發時間止損",
             0.85, int(not is_losing), status,
             json.dumps({"symbol": symbol, "reduce_pct": reduce_pct,
