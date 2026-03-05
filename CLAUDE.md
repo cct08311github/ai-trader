@@ -258,6 +258,18 @@ cd frontend/web && npm test -- --run
 gh run list --limit 5          # 查看最近 CI
 gh run watch <run-id>          # 即時監控 CI
 gh run view <run-id> --log-failed   # 查看失敗 log
+
+# 復盤查詢（ts_submit 是 TEXT ISO，直接 date() 即可）
+sqlite3 data/sqlite/trades.db "SELECT * FROM orders WHERE date(ts_submit)='YYYY-MM-DD';"
+sqlite3 data/sqlite/trades.db "SELECT symbol,quantity,avg_price,current_price,unrealized_pnl,state FROM positions WHERE quantity>0;"
+
+# API 直接測試（本機自簽憑證用 -sk）
+curl -sk -X POST https://127.0.0.1:8080/api/pm/review \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')" \
+  -H "Content-Type: application/json"
+
+# pm2 log 輪轉路徑（有數字後綴）
+tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 ```
 
 ---
@@ -273,6 +285,7 @@ gh run view <run-id> --log-failed   # 查看失敗 log
 | v4.10.x | 持倉 Drawer K 線圖（純 SVG）；quote EOD fallback；設定頁 dirty 狀態修正 |
 | v4.11.x | Strangler Fig 信號重構；Trailing Stop；T+2 交割追蹤；實際費率；Gemini 全自動策略審查；Telegram 雙向通知 |
 | v4.12.x | Sprint 2：signal_aggregator Regime-based 動態權重；trading_engine 持倉狀態機 + 時間止損；lm_signal_cache LLM 快取；strategy_optimizer 自主優化三層架構 |
+| v4.12.1 | google-genai SDK 遷移（棄用 google.generativeai）；strategy_proposals.created_at 毫秒修正 |
 
 ---
 
