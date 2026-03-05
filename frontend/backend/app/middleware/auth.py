@@ -77,7 +77,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         if auth_header.startswith("Bearer "):
             provided_token = auth_header[7:]
-        elif path.startswith("/api/stream/"):
+        elif path.startswith("/api/stream/") or "/proposals/" in path:
+            # SSE streams and proposal approve/reject URL buttons use token query param
             provided_token = request.query_params.get("token", "")
 
         if not provided_token:

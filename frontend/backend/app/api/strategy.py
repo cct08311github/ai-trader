@@ -360,7 +360,7 @@ def approve_proposal_url(proposal_id: str, token: str = Query(...)):
     import os
     if token != os.environ.get("AUTH_TOKEN", ""):
         return HTMLResponse("<h2>❌ 無效 token</h2>", status_code=403)
-    with db.get_conn() as conn:
+    with db.get_conn_rw() as conn:
         row = conn.execute(
             "SELECT proposal_id, target_rule, status FROM strategy_proposals WHERE proposal_id=?",
             (proposal_id,)
@@ -376,7 +376,7 @@ def approve_proposal_url(proposal_id: str, token: str = Query(...)):
         conn.commit()
     try:
         from openclaw.tg_notify import send_message
-        send_message(f"✅ 已核准 — {row['target_rule']}（{proposal_id[:8]}…）")
+        send_message(f"✅ 已核准 — {row['target_rule']}（{proposal_id[:8]}…）", chat_id=os.environ.get("TELEGRAM_CHAT_ID", "-1003772422881"))
     except Exception:
         pass
     return HTMLResponse("<h2>✅ 提案已核准</h2><p>可關閉此頁面。</p>")
@@ -388,7 +388,7 @@ def reject_proposal_url(proposal_id: str, token: str = Query(...)):
     import os
     if token != os.environ.get("AUTH_TOKEN", ""):
         return HTMLResponse("<h2>❌ 無效 token</h2>", status_code=403)
-    with db.get_conn() as conn:
+    with db.get_conn_rw() as conn:
         row = conn.execute(
             "SELECT proposal_id, target_rule, status FROM strategy_proposals WHERE proposal_id=?",
             (proposal_id,)
@@ -404,7 +404,7 @@ def reject_proposal_url(proposal_id: str, token: str = Query(...)):
         conn.commit()
     try:
         from openclaw.tg_notify import send_message
-        send_message(f"🚫 已拒絕 — {row['target_rule']}（{proposal_id[:8]}…）")
+        send_message(f"🚫 已拒絕 — {row['target_rule']}（{proposal_id[:8]}…）", chat_id=os.environ.get("TELEGRAM_CHAT_ID", "-1003772422881"))
     except Exception:
         pass
     return HTMLResponse("<h2>🚫 提案已拒絕</h2><p>可關閉此頁面。</p>")

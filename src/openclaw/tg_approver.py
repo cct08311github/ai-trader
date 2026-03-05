@@ -26,7 +26,7 @@ import uuid
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_CHAT_ID = "1017252031"
+_DEFAULT_CHAT_ID = "-1003772422881"
 _NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS"}
 
 
@@ -217,7 +217,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
             {"text": "🚫 拒絕", "url": f"{base}/api/strategy/proposals/{pid}/reject?token={auth}"},
         ]]
 
-        ok = send_message_with_buttons("\n".join(lines), buttons)
+        ok = send_message_with_buttons("\n".join(lines), buttons, chat_id=_chat_id())
         if ok:
             notified.add(pid)
             sent += 1

@@ -98,6 +98,22 @@ def _init_full_db(path):
             metrics_json TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS eod_prices (
+            trade_date TEXT NOT NULL,
+            market TEXT NOT NULL DEFAULT 'TWSE',
+            symbol TEXT NOT NULL,
+            name TEXT,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            volume REAL,
+            source_url TEXT NOT NULL DEFAULT '',
+            ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (trade_date, market, symbol)
+        )
+    """)
     conn.commit()
     conn.close()
 
