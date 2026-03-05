@@ -71,12 +71,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         try:
             conn.execute(sql)
             conn.commit()
-        except sqlite3.OperationalError:
-            pass  # 欄位已存在或資料表不存在
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                log.warning("Migration skipped (unexpected): %s | %s", sql[:60], e)
 
-    # Sprint 2 新表
-    conn.executescript("""
-        CREATE TABLE IF NOT EXISTS lm_signal_cache (
+    # Sprint 2 新表（逐條 execute 避免 executescript 的隱式 COMMIT）
+    sprint2_ddl = [
+        """CREATE TABLE IF NOT EXISTS lm_signal_cache (
             cache_id    TEXT PRIMARY KEY,
             symbol      TEXT,
             score       REAL NOT NULL,
@@ -85,30 +86,25 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             raw_json    TEXT,
             created_at  INTEGER NOT NULL,
             expires_at  INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_lm_cache_lookup
-            ON lm_signal_cache (symbol, expires_at);
-
-        CREATE TABLE IF NOT EXISTS position_events (
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_lm_cache_lookup ON lm_signal_cache (symbol, expires_at)",
+        """CREATE TABLE IF NOT EXISTS position_events (
             event_id    TEXT PRIMARY KEY,
             symbol      TEXT NOT NULL,
             from_state  TEXT,
             to_state    TEXT NOT NULL,
             reason      TEXT,
-            trading_day TEXT,
+            trading_day TEXT NOT NULL,
             ts          INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_pos_events_symbol
-            ON position_events (symbol, ts);
-
-        CREATE TABLE IF NOT EXISTS position_candidates (
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_pos_events_symbol ON position_events (symbol, ts)",
+        """CREATE TABLE IF NOT EXISTS position_candidates (
             symbol      TEXT PRIMARY KEY,
             trading_day TEXT NOT NULL,
             reason      TEXT,
             created_at  INTEGER NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS optimization_log (
+        )""",
+        """CREATE TABLE IF NOT EXISTS optimization_log (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             ts              INTEGER NOT NULL,
             trigger_type    TEXT NOT NULL,
@@ -119,17 +115,19 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             sample_n        INTEGER,
             confidence      REAL,
             rationale       TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS param_bounds (
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_opt_log_ts ON optimization_log (ts)",
+        """CREATE TABLE IF NOT EXISTS param_bounds (
             param_key           TEXT PRIMARY KEY,
             min_val             REAL NOT NULL,
             max_val             REAL NOT NULL,
             weekly_max_delta    REAL NOT NULL,
             last_auto_change_ts INTEGER,
             frozen_until_ts     INTEGER
-        );
-    """)
+        )""",
+    ]
+    for ddl in sprint2_ddl:
+        conn.execute(ddl)
     conn.commit()
 
 
