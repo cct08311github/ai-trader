@@ -6,11 +6,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger(__name__)
 
 from openclaw.agents.base import (
     AgentResult, DEFAULT_MODEL, call_agent_llm, open_conn,
@@ -225,6 +228,16 @@ def run_eod_analysis(
             ),
         )
         _conn.commit()
+
+        # EOD 統計優化（每日）
+        try:
+            from openclaw.strategy_optimizer import StrategyMetricsEngine, OptimizationGateway
+            metrics = StrategyMetricsEngine(_conn).compute(window_days=28)
+            adjustments = OptimizationGateway(_conn).on_eod(metrics)
+            if adjustments:
+                log.info("[eod_analysis] 自動調整 %d 項參數", len(adjustments))
+        except Exception as e:
+            log.warning("[eod_analysis] strategy_optimizer 失敗：%s", e)
 
         return AgentResult(
             success=True,

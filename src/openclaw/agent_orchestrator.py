@@ -139,6 +139,13 @@ async def run_orchestrator() -> None:
                 if _should_run_now("07:00", now_twn):
                     asyncio.create_task(
                         _run_agent("SystemOptimizationAgent", run_system_optimization))
+                    # 週一 07:00 深度反思
+                    try:
+                        from openclaw.strategy_optimizer import ReflectionAgent
+                        proposals = ReflectionAgent(conn).reflect_weekly()
+                        log.info("[orchestrator] ReflectionAgent 建議 %d 項", len(proposals))
+                    except Exception as e:
+                        log.warning("[orchestrator] ReflectionAgent 失敗：%s", e)
                 if _should_run_now("07:30", now_twn):
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))
