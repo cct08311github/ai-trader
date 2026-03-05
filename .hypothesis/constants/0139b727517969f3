@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/cash_mode.py
-# hypothesis_version: 6.151.9
-
-[-1.0, 0.0, 0.03, 0.06, 0.07, 0.45, 1.0, 5.0, 25.0, 35.0, 50.0, 55.0, 100.0, 'CASHMODE_BEAR_REGIME', 'CASHMODE_HOLD', 'CASHMODE_NORMAL', 'CashModePolicy', 'confidence', 'enter_below', 'exit_above', 'min_confidence', 'rating', 'regime', 'threshold', 'trend_strength', 'volatility']

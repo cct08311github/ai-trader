@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/cash_mode_manager.py
-# hypothesis_version: 6.151.9
-
-[0.07, 0.45, 35.0, 55.0, 100, 1000, ':memory:', 'UNINITIALIZED', 'bear_min_confidence', 'cash_mode_active', 'confidence', 'detail', 'enter_below_rating', 'enter_on_bear_regime', 'exit_above_rating', 'is_active', 'market_regime', 'policy', 'rating', 'reason_code', 'status', 'timestamp']

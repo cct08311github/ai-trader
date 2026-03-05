@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/decision_pipeline.py
-# hypothesis_version: 6.151.9
-
-[0.0, 'blocked', 'blocked_reason', 'bull_bear_debate', 'confidence', 'input_tokens', 'latency_ms', 'news_guard', 'news_sentiment', 'output_tokens', 'pinned_model', 'pm', 'reason', 'stage']

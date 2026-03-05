@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/shadow_mode.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.1, 0.3, 1.0, 3600, 10000, '0%', '10%', '100%', '30%', 'PENDING', 'ShadowModeManager', '__main__', 'active', 'already at 100%', 'avg_delta', 'big', 'completed', 'count', 'created_at', 'current_phase', 'decision_id', 'decision_quality', 'deployment_id', 'execution_time_ms', 'full_deployment', 'last_error', 'last_recorded_at', 'manual rollback', 'metric_type', 'metrics', 'pending', 'phase_changed_at', 'pnl', 'r', 'recorded_at', 'rollback_reason', 'rolled_back', 'rolled_back_at', 'shadow_avg', 'shadow_better', 'shadow_better_count', 'shadow_better_ratio', 'shadow_latency_s', 'shadow_result', 'shadow_routed', 'shadow_value', 'shadow_version', 'stable_avg', 'stable_latency_s', 'stable_value', 'stable_version', 'started_at', 'state', 'utf-8']

@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/main.py
-# hypothesis_version: 6.151.9
-
-['*', '/api/health', '0', 'AUTH_ENABLED', 'false', 'health', 'no', 'ok', 'service', 'status', 'true']

@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/sentinel.py
-# hypothesis_version: 6.151.9
-
-[0.0, 200, 'PM_OK', 'PM_REJECT', 'PortfolioState', 'SENTINEL_BUDGET_HALT', 'SENTINEL_BUDGET_SOFT', 'SENTINEL_DB_LATENCY', 'SENTINEL_OK', 'SENTINEL_REDUCE_ONLY', 'db_write_p99_ms', 'drawdown', 'halt', 'limit', 'locked', 'mode', 'ok', 'r', 'reason', 'sell', 'suspended', 'symbol', 'throttle', 'used_pct', 'warn']

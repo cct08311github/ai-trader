@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/db.py
-# hypothesis_version: 6.151.9
-
-[500, '..', '5', 'ASC', 'DB_PATH', 'DB_POOL_SIZE', 'DESC', 'created_at', 'data', 'id', 'sqlite', 'time', 'timestamp', 'trades.db']

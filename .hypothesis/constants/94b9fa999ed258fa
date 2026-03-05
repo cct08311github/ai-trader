@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/pm.py
-# hypothesis_version: 6.151.9
-
-[500, 503, '../../../../src', '/api/pm', '/approve', '/reject', '/review', '/status', 'GEMINI_API_KEY', 'LLM 暫時不可用，請稍後重試', 'PM_LLM_MODEL', '_latency_ms', '_model', '_prompt', '_raw_response', 'approved', 'bear_case', 'bull_case', 'confidence', 'consensus_points', 'data', 'detail', 'divergence_points', 'error', 'llm', 'manual', 'neutral_case', 'ok', 'pm', 'pm_api', 'reason', 'recommended_action', 'source', 'status', '✅', '人工封鎖', '人工授權', '🚫']

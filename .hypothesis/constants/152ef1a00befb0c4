@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/strategy.py
-# hypothesis_version: 6.151.9
-
-[0.7, 300, 400, 404, 500, 503, 86400, '/api/strategy', '/debates', '/logs', '/market-rating', '/pm-traces', '/proposals', '/semantic-memory', 'A', 'ASC', 'B', 'C', 'DESC', 'Invalid status', 'Proposal not found', 'adjudication', 'approved', 'basis', 'confidence', 'content_json', 'created_at', 'data', 'date', 'decided_at', 'desc', 'episodic_memory', 'from', 'limit', 'no such table', 'offset', 'ok', 'proposal_id', 'proposal_json', 'rating', 'reason', 'recommended_action', 'rejected', 'seconds', 'source', 'status', 'strategy', 'summary', 'to', 'today', 'total', 'updated_at', 'user', '{}']

@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/decision_pipeline_v4.py
-# hypothesis_version: 6.151.9
-
-[0.0, 200, 'Auto-trading enabled', 'DECISION_APPROVED', 'MASTER_SWITCH_OFF', 'adjudication', 'allowed', 'blocked', 'blocked_reason', 'budget_status', 'budget_used_pct', 'bull_bear_debate', 'confidence', 'decision_id', 'decisions', 'detail', 'disabled', 'drawdown_decision', 'hard_blocked', 'input_tokens', 'latency_ms', 'master_switch', 'news_guard', 'news_sentiment', 'order_candidate', 'output_tokens', 'pinned_model', 'pm', 'pm_approved', 'pm_veto', 'reason', 'reason_code', 'risk_checks', 'sentinel_post_risk', 'sentinel_pre_trade', 'sentinel_verdict', 'stage', 'stop_loss', 'suspended', 'take_profit']

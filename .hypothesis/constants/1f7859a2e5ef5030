@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/llm_gemini.py
-# hypothesis_version: 6.151.9
-
-[120, 1000, 'GEMINI_API_KEY', '\\{[\\s\\S]*\\}', '_latency_ms', '_model', '_prompt', '_raw_response', 'application/json', 'response_mime_type', 'timeout']

@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/prompt_security.py
-# hypothesis_version: 6.151.9
-
-[10000, 'EMPTY_AFTER_SANITIZE', 'EMPTY_INPUT', 'OK', '```[\\s\\S]*```', 'bypass\\s+risk', 'developer\\s+message', 'disable\\s+risk', 'do\\s+anything\\s+now', 'execute\\s+order', 'jailbreak', 'name', 'system\\s+prompt', 'tool', 'you\\s+are\\s+chatgpt', '忽略.*風控', '立刻.*下單', '系統指令']

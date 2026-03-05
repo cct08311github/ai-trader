@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/pm_debate.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.5, 1.0, 'adjudication', 'bear_case', 'bull_case', 'confidence', 'consensus_points', 'divergence_points', 'gpt-4', 'neutral_case', 'recommended_action']

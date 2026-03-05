@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/order_slicing.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.005, 0.5, 0.6, 1.0, 1.2, 2.0, 10000.0, 'IOC', 'UNKNOWN', 'atr_stop_multiple', 'buy', 'confidence', 'fixed_fractional', 'limit', 'low_confidence_scale', 'sell', 'tif', 'twap', 'vwap']

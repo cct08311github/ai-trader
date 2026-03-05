@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/middleware/auth.py
-# hypothesis_version: 6.151.9
-
-[401, '/api/auth/login', '/api/health', '/api/stream/', '/docs', '/openapi.json', '/redoc', 'AUTH_TOKEN', 'Bearer', 'Bearer ', 'WWW-Authenticate', 'authorization', 'detail', 'error', 'status', 'token', '未授權：無效的 Token', '未授權：缺少 Bearer Token']

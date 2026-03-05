@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/tw_session_rules.py
-# hypothesis_version: 6.151.9
-
-[0.5, 0.6, 0.7, 0.8, 1.0, 1000, 'Asia/Taipei', 'TWSessionConfig', 'afterhours_auction', 'closed', 'max_orders_per_min', 'max_slippage_bps', 'preopen_auction', 'regular', 'timezone', 'tw_session_rules', 'tw_trading_phase', 'utf-8']

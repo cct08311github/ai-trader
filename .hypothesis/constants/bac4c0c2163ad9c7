@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/edge_integration.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.3, 0.4, 0.5, 0.7, 0.8, 1.0, 1.1, 1.2, 50.0, 'actual_score', 'analysis_period_days', 'block_reason', 'details', 'edge_adjustment', 'edge_analysis', 'edge_decision', 'edge_integration', 'edge_score', 'edge_threshold', 'error', 'failed', 'is_edge_ok', 'metrics', 'pnl', 'position_sizing', 'recommendation', 'should_proceed', 'size', 'status', 'strategy_id', 'total_versions', 'trade_blocked', 'trade_count', 'unknown', 'updated', 'version_id']

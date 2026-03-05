@@ -48,3 +48,14 @@ frontend/backend/.pytest_cache/
 # Repo-level emergency stop sentinel
 .EMERGENCY_STOP
 .worktrees/
+
+# Test artifacts
+.hypothesis/
+coverage.json
+.coverage
+*.cover
+*,cover
+
+# Firebase / debug logs
+firebase-debug.log
+*.log

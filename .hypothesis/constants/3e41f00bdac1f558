@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/system_switch.py
-# hypothesis_version: 6.151.9
-
-[1.0, '.EMERGENCY_STOP', 'Accept', 'CONTROL_STATUS_URL', 'application/json', 'r', 'trading_enabled', 'utf-8']

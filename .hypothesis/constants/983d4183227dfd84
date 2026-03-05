@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/broker.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.5, 5.0, 20.0, 30.0, 40.0, 60.0, 'AUTH', 'AUTH_FAILED', 'BALANCE', 'Buy', 'CONNECTION', 'Common', 'EXEC_BROKER_AUTH', 'EXEC_BROKER_REJECTED', 'EXEC_BROKER_UNKNOWN', 'EXEC_NETWORK_ERROR', 'EXEC_NETWORK_TIMEOUT', 'INSUFFICIENT', 'INSUFFICIENT_BALANCE', 'INVALID_PRICE', 'INVALID_QTY', 'LIMIT', 'LMT', 'MKT', 'NETWORK', 'NETWORK_ERROR', 'NO_PERMISSION', 'ORDER_REJECTED', 'PRICE', 'RATE', 'RATE_LIMIT', 'RISK_LIQUIDITY_LIMIT', 'ROD', 'Sell', 'TIMEOUT', 'TOKEN', 'TOKEN_EXPIRED', 'avg_price', 'buy', 'canceled', 'cancelled', 'code', 'deal', 'deal_quantity', 'expired', 'failed', 'filled', 'id', 'limit', 'order not found', 'part_filled', 'partial_filled', 'partially_filled', 'pending', 'price', 'qty', 'rejected', 'side', 'status', 'submitted']

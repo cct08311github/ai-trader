@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/app/api/agents.py
-# hypothesis_version: 6.151.9
-
-[100, 404, 409, '/api/agents', '/{agent_name}/run', 'Market Research', 'PM 審核後 / 每週一 07:30', 'Portfolio Review', 'Portfolio 審查員', 'Strategy Committee', 'System Health', 'System Optimization', 'agent', 'agents', 'agents_api', 'confidence', 'created_at', 'data', 'description', 'label', 'label_zh', 'last_confidence', 'last_latency_ms', 'last_model', 'last_run_at', 'last_summary', 'latency_ms', 'market_research', 'model', 'name', 'ok', 'portfolio_review', 'running', 'schedule', 'started', 'status', 'strategy_committee', 'summary', 'system_health', 'system_optimization', 'trace_id', '分析大盤走勢、板塊資金流向、異常成交量', '市場研究員', '持倉集中度風險、當日勝率分析、再平衡建議', '每 30 / 120 分鐘', '每交易日 08:20', '每交易日 14:30', '每週一 07:00 / 3 日無成交觸發', '策略小組', '系統健康監控', '系統優化員']

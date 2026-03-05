@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/llm_observability.py
-# hypothesis_version: 6.151.9
-
-[0.0, 'agent', 'component', 'created_at', 'created_at_ms', 'est_cost_twd', 'llm_traces', 'prompt', 'prompt_text', 'response', 'response_text', 'unknown']

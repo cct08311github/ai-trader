@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/institution_ingest.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.15, 0.35, 0.45, 0.5, 1.0, 2.0, 3.0, 1000000.0, 1000, ' AND ', ' WHERE ', '+', ',', '-', '--', '---', '.TPEX', '.TW', '.TWO', '.TWSE', 'CHIP_HEALTH_LOW', 'CHIP_HEALTH_OK', 'Code', 'Date', 'DealerBuy', 'DealerNet', 'DealerSell', 'ForeignBuy', 'ForeignNet', 'ForeignSell', 'Foreign_Dealer_Net', 'InvestmentTrustBuy', 'InvestmentTrustNet', 'InvestmentTrustSell', 'N/A', 'NO_DATA', 'No data for chart', 'OpenClaw/1.2.1', 'TradeDate', 'User-Agent', '[^0-9A-Z]', 'allowed', 'available', 'dealer_net', 'foreign_net', 'health_score', 'investment_trust_net', 'it_net', 'reason', 'replace', 'score', 'symbol', 'symbol = ?', 'total_dealer', 'total_foreign', 'total_it', 'total_net', 'total_symbols', 'trade_date', 'trade_date = ?', 'utf-8', '交易日期', '外資買賣超', '外資買進', '外資賣出', '投信買賣超', '投信買進', '投信賣出', '日期', '自營商買賣超', '自營商買進', '自營商賣出', '證券代號']

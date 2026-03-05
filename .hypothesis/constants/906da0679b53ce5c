@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/trading_calendar.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.15, 0.2, 0.25, 0.3, 2026, '%Y-%m-%d', '2026-02-17', '2026-06-19', '2026-09-25', 'cny', 'dragon_boat', 'effect_type', 'event_date', 'festival', 'impact', 'last_week', 'manual', 'metadata_json', 'mid_autumn', 'month_end', 'name', 'quarter_end', 'window', 'window_dressing', '中秋效應', '季底效應', '春節效應', '法人作帳效應', '端午效應']

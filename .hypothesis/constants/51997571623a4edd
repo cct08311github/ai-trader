@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/take_profit.py
-# hypothesis_version: 6.151.9
-
-[0.0, 0.01, 0.5, 1.0, 2.0, 1000, 'exit', 'held_ms', 'hold', 'long', 'no_position', 'profit_pct', 'short', 'target_price', 'time_decay', 'trailing_stop']

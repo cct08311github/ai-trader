@@ -1,4 +1,0 @@
-# file: /Users/openclaw/.openclaw/shared/projects/ai-trader/src/openclaw/pnl_engine.py
-# hypothesis_version: 6.151.9
-
-[0.0, 1.0, '%Y-%m-%d', 'avg_price', 'date', 'equity', 'net_qty', 'realized_pnl', 'total', 'total_trades', 'trade_date', 'wins']
