@@ -42,10 +42,22 @@ def check_concentration(conn: sqlite3.Connection) -> list[ConcentrationProposal]
     if total_value <= 0:
         return []
 
+    # Dedup: skip symbols that already have pending submitted sell orders
+    pending_symbols = {
+        r[0] for r in conn.execute(
+            "SELECT DISTINCT symbol FROM orders WHERE side='sell' AND status='submitted'"
+        ).fetchall()
+    }
+
     proposals: list[ConcentrationProposal] = []
     for symbol, qty, price in rows:
         weight = (qty * (price or 0)) / total_value
         if weight < _WARN_THRESHOLD:
+            continue
+
+        if symbol in pending_symbols:
+            log.info("Concentration %s: %.1f%% — skipped (pending sell orders exist)",
+                     symbol, weight * 100)
             continue
 
         auto_approve = weight >= _AUTO_REDUCE_THRESHOLD

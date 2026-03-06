@@ -896,10 +896,40 @@ def run_watcher() -> None:
 
             # ── 每輪掃盤後：執行 approved proposals + 集中度守衛 ─────────────
             try:
-                from openclaw.proposal_executor import execute_pending_proposals
-                n_exec = execute_pending_proposals(conn, dry_run=False)
-                if n_exec > 0:
-                    log.info("[proposals] Executed %d approved proposals", n_exec)
+                from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed, SellIntent
+                from openclaw.risk_engine import OrderCandidate
+                sell_intents, n_noted = execute_pending_proposals(conn)
+                for intent in sell_intents:
+                    try:
+                        candidate = OrderCandidate(
+                            symbol=intent.symbol, side="sell",
+                            qty=intent.qty, price=intent.price,
+                            order_type="limit", tif="ROD",
+                            opens_new_position=False,
+                        )
+                        conn.execute("BEGIN IMMEDIATE")
+                        ok, _oid = _execute_sim_order(
+                            conn, broker=broker,
+                            decision_id=intent.proposal_id,
+                            symbol=intent.symbol,
+                            side="sell", qty=intent.qty,
+                            price=intent.price, candidate=candidate,
+                        )
+                        conn.commit()
+                        if ok:
+                            mark_intent_executed(conn, intent.proposal_id)
+                            log.info("[proposals] Executed rebalance sell %s %d @ %.2f via broker",
+                                     intent.symbol, intent.qty, intent.price)
+                        else:
+                            log.warning("[proposals] Broker rejected rebalance sell %s", intent.symbol)
+                    except Exception as _ie:
+                        log.warning("[proposals] intent execution error for %s: %s", intent.symbol, _ie)
+                        try:
+                            conn.execute("ROLLBACK")
+                        except Exception:
+                            pass
+                if sell_intents or n_noted:
+                    log.info("[proposals] Processed %d sell intents, %d noted", len(sell_intents), n_noted)
             except Exception as _pe:
                 log.warning("[proposals] executor error: %s", _pe)
 

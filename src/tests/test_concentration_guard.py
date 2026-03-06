@@ -14,6 +14,10 @@ def _make_db(tmp_path):
         supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER,
         status TEXT, expires_at INTEGER, proposal_json TEXT, created_at INTEGER,
         decided_at INTEGER)""")
+    conn.execute("""CREATE TABLE orders (
+        order_id TEXT PRIMARY KEY, decision_id TEXT, broker_order_id TEXT,
+        ts_submit TEXT, symbol TEXT, side TEXT, qty INTEGER, price REAL,
+        order_type TEXT, tif TEXT, status TEXT, strategy_version TEXT)""")
     conn.commit()
     return conn
 
@@ -22,7 +26,6 @@ def test_auto_reduce_when_over_60pct(tmp_path):
     """單檔超過 60% 應自動生成 approved proposal"""
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
-    # 3008 佔 ~70%: value=591*2450=1,447,950; 2330: 151*1935=292,185; total=1,740,135
     conn.execute("INSERT INTO positions VALUES ('3008',591,379.6,2450,0,2450)")
     conn.execute("INSERT INTO positions VALUES ('2330',151,898.6,1935,0,1935)")
     conn.commit()
@@ -54,8 +57,6 @@ def test_pending_proposal_when_40_to_60_pct(tmp_path):
     """單檔 40-60% 生成 pending proposal（需人工核准）"""
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
-    # 3008: 100*2450=245,000; 2330: 200*500=100,000; total=345,000; 3008=71%...
-    # 讓 3008 約 45%: value=100*2450=245k; other=300*1000=300k; total=545k; 3008=44.9%
     conn.execute("INSERT INTO positions VALUES ('3008',100,379.6,2450,0,2450)")
     conn.execute("INSERT INTO positions VALUES ('2330',300,898.6,1000,0,1000)")
     conn.commit()
@@ -71,7 +72,6 @@ def test_no_proposals_when_under_40pct(tmp_path):
     """所有持倉均低於 40% 時不生成 proposal（各佔約 33%）"""
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
-    # 各佔 33%：value = 100 each
     conn.execute("INSERT INTO positions VALUES ('2330',100,0,100,0,100)")
     conn.execute("INSERT INTO positions VALUES ('2317',100,0,100,0,100)")
     conn.execute("INSERT INTO positions VALUES ('2382',100,0,100,0,100)")
@@ -87,3 +87,19 @@ def test_empty_positions_returns_no_proposals(tmp_path):
     conn = _make_db(tmp_path)
     proposals = check_concentration(conn)
     assert proposals == []
+
+
+def test_dedup_skips_symbol_with_pending_sell_orders(tmp_path):
+    """已有 submitted sell orders 的標的不應再產生新 proposal"""
+    from openclaw.concentration_guard import check_concentration
+    conn = _make_db(tmp_path)
+    conn.execute("INSERT INTO positions VALUES ('3008',591,379.6,2450,0,2450)")
+    conn.execute("INSERT INTO positions VALUES ('2330',151,898.6,1935,0,1935)")
+    # 已有一筆 submitted sell order for 3008
+    conn.execute("""INSERT INTO orders VALUES (
+        'existing-order','d1','b1','2026-03-06T04:00:00+00:00',
+        '3008','sell',378,2350.0,'limit','ROD','submitted','v1')""")
+    conn.commit()
+
+    proposals = check_concentration(conn)
+    assert not any(p["symbol"] == "3008" for p in proposals)

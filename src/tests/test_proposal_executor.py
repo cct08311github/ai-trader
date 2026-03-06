@@ -1,4 +1,4 @@
-"""test_proposal_executor.py — approved 提案自動執行測試"""
+"""test_proposal_executor.py — approved 提案執行測試（intent-based API）"""
 import json
 import sqlite3
 import time
@@ -40,37 +40,43 @@ def db_with_proposal(tmp_path):
     return conn
 
 
-def test_executor_creates_sell_order_for_approved_proposal(db_with_proposal):
-    """approved POSITION_REBALANCE proposal 應產生 sell 訂單"""
+def test_executor_returns_sell_intent_for_approved_proposal(db_with_proposal):
+    """approved POSITION_REBALANCE proposal 應回傳 SellIntent"""
     from openclaw.proposal_executor import execute_pending_proposals
-    execute_pending_proposals(db_with_proposal, dry_run=False)
-    orders = db_with_proposal.execute("SELECT symbol, side, qty FROM orders").fetchall()
-    assert len(orders) == 1
-    assert orders[0][0] == "3008"
-    assert orders[0][1] == "sell"
-    assert orders[0][2] == 300  # 1000 * 30%，取整
+    intents, n_noted = execute_pending_proposals(db_with_proposal)
+    assert len(intents) == 1
+    assert intents[0].symbol == "3008"
+    assert intents[0].qty == 300  # 1000 * 30%
+    assert intents[0].price == 2450.0
+    assert intents[0].proposal_id == "p1"
+    # proposal 仍為 approved（等 broker 成交後才標記 executed）
+    status = db_with_proposal.execute(
+        "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
+    ).fetchone()[0]
+    assert status == "approved"
 
 
-def test_executor_marks_proposal_as_executed(db_with_proposal):
-    """執行後 proposal status 應更新為 executed"""
-    from openclaw.proposal_executor import execute_pending_proposals
-    execute_pending_proposals(db_with_proposal, dry_run=False)
+def test_mark_intent_executed(db_with_proposal):
+    """broker 成交後 mark_intent_executed 應更新為 executed"""
+    from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    mark_intent_executed(db_with_proposal, intents[0].proposal_id)
     status = db_with_proposal.execute(
         "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
     ).fetchone()[0]
     assert status == "executed"
 
 
-def test_executor_dry_run_does_not_create_orders(db_with_proposal):
-    """dry_run=True 時不建立訂單"""
+def test_executor_does_not_create_orders(db_with_proposal):
+    """execute_pending_proposals 不應直接建立 orders（由 ticker_watcher 負責）"""
     from openclaw.proposal_executor import execute_pending_proposals
-    execute_pending_proposals(db_with_proposal, dry_run=True)
+    execute_pending_proposals(db_with_proposal)
     count = db_with_proposal.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
     assert count == 0
 
 
 def test_executor_skips_expired_proposal(tmp_path):
-    """已過期的 proposal 不應執行"""
+    """已過期的 proposal 不應回傳 intent"""
     from openclaw.proposal_executor import execute_pending_proposals
     conn = sqlite3.connect(str(tmp_path / "t.db"))
     conn.execute("""CREATE TABLE strategy_proposals (
@@ -79,11 +85,6 @@ def test_executor_skips_expired_proposal(tmp_path):
         supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER,
         status TEXT, expires_at INTEGER, proposal_json TEXT, created_at INTEGER,
         decided_at INTEGER
-    )""")
-    conn.execute("""CREATE TABLE orders (
-        order_id TEXT PRIMARY KEY, decision_id TEXT, broker_order_id TEXT,
-        ts_submit TEXT, symbol TEXT, side TEXT, qty INTEGER, price REAL,
-        order_type TEXT, tif TEXT, status TEXT, strategy_version TEXT
     )""")
     conn.execute("""CREATE TABLE positions (
         symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
@@ -99,21 +100,48 @@ def test_executor_skips_expired_proposal(tmp_path):
     conn.execute("INSERT INTO positions VALUES ('2330',100,900,950,0,950)")
     conn.commit()
 
-    execute_pending_proposals(conn, dry_run=False)
-    count = conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
-    assert count == 0  # 過期 proposal 不執行
+    intents, _ = execute_pending_proposals(conn)
+    assert len(intents) == 0
 
 
 def test_executor_skips_no_position(db_with_proposal):
     """無持倉的 symbol proposal 標記為 skipped"""
     from openclaw.proposal_executor import execute_pending_proposals
-    # 刪除持倉
     db_with_proposal.execute("DELETE FROM positions WHERE symbol='3008'")
     db_with_proposal.commit()
-    execute_pending_proposals(db_with_proposal, dry_run=False)
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    assert len(intents) == 0
     status = db_with_proposal.execute(
         "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
     ).fetchone()[0]
     assert status == "skipped"
-    count = db_with_proposal.execute("SELECT COUNT(*) FROM orders").fetchone()[0]
-    assert count == 0
+
+
+def test_strategy_direction_marked_as_noted(tmp_path):
+    """STRATEGY_DIRECTION proposal 應標記為 noted"""
+    from openclaw.proposal_executor import execute_pending_proposals
+    conn = sqlite3.connect(str(tmp_path / "t.db"))
+    conn.execute("""CREATE TABLE strategy_proposals (
+        proposal_id TEXT PRIMARY KEY, generated_by TEXT, target_rule TEXT,
+        rule_category TEXT, current_value TEXT, proposed_value TEXT,
+        supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER,
+        status TEXT, expires_at INTEGER, proposal_json TEXT, created_at INTEGER,
+        decided_at INTEGER
+    )""")
+    conn.execute("""CREATE TABLE positions (
+        symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+        current_price REAL, unrealized_pnl REAL, high_water_mark REAL
+    )""")
+    conn.execute("""INSERT INTO strategy_proposals VALUES (
+        'p_dir','pm','STRATEGY_DIRECTION','strategy',
+        NULL,'increase exposure','evidence',0.7,1,'approved',NULL,?,?,NULL
+    )""", (json.dumps({"direction": "bullish"}), int(time.time())))
+    conn.commit()
+
+    intents, n_noted = execute_pending_proposals(conn)
+    assert len(intents) == 0
+    assert n_noted == 1
+    status = conn.execute(
+        "SELECT status FROM strategy_proposals WHERE proposal_id='p_dir'"
+    ).fetchone()[0]
+    assert status == "noted"
