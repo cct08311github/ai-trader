@@ -205,10 +205,11 @@ pm2 logs ai-trader-watcher  # 看掃盤 log
 盤中每 3 分鐘
   → signal_generator（EOD MA 黃金交叉 + RSI + Trailing Stop）
   → risk_engine 7 層風控 → 自動下單（止損單跳過滑點/偏離檢查）
-  → concentration_guard（>60% 自動減倉 / 40-60% 生成 pending）
+  → concentration_guard（>60% 自動減倉 / 40-60% 生成 pending；有 submitted 賣單時跳過 dedup）
   → proposal_reviewer（Gemini 審查 pending）
       → approve/reject + Telegram 通知
-  → proposal_executor（執行 approved）
+  → proposal_executor（回傳 SellIntent 清單，不直接建 order）
+  → ticker_watcher 透過 broker 執行 SellIntent → mark_intent_executed/failed
 ```
 
 **Telegram 通知環境變數**：
@@ -246,6 +247,8 @@ pytest -q   # 根目錄 pytest.ini
   - `tests/frontend_backend/`
 - **FastAPI `conn_dep` generator 500 路徑**：不能 patch `conn_dep` 本身；必須 `monkeypatch.setattr(db_mod, "get_conn", broken_ctx)` + `monkeypatch.setattr(aa, "db", db_mod)`
 - **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
+- **`full_client` fixture 陷阱**：`importlib.reload()` 會覆蓋 autouse fixture 的 monkeypatch → 必須在 test method 內、`full_client` 解構後才 monkeypatch
+- **`close_position` 時段檢查**：`_is_tw_trading_hours()` 在非交易時段回 403，測試必須 `monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)`
 
 ### 前端 JavaScript（vitest）
 
@@ -304,6 +307,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.12.1 | google-genai SDK 遷移（棄用 google.generativeai）；strategy_proposals.created_at 毫秒修正 |
 | v4.12.2 | tg_approver 端對端修復：auth middleware proposals 路徑、get_conn_rw、chat_id=-1003772422881；test fixture 補 eod_prices |
 | v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
+| v4.13.1 | proposal_executor intent-based 重構（修 phantom orders）；concentration_guard dedup；price=0 guard；mark_intent_failed 防無限重試；silent failure hardening；timestamp 統一毫秒；CI 全綠（close_position 403 修復） |
 
 ---
 
