@@ -167,11 +167,11 @@ function WatchlistSection() {
             setAddError('格式不正確（台股4位數字或美股英文代碼）')
             return
         }
-        if (data.universe.includes(sym)) {
+        if (data.manual_watchlist.includes(sym)) {
             setAddError(`${sym} 已在清單中`)
             return
         }
-        setData(d => ({ ...d, universe: [...d.universe, sym] }))
+        setData(d => ({ ...d, manual_watchlist: [...d.manual_watchlist, sym] }))
         setNewSymbol('')
         setAddError('')
         setDirty(true)
@@ -179,7 +179,14 @@ function WatchlistSection() {
     }
 
     function removeSymbol(sym) {
-        setData(d => ({ ...d, universe: d.universe.filter(s => s !== sym) }))
+        setData(d => ({ ...d, manual_watchlist: d.manual_watchlist.filter(s => s !== sym) }))
+        setDirty(true)
+        setSaved(false)
+    }
+
+    function pinSymbol(sym) {
+        if (data.manual_watchlist.includes(sym)) return
+        setData(d => ({ ...d, manual_watchlist: [...d.manual_watchlist, sym] }))
         setDirty(true)
         setSaved(false)
     }
@@ -190,7 +197,7 @@ function WatchlistSection() {
             const res = await authFetch(`${getApiBase()}/api/settings/watchlist`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ universe: data.universe, max_active: data.max_active }),
+                body: JSON.stringify({ manual_watchlist: data.manual_watchlist }),
             })
             if (!res.ok) {
                 const b = await res.json().catch(() => ({}))
@@ -203,6 +210,12 @@ function WatchlistSection() {
             setTimeout(() => setSaved(false), 4000)
         } catch (e) { setError(e.message) }
         finally { setSaving(false) }
+    }
+
+    const labelColor = (label) => {
+        if (label === '短線') return 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+        if (label === '長線') return 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+        return 'bg-slate-700/40 border-slate-600/30 text-slate-300'
     }
 
     return (
@@ -218,53 +231,23 @@ function WatchlistSection() {
                 </div>
             ) : (
                 <>
-                    {/* Active watchlist — read-only */}
+                    {/* 1. Manual Watchlist — editable */}
                     <div className="pt-4">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Zap className="h-3.5 w-3.5 text-amber-400" />
-                            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                                系統主動篩選（Active Watchlist）
-                            </span>
-                            <button onClick={load} className="ml-auto text-slate-500 hover:text-slate-300 transition-colors">
-                                <RefreshCw className="h-3 w-3" />
-                            </button>
-                        </div>
-                        <p className="text-xs text-slate-500 mb-2">
-                            每3分鐘從候選池中依漲跌幅排名自動更新，最多取前 {data.max_active} 支。
-                            {data.screened_at && <span className="ml-1 text-slate-600">最後篩選：{data.screened_at}</span>}
-                        </p>
-                        <div className="flex flex-wrap gap-2 min-h-[2rem]">
-                            {data.active_watchlist && data.active_watchlist.length > 0 ? (
-                                data.active_watchlist.map(sym => (
-                                    <span key={sym} className="flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-xs font-mono font-semibold text-amber-300">
-                                        <Zap className="h-3 w-3" />{sym}
-                                    </span>
-                                ))
-                            ) : (
-                                <span className="text-xs text-slate-500 italic">尚無篩選結果（watcher 執行後自動更新）</span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="my-4 border-t border-slate-800/60" />
-
-                    {/* Universe — editable */}
-                    <div>
                         <div className="flex items-center gap-2 mb-2">
                             <List className="h-3.5 w-3.5 text-violet-400" />
                             <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                                候選池（Universe）
+                                我的追蹤清單
                             </span>
-                            <span className="ml-auto text-xs text-slate-500">{data.universe.length} 支</span>
+                            <span className="ml-auto text-xs text-slate-500">{data.manual_watchlist.length} 支</span>
                         </div>
-                        <p className="text-xs text-slate-500 mb-3">手動維護的股票候選池。系統每次掃描時從此清單篩選 active watchlist。</p>
+                        <p className="text-xs text-slate-500 mb-3">手動維護的股票追蹤清單，與系統推薦合併後成為監控標的。</p>
                         <div className="flex flex-wrap gap-2 mb-3">
-                            {data.universe.map(sym => (
-                                <span key={sym} className="flex items-center gap-1 rounded-lg bg-slate-800/60 border border-slate-700/60 px-2.5 py-1 text-xs font-mono text-slate-200">
+                            {data.manual_watchlist.map(sym => (
+                                <span key={sym} className="flex items-center gap-1 rounded-lg bg-violet-500/10 border border-violet-500/30 px-2.5 py-1 text-xs font-mono font-semibold text-violet-300">
                                     {sym}
                                     <button
                                         onClick={() => removeSymbol(sym)}
-                                        className="text-slate-500 hover:text-rose-400 transition-colors ml-0.5"
+                                        className="text-violet-400/50 hover:text-rose-400 transition-colors ml-0.5"
                                         title={`移除 ${sym}`}
                                     >
                                         <X className="h-3 w-3" />
@@ -295,15 +278,102 @@ function WatchlistSection() {
 
                     <div className="my-4 border-t border-slate-800/60" />
 
-                    {/* max_active */}
-                    <Field
-                        label="Active Watchlist 最大數量"
-                        hint="每次掃描最多選取幾支股票進行監控與交易訊號產生"
-                        value={data.max_active}
-                        min={1} max={20} step={1}
-                        onChange={v => { setData(d => ({ ...d, max_active: v })); setDirty(true); setSaved(false) }}
-                        suffix="支"
-                    />
+                    {/* 2. System Candidates — read-only cards */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Zap className="h-3.5 w-3.5 text-amber-400" />
+                            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                系統推薦候選
+                            </span>
+                            <button onClick={load} className="ml-auto text-slate-500 hover:text-slate-300 transition-colors">
+                                <RefreshCw className="h-3 w-3" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-3">由選股引擎自動篩選，到期後自動移除。點擊「加入追蹤」可釘選至手動清單。</p>
+                        {data.system_candidates && data.system_candidates.length > 0 ? (
+                            <div className="space-y-2">
+                                {data.system_candidates.map(c => (
+                                    <div key={`${c.symbol}-${c.label}`} className="rounded-xl border border-slate-800/60 bg-slate-950/30 px-4 py-3 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-mono font-semibold text-sm text-slate-100">{c.symbol}</span>
+                                            {c.name && <span className="text-xs text-slate-400">{c.name}</span>}
+                                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${labelColor(c.label)}`}>
+                                                {c.label || '—'}
+                                            </span>
+                                            <span className="ml-auto text-[10px] text-slate-500">到期 {c.expires_at}</span>
+                                        </div>
+                                        {/* Score bar */}
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] text-slate-500 w-8 shrink-0">分數</span>
+                                            <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                                                <div className="h-full rounded-full bg-amber-500/70" style={{ width: `${Math.min((c.score || 0) * 100, 100)}%` }} />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-slate-400 w-8 text-right">{(c.score || 0).toFixed(2)}</span>
+                                        </div>
+                                        {/* Reasons chips */}
+                                        {c.reasons && c.reasons.length > 0 && (
+                                            <div className="flex flex-wrap gap-1">
+                                                {c.reasons.map((r, i) => (
+                                                    <span key={i} className="text-[10px] rounded bg-slate-800/80 border border-slate-700/40 px-1.5 py-0.5 text-slate-400">{r}</span>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {/* LLM filter warning */}
+                                        {c.llm_filtered === false && (
+                                            <div className="flex items-center gap-1 text-[10px] text-yellow-400">
+                                                <AlertCircle className="h-3 w-3 shrink-0" />僅規則篩選，未經 AI 驗證
+                                            </div>
+                                        )}
+                                        {/* Pin button */}
+                                        {!data.manual_watchlist.includes(c.symbol) && (
+                                            <button
+                                                onClick={() => pinSymbol(c.symbol)}
+                                                className="flex items-center gap-1 text-[10px] font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                                            >
+                                                <Plus className="h-3 w-3" />加入追蹤
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="text-xs text-slate-500 italic">尚無系統推薦候選（選股引擎執行後自動更新）</span>
+                        )}
+                    </div>
+
+                    <div className="my-4 border-t border-slate-800/60" />
+
+                    {/* 3. Active Symbols — merged read-only */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-2">
+                            <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                                目前監控中
+                            </span>
+                            <span className="ml-auto text-xs text-slate-500">{data.active_symbols ? data.active_symbols.length : 0} 支</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mb-2">手動清單 + 系統推薦合併後的實際監控標的。</p>
+                        <div className="flex flex-wrap gap-2 min-h-[2rem]">
+                            {data.active_symbols && data.active_symbols.length > 0 ? (
+                                data.active_symbols.map(sym => {
+                                    const isManual = data.manual_watchlist.includes(sym)
+                                    const isSystem = data.system_candidates && data.system_candidates.some(c => c.symbol === sym)
+                                    const color = isManual && isSystem
+                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                                        : isManual
+                                            ? 'bg-violet-500/10 border-violet-500/30 text-violet-300'
+                                            : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                                    return (
+                                        <span key={sym} className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-mono font-semibold ${color}`}>
+                                            {sym}
+                                        </span>
+                                    )
+                                })
+                            ) : (
+                                <span className="text-xs text-slate-500 italic">無監控標的</span>
+                            )}
+                        </div>
+                    </div>
 
                     <SaveBar saving={saving} saved={saved} dirty={dirty} onSave={save} />
                 </>

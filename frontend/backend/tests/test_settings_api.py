@@ -42,9 +42,9 @@ def settings_client(tmp_path, monkeypatch):
     }))
     watchlist_file = tmp_path / "watchlist.json"
     watchlist_file.write_text(json.dumps({
-        "universe": ["2330", "2317"],
-        "max_active": 5,
-        "screening": {"method": "top_movers"},
+        "manual_watchlist": ["2330", "2317"],
+        "max_system_candidates": 10,
+        "screener": {"enabled": True},
     }))
     db_file = tmp_path / "trades.db"
     conn = sqlite3.connect(str(db_file))
@@ -64,6 +64,15 @@ def settings_client(tmp_path, monkeypatch):
             created_at INTEGER
         )
     """)
+    conn.execute("""CREATE TABLE IF NOT EXISTS system_candidates (
+        symbol TEXT, trade_date TEXT, label TEXT, score REAL,
+        source TEXT, reasons TEXT, llm_filtered INTEGER,
+        expires_at TEXT, created_at INTEGER,
+        PRIMARY KEY(symbol, trade_date, label))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS eod_prices (
+        trade_date TEXT, market TEXT, symbol TEXT, name TEXT,
+        open REAL, high REAL, low REAL, close REAL, volume INTEGER,
+        PRIMARY KEY(trade_date, market, symbol))""")
     conn.commit()
     conn.close()
 
@@ -289,34 +298,22 @@ class TestWatchlistSettings:
         r = c.get("/api/settings/watchlist", headers=_AUTH)
         assert r.status_code == 200
         data = r.json()
-        assert "universe" in data
-        assert "max_active" in data
-        assert "active_watchlist" in data
+        assert "manual_watchlist" in data
+        assert "system_candidates" in data
+        assert "active_symbols" in data
 
     def test_update_watchlist(self, settings_client):
         c, *_ = settings_client
-        payload = {"universe": ["2330", "2454", "2308"], "max_active": 3}
+        payload = {"manual_watchlist": ["2330", "2454"]}
         r = c.put("/api/settings/watchlist", json=payload, headers=_AUTH)
         assert r.status_code == 200
         data = r.json()
         assert data["status"] == "ok"
-        assert "2330" in data["universe"]
+        assert "2330" in data["manual_watchlist"]
 
-    def test_update_watchlist_invalid_max_active(self, settings_client):
+    def test_update_watchlist_empty(self, settings_client):
         c, *_ = settings_client
-        payload = {"universe": ["2330"], "max_active": 0}
-        r = c.put("/api/settings/watchlist", json=payload, headers=_AUTH)
-        assert r.status_code == 400
-
-    def test_update_watchlist_empty_universe(self, settings_client):
-        c, *_ = settings_client
-        payload = {"universe": [], "max_active": 5}
-        r = c.put("/api/settings/watchlist", json=payload, headers=_AUTH)
-        assert r.status_code == 400
-
-    def test_update_watchlist_max_active_too_large(self, settings_client):
-        c, *_ = settings_client
-        payload = {"universe": ["2330"], "max_active": 25}
+        payload = {"manual_watchlist": []}
         r = c.put("/api/settings/watchlist", json=payload, headers=_AUTH)
         assert r.status_code == 400
 
@@ -325,29 +322,78 @@ class TestWatchlistSettings:
         r = c.get("/api/settings/watchlist")
         assert r.status_code == 401
 
+    def test_get_watchlist_backward_compat(self, settings_client, monkeypatch):
+        """Old format with 'universe' key should still work via backward compat."""
+        c, tmp_path, _, _, watchlist_file, _ = settings_client
+        # Overwrite with old-format config
+        import app.api.settings as settings_mod
+        old_cfg = tmp_path / "watchlist_old.json"
+        old_cfg.write_text(json.dumps({
+            "universe": ["1301", "2603"],
+            "max_active": 5,
+            "screening": {"method": "top_movers"},
+        }))
+        monkeypatch.setattr(settings_mod, "WATCHLIST_PATH", str(old_cfg))
+        r = c.get("/api/settings/watchlist", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert "manual_watchlist" in data
+        assert "1301" in data["manual_watchlist"]
 
-class TestGetActiveWatchlist:
-    def test_active_watchlist_with_screener_trace(self, settings_client):
+    def test_system_candidates_in_response(self, settings_client):
+        """Insert a system candidate with future expiry, verify it appears."""
         c, _, _, _, _, db_file = settings_client
         conn = sqlite3.connect(str(db_file))
         conn.execute(
-            """INSERT INTO llm_traces (trace_id, agent, model, prompt, response, latency_ms, created_at)
-               VALUES (?,?,?,?,?,?,?)""",
-            ("t1", "watcher", "mock",
-             "SCREENER result", "active watchlist: 2330, 2317, 2454",
-             100, 1000000)
+            "INSERT INTO system_candidates (symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("9999", "2099-01-01", "短線", 0.85, "rule", '["vol_spike","price_breakout"]', 1, "2099-12-31", 1000000)
+        )
+        conn.execute(
+            "INSERT INTO eod_prices (trade_date, market, symbol, name, open, high, low, close, volume) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("2099-01-01", "TSE", "9999", "測試公司", 100, 110, 95, 105, 50000)
         )
         conn.commit()
         conn.close()
-        import app.api.settings as sm
-        result = sm._get_active_watchlist()
-        assert isinstance(result, dict)
-        assert "symbols" in result
+        r = c.get("/api/settings/watchlist", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        symbols = [sc["symbol"] for sc in data["system_candidates"]]
+        assert "9999" in symbols
+        # Verify it also appears in active_symbols
+        assert "9999" in data["active_symbols"]
+        # Verify name lookup worked
+        candidate = [sc for sc in data["system_candidates"] if sc["symbol"] == "9999"][0]
+        assert candidate["name"] == "測試公司"
+        assert candidate["llm_filtered"] is True
+        assert "vol_spike" in candidate["reasons"]
 
-    def test_active_watchlist_empty_db(self, settings_client):
+
+class TestLoadSystemCandidates:
+    def test_no_table_returns_empty(self, settings_client):
+        """When system_candidates table doesn't exist (different DB), returns empty list."""
         import app.api.settings as sm
-        result = sm._get_active_watchlist()
-        assert result["symbols"] == [] or isinstance(result["symbols"], list)
+        from unittest.mock import patch
+        # Point to a fresh DB without the table
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            tmp_db = f.name
+        try:
+            conn = sqlite3.connect(tmp_db)
+            conn.close()
+            with patch.object(sm, "DB_PATH_ENV", tmp_db):
+                result = sm._load_system_candidates()
+            assert result == []
+        finally:
+            os.unlink(tmp_db)
+
+    def test_exception_returns_empty(self, settings_client, monkeypatch):
+        """_load_system_candidates silently handles DB exception."""
+        import app.api.settings as settings_mod
+        monkeypatch.setattr(settings_mod, "DB_PATH_ENV", "/nonexistent/db.db")
+        result = settings_mod._load_system_candidates()
+        assert result == []
 
 
 class TestLoadJson:
@@ -472,13 +518,10 @@ class TestLimitsWithLevel3:
         assert updated["position_limits"]["levels"]["3"]["max_position_notional_pct_nav"] == 0.12
 
 
-class TestGetActiveWatchlistException:
-    def test_active_watchlist_exception_returns_empty(self, settings_client, monkeypatch):
-        """_get_active_watchlist silently handles DB exception (covers lines 253-254)."""
+class TestLoadSystemCandidatesException:
+    def test_load_system_candidates_exception_returns_empty(self, settings_client, monkeypatch):
+        """_load_system_candidates silently handles DB exception."""
         import app.api.settings as settings_mod
-        # Point to non-existent path to force exception
         monkeypatch.setattr(settings_mod, "DB_PATH_ENV", "/nonexistent/db.db")
-        result = settings_mod._get_active_watchlist()
-        # Exception is caught, returns empty (line 253-254 executed)
-        assert result["symbols"] == []
-        assert result["screened_at"] is None
+        result = settings_mod._load_system_candidates()
+        assert result == []

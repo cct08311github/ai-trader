@@ -218,72 +218,100 @@ def update_limits(req: BudgetUpdateRequest):
 # ─── Watchlist ─────────────────────────────────────────────────────────────────
 
 _WATCHLIST_DEFAULT = {
-    "universe": ["2330", "2317", "2454", "2308", "2382",
-                 "2881", "2882", "2886", "2412", "3008",
-                 "2002", "1301", "1303", "2603", "2609"],
-    "max_active": 5,
-    "screening": {"method": "top_movers"},
+    "manual_watchlist": ["2330", "2317", "2454", "2308", "2382",
+                         "2881", "2882", "2886", "2412", "3008",
+                         "2002", "1301", "1303", "2603", "2609"],
+    "max_system_candidates": 10,
+    "screener": {"enabled": True},
 }
 
 
 class WatchlistSettings(BaseModel):
-    universe: List[str]
-    max_active: int = 5
+    manual_watchlist: List[str]
 
 
-def _get_active_watchlist() -> dict:
-    """從 llm_traces 取最新一次 screener 結果。"""
+def _load_system_candidates() -> List[dict]:
+    """Load unexpired system candidates from DB."""
     try:
         con = sqlite3.connect(DB_PATH_ENV)
-        row = con.execute(
-            "SELECT response, created_at FROM llm_traces "
-            "WHERE agent='watcher' AND prompt LIKE '%SCREENER%' "
-            "ORDER BY created_at DESC LIMIT 1"
+        con.row_factory = sqlite3.Row
+        # Check if table exists first
+        tbl = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='system_candidates'"
         ).fetchone()
+        if not tbl:
+            con.close()
+            return []
+        rows = con.execute(
+            "SELECT symbol, trade_date, label, score, reasons, llm_filtered, expires_at "
+            "FROM system_candidates WHERE expires_at >= date('now') ORDER BY score DESC"
+        ).fetchall()
         con.close()
-        if row:
-            # response 格式: "active watchlist: 2002, 2886, 3008, 2382, 2317"
-            resp, ts_ms = row
-            symbols = []
-            if "active watchlist:" in resp:
-                part = resp.split("active watchlist:")[-1].strip()
-                symbols = [s.strip() for s in part.split(",") if s.strip()]
-            ts_iso = datetime.utcfromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d %H:%M:%S UTC")
-            return {"symbols": symbols, "screened_at": ts_iso}
+        result = []
+        for r in rows:
+            # Look up name
+            name = ""
+            try:
+                con2 = sqlite3.connect(DB_PATH_ENV)
+                nr = con2.execute(
+                    "SELECT name FROM eod_prices WHERE symbol=? ORDER BY trade_date DESC LIMIT 1",
+                    (r["symbol"],)
+                ).fetchone()
+                con2.close()
+                if nr:
+                    name = nr[0]
+            except Exception:
+                pass
+            reasons_raw = r["reasons"]
+            try:
+                reasons = json.loads(reasons_raw) if reasons_raw else []
+            except (json.JSONDecodeError, TypeError):
+                reasons = reasons_raw.split(",") if reasons_raw else []
+            result.append({
+                "symbol": r["symbol"], "name": name,
+                "trade_date": r["trade_date"], "label": r["label"],
+                "score": r["score"], "reasons": reasons,
+                "llm_filtered": bool(r["llm_filtered"]),
+                "expires_at": r["expires_at"],
+            })
+        return result
     except Exception:
-        pass
-    return {"symbols": [], "screened_at": None}
+        return []
 
 
 @router.get("/watchlist")
 def get_watchlist():
     cfg = _load_json(WATCHLIST_PATH, _WATCHLIST_DEFAULT)
-    active = _get_active_watchlist()
+    # Backward compat: universe → manual_watchlist
+    manual = cfg.get("manual_watchlist", cfg.get("universe", _WATCHLIST_DEFAULT["manual_watchlist"]))
+    candidates = _load_system_candidates()
+    candidate_symbols = [c["symbol"] for c in candidates]
+    active = list(dict.fromkeys(manual + candidate_symbols))
     return {
-        "universe": cfg.get("universe", _WATCHLIST_DEFAULT["universe"]),
-        "max_active": cfg.get("max_active", 5),
-        "screening_method": cfg.get("screening", {}).get("method", "top_movers"),
-        "active_watchlist": active["symbols"],
-        "screened_at": active["screened_at"],
+        "manual_watchlist": manual,
+        "system_candidates": candidates,
+        "active_symbols": active,
+        "screener": cfg.get("screener", {"enabled": True}),
     }
 
 
 @router.put("/watchlist")
 def update_watchlist(req: WatchlistSettings):
-    if req.max_active < 1 or req.max_active > 20:
-        raise HTTPException(status_code=400, detail="max_active 必須介於 1-20")
-    if not req.universe:
-        raise HTTPException(status_code=400, detail="universe 不可為空")
+    if not req.manual_watchlist:
+        raise HTTPException(status_code=400, detail="manual_watchlist 不可為空")
     cfg = _load_json(WATCHLIST_PATH, _WATCHLIST_DEFAULT)
-    cfg["universe"] = [s.strip().upper() for s in req.universe if s.strip()]
-    cfg["max_active"] = req.max_active
+    cfg["manual_watchlist"] = [s.strip().upper() for s in req.manual_watchlist if s.strip()]
+    # Remove old keys
+    cfg.pop("universe", None)
+    cfg.pop("max_active", None)
     _save_json(WATCHLIST_PATH, cfg)
-    active = _get_active_watchlist()
+    candidates = _load_system_candidates()
+    candidate_symbols = [c["symbol"] for c in candidates]
+    active = list(dict.fromkeys(cfg["manual_watchlist"] + candidate_symbols))
     return {
         "status": "ok",
-        "universe": cfg["universe"],
-        "max_active": cfg["max_active"],
-        "screening_method": cfg.get("screening", {}).get("method", "top_movers"),
-        "active_watchlist": active["symbols"],
-        "screened_at": active["screened_at"],
+        "manual_watchlist": cfg["manual_watchlist"],
+        "system_candidates": candidates,
+        "active_symbols": active,
+        "screener": cfg.get("screener", {"enabled": True}),
     }
