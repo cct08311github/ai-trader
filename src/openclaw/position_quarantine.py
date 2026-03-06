@@ -45,6 +45,13 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
+def _position_columns(conn: sqlite3.Connection) -> set[str]:
+    if not _table_exists(conn, "positions"):
+        return set()
+    rows = conn.execute("PRAGMA table_info(positions)").fetchall()
+    return {str(r[1]) for r in rows}
+
+
 def build_reconciliation_quarantine_plan(
     conn: sqlite3.Connection,
     *,
@@ -53,19 +60,32 @@ def build_reconciliation_quarantine_plan(
     diagnostics = report.get("diagnostics") or {}
     missing = list((report.get("mismatches") or {}).get("missing_broker_position", []))
     active_quarantines = _active_quarantine_symbols(conn)
+    position_columns = _position_columns(conn)
+    position_select = [
+        "symbol",
+        "quantity" if "quantity" in position_columns else "NULL AS quantity",
+        "avg_price" if "avg_price" in position_columns else "NULL AS avg_price",
+        "current_price" if "current_price" in position_columns else "NULL AS current_price",
+        "state" if "state" in position_columns else "NULL AS state",
+    ]
     actions: list[dict[str, Any]] = []
     for item in missing:
         symbol = str(item.get("symbol") or "").upper()
         if not symbol:
             continue
-        position_row = conn.execute(
-            "SELECT symbol, quantity, avg_price, current_price, state FROM positions WHERE UPPER(symbol)=UPPER(?) LIMIT 1",
-            (symbol,),
-        ).fetchone()
-        open_orders = conn.execute(
-            "SELECT order_id, status FROM orders WHERE UPPER(symbol)=UPPER(?) AND status IN ('submitted', 'partially_filled')",
-            (symbol,),
-        ).fetchall()
+        position_row = None
+        if "symbol" in position_columns:
+            position_row = conn.execute(
+                f"SELECT {', '.join(position_select)} FROM positions WHERE UPPER(symbol)=UPPER(?) LIMIT 1",
+                (symbol,),
+            ).fetchone()
+        if _table_exists(conn, "orders"):
+            open_orders = conn.execute(
+                "SELECT order_id, status FROM orders WHERE UPPER(symbol)=UPPER(?) AND status IN ('submitted', 'partially_filled')",
+                (symbol,),
+            ).fetchall()
+        else:
+            open_orders = []
         actions.append(
             {
                 "symbol": symbol,
@@ -96,6 +116,7 @@ def apply_quarantine_plan(
 ) -> dict[str, Any]:
     ensure_position_quarantine_schema(conn)
     now_ms = int(time.time() * 1000)
+    position_columns = _position_columns(conn)
     applied: list[str] = []
     for item in plan.get("actions", []):
         if not item.get("eligible"):
@@ -130,16 +151,18 @@ def apply_quarantine_plan(
                 json.dumps(payload, ensure_ascii=True),
             ),
         )
-        conn.execute(
-            """
-            UPDATE positions
-               SET quantity=0,
-                   unrealized_pnl=0,
-                   state='QUARANTINED'
-             WHERE UPPER(symbol)=UPPER(?)
-            """,
-            (symbol,),
-        )
+        updates = []
+        if "quantity" in position_columns:
+            updates.append("quantity=0")
+        if "unrealized_pnl" in position_columns:
+            updates.append("unrealized_pnl=0")
+        if "state" in position_columns:
+            updates.append("state='QUARANTINED'")
+        if updates:
+            conn.execute(
+                f"UPDATE positions SET {', '.join(updates)} WHERE UPPER(symbol)=UPPER(?)",
+                (symbol,),
+            )
         applied.append(symbol)
     if auto_commit:
         conn.commit()
@@ -152,7 +175,7 @@ def apply_quarantine_plan(
 def get_quarantine_status(conn: sqlite3.Connection) -> dict[str, Any]:
     if not _table_exists(conn, "position_quarantine"):
         return {"active_count": 0, "items": []}
-    position_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(positions)").fetchall()} if _table_exists(conn, "positions") else set()
+    position_columns = _position_columns(conn)
     select_parts = [
         "q.symbol",
         "q.source",
@@ -220,7 +243,8 @@ def clear_quarantine_symbols(
             "UPDATE position_quarantine SET active=0, cleared_at=? WHERE active=1",
             (now_ms,),
         )
-    sync_positions_table(conn)
+    if _table_exists(conn, "orders") and _table_exists(conn, "fills"):
+        sync_positions_table(conn)
     if auto_commit:
         conn.commit()
     status = get_quarantine_status(conn)

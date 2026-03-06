@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import json
 import sqlite3
 import psutil
 from datetime import datetime, timedelta
@@ -8,10 +9,15 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.db import DB_PATH, READONLY_POOL
+import app.db as db
 
 router = APIRouter(prefix="/api/system", tags=["System"])
 inventory_router = APIRouter(prefix="/api/inventory", tags=["Inventory"])
 capital_router = APIRouter(prefix="/api/capital", tags=["Capital"])
+
+
+class QuarantineClearRequest(BaseModel):
+    symbols: list[str] = []
 
 
 @router.get("/health")
@@ -131,6 +137,62 @@ def quarantine_status():
     with READONLY_POOL.conn() as conn:
         data = get_quarantine_status(conn)
     return data
+
+
+def _load_latest_reconciliation_report(conn: sqlite3.Connection) -> dict:
+    try:
+        row = conn.execute(
+            """
+            SELECT summary_json
+              FROM reconciliation_reports
+          ORDER BY created_at DESC
+             LIMIT 1
+            """
+        ).fetchone()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="No reconciliation report available")
+    try:
+        payload = json.loads(row[0] or "{}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Invalid reconciliation report JSON: {e}")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=500, detail="Invalid reconciliation report payload")
+    return payload
+
+
+@router.get("/quarantine-plan")
+def quarantine_plan():
+    from openclaw.position_quarantine import build_reconciliation_quarantine_plan, get_quarantine_status
+
+    with READONLY_POOL.conn() as conn:
+        report = _load_latest_reconciliation_report(conn)
+        plan = build_reconciliation_quarantine_plan(conn, report=report)
+        plan["quarantine_status"] = get_quarantine_status(conn)
+    return plan
+
+
+@router.post("/quarantine/apply")
+def apply_quarantine():
+    from openclaw.position_quarantine import apply_quarantine_plan, build_reconciliation_quarantine_plan, get_quarantine_status
+
+    with db.get_conn_rw() as conn:
+        report = _load_latest_reconciliation_report(conn)
+        plan = build_reconciliation_quarantine_plan(conn, report=report)
+        result = apply_quarantine_plan(conn, plan=plan, auto_commit=False)
+        result["quarantine_status"] = get_quarantine_status(conn)
+        return result
+
+
+@router.post("/quarantine/clear")
+def clear_quarantine(req: QuarantineClearRequest):
+    from openclaw.position_quarantine import clear_quarantine_symbols, get_quarantine_status
+
+    with db.get_conn_rw() as conn:
+        result = clear_quarantine_symbols(conn, symbols=req.symbols, auto_commit=False)
+        result["quarantine_status"] = get_quarantine_status(conn)
+        return result
 
 
 @router.get("/quota")

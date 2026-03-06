@@ -47,6 +47,31 @@ def _init_system_db(path: Path) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            order_id TEXT PRIMARY KEY,
+            decision_id TEXT,
+            strategy_id TEXT,
+            ts_submit TEXT,
+            symbol TEXT,
+            side TEXT,
+            qty INTEGER,
+            price REAL,
+            order_type TEXT,
+            tif TEXT,
+            status TEXT,
+            broker_version TEXT
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fills (
+            order_id TEXT,
+            qty INTEGER,
+            price REAL,
+            fee REAL,
+            tax REAL
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS proposal_execution_journal (
             execution_key TEXT PRIMARY KEY,
             proposal_id TEXT,
@@ -219,6 +244,65 @@ class TestSystemHealth:
         data = r.json()
         assert data["active_count"] == 1
         assert data["items"][0]["symbol"] == "2330"
+
+    def test_quarantine_plan_returns_latest_report_plan(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r-plan', 1234567891, 1, ?)",
+            (json.dumps({"report_id": "r-plan", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/quarantine-plan", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["report_id"] == "r-plan"
+        assert data["eligible_symbols"] == ["2330"]
+
+    def test_quarantine_apply_updates_status(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r-apply', 1234567892, 1, ?)",
+            (json.dumps({"report_id": "r-apply", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.post("/api/system/quarantine/apply", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["applied_symbols"] == ["2330"]
+        assert data["quarantine_status"]["active_count"] == 1
+
+    def test_quarantine_clear_clears_specific_symbol(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO orders VALUES ('o1', 'd1', NULL, '2026-03-06T00:00:00Z', '2330', 'buy', 100, 500.0, 'limit', 'DAY', 'filled', 'v1')"
+        )
+        conn.execute("INSERT INTO fills VALUES ('o1', 100, 500.0, 10.0, 0.0)")
+        conn.execute("INSERT INTO positions VALUES ('2330', 0, 0.0, 0.0, NULL, NULL)")
+        conn.execute(
+            "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.post("/api/system/quarantine/clear", json={"symbols": ["2330"]}, headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["remaining_active_count"] == 0
+        assert data["quarantine_status"]["active_count"] == 0
+
+    def test_quarantine_plan_404_when_missing_report(self, sys_client):
+        c, _, _ = sys_client
+        r = c.get("/api/system/quarantine-plan", headers=_AUTH)
+        assert r.status_code == 404
 
 
 class TestSystemQuota:
