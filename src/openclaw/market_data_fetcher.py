@@ -365,18 +365,29 @@ def run_daily_fetch(
     Returns dict: {institution_flows: N, margin_data: M}
     """
     ensure_schema(conn)
+    result: Dict[str, Any] = {"institution_flows": 0, "margin_data": 0, "errors": []}
+
+    # Source 1: Institution flows (T86) — independent error isolation
+    try:
+        institution_rows = fetch_institution_flows(trade_date)
+        result["institution_flows"] = save_institution_flows(conn, trade_date, institution_rows)
+    except Exception as exc:
+        log.error("[market_data_fetcher] institution save failed: %s", exc, exc_info=True)
+        result["errors"].append(f"institution: {exc}")
 
     # Polite delay between requests (TWSE rate-limits aggressive crawlers)
-    institution_rows = fetch_institution_flows(trade_date)
-    n_inst = save_institution_flows(conn, trade_date, institution_rows)
-
     time.sleep(1)
 
-    margin_rows = fetch_margin_data(trade_date)
-    n_margin = save_margin_data(conn, trade_date, margin_rows)
+    # Source 2: Margin data (MI_MARGN) — independent error isolation
+    try:
+        margin_rows = fetch_margin_data(trade_date)
+        result["margin_data"] = save_margin_data(conn, trade_date, margin_rows)
+    except Exception as exc:
+        log.error("[market_data_fetcher] margin save failed: %s", exc, exc_info=True)
+        result["errors"].append(f"margin: {exc}")
 
     log.info(
-        "[market_data_fetcher] run_daily_fetch %s complete: institution=%d margin=%d",
-        trade_date, n_inst, n_margin,
+        "[market_data_fetcher] run_daily_fetch %s: institution=%d margin=%d errors=%d",
+        trade_date, result["institution_flows"], result["margin_data"], len(result["errors"]),
     )
-    return {"institution_flows": n_inst, "margin_data": n_margin}
+    return result

@@ -58,6 +58,7 @@ trading_enabled = true
 | `trading_engine.py` | 持倉狀態機 + 時間止損（EOD日計：虧損10日/獲利30日） |
 | `lm_signal_cache.py` | LLM 信號快取層（TTL/fallback/purge） |
 | `strategy_optimizer.py` | 策略自主優化（StrategyMetricsEngine/OptimizationGateway/ReflectionAgent） |
+| `eod_ingest.py` | 盤後 OHLCV 抓取（TWSE+TPEx→eod_prices）＋呼叫 market_data_fetcher 抓法人籌碼/融資借券 |
 | `market_data_fetcher.py` | TWSE 盤後資料抓取：三大法人（T86）+ 融資借券（MI_MARGN）→ eod_institution_flows / eod_margin_data |
 
 ---
@@ -308,6 +309,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.12.2 | tg_approver 端對端修復：auth middleware proposals 路徑、get_conn_rw、chat_id=-1003772422881；test fixture 補 eod_prices |
 | v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
 | v4.13.1 | proposal_executor intent-based 重構（修 phantom orders）；concentration_guard dedup；price=0 guard；mark_intent_failed 防無限重試；silent failure hardening；timestamp 統一毫秒；CI 全綠（close_position 403 修復） |
+| v4.13.2 | eod_ingest 統一法人籌碼管線（T86+MI_MARGN 寫入 eod_institution_flows）；market_data_fetcher 獨立錯誤隔離；移除冗餘 institution_ingest cron 步驟 |
 
 ---
 

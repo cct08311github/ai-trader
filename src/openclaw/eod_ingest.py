@@ -274,7 +274,10 @@ def main() -> None:
         )
         conn.commit()
     except Exception as exc:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         status = "failed"
         error_text = str(exc)
         record_run(
@@ -288,18 +291,54 @@ def main() -> None:
         conn.commit()
         raise
     finally:
-        print(
-            json.dumps(
-                {
-                    "status": status,
-                    "trade_date": args.trade_date,
-                    "twse_rows": twse_rows,
-                    "tpex_rows": tpex_rows,
-                    "error": error_text,
-                },
-                ensure_ascii=True,
+        # Fetch institution flows (T86) + margin data (MI_MARGN) into
+        # eod_institution_flows / eod_margin_data — used by reports API.
+        inst_rows = 0
+        margin_rows = 0
+        inst_error = ""
+        try:
+            # Support both `python -m openclaw.eod_ingest` and direct script execution
+            try:
+                from openclaw.market_data_fetcher import run_daily_fetch
+            except ModuleNotFoundError:
+                import sys as _sys
+                _sys.path.insert(0, str(Path(__file__).resolve().parent))
+                from market_data_fetcher import run_daily_fetch
+            result = run_daily_fetch(args.trade_date, conn)
+            inst_rows = result.get("institution_flows", 0)
+            margin_rows = result.get("margin_data", 0)
+            fetch_errors = result.get("errors", [])
+            if fetch_errors:
+                inst_error = "; ".join(fetch_errors)
+                print(
+                    f"[eod_ingest] partial fetch errors: {inst_error}",
+                    file=__import__("sys").stderr,
+                )
+        except Exception as exc:
+            inst_error = str(exc)
+            print(
+                f"[eod_ingest] institution/margin fetch failed: {exc}",
+                file=__import__("sys").stderr,
             )
-        )
+
+        try:
+            print(
+                json.dumps(
+                    {
+                        "status": status,
+                        "trade_date": args.trade_date,
+                        "twse_rows": twse_rows,
+                        "tpex_rows": tpex_rows,
+                        "institution_flows": inst_rows,
+                        "margin_data": margin_rows,
+                        "institution_error": inst_error,
+                        "error": error_text,
+                    },
+                    ensure_ascii=True,
+                )
+            )
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
