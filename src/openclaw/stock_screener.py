@@ -451,7 +451,7 @@ def screen_candidates(
                 trade_date,
                 label,
                 c["score"],
-                ",".join(c["reasons"]),
+                json.dumps(c["reasons"], ensure_ascii=False),
                 llm_filtered,
                 expires_at,
                 now_ms,
