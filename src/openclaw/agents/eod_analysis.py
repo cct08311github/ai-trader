@@ -147,6 +147,30 @@ def run_eod_analysis(
     try:
         _ensure_table(_conn)
 
+        # 0. 抓取盤後公開資料（三大法人 + 融資借券）
+        try:
+            from openclaw.market_data_fetcher import run_daily_fetch
+            run_daily_fetch(_date, _conn)
+        except Exception as _e:
+            log.warning("[eod_analysis] market_data_fetcher 失敗，繼續執行: %s", _e)
+
+        # 0.5 篩選潛力候選股
+        try:
+            from openclaw.stock_screener import screen_candidates
+            watchlist_cfg_path = _REPO_ROOT / "config" / "watchlist.json"
+            manual_wl = []
+            if watchlist_cfg_path.exists():
+                wl_cfg = json.loads(watchlist_cfg_path.read_text())
+                manual_wl = wl_cfg.get("manual_watchlist", wl_cfg.get("universe", []))
+            screen_candidates(
+                _conn, _date,
+                manual_watchlist=set(manual_wl),
+                max_candidates=10,
+                llm_refine=True,
+            )
+        except Exception as _e:
+            log.warning("[eod_analysis] stock_screener 失敗，繼續執行: %s", _e)
+
         # 1. 市場概覽
         top_movers = query_db(
             _conn,
@@ -165,13 +189,21 @@ def run_eod_analysis(
                 raw={},
             )
 
-        # 2. 三大法人
+        # 2. 三大法人（優先查新表 eod_institution_flows，舊表 institution_flows 作 fallback）
         institution_data = query_db(
             _conn,
-            "SELECT symbol, foreign_net, investment_trust_net, dealer_net, total_net "
-            "FROM institution_flows WHERE trade_date=? ORDER BY ABS(total_net) DESC LIMIT 10",
+            "SELECT symbol, name, foreign_net, trust_net AS investment_trust_net, "
+            "dealer_net, total_net "
+            "FROM eod_institution_flows WHERE trade_date=? ORDER BY ABS(total_net) DESC LIMIT 10",
             (_date,),
         )
+        if not institution_data:
+            institution_data = query_db(
+                _conn,
+                "SELECT symbol, foreign_net, investment_trust_net, dealer_net, total_net "
+                "FROM institution_flows WHERE trade_date=? ORDER BY ABS(total_net) DESC LIMIT 10",
+                (_date,),
+            )
 
         # 3. 持倉 + watchlist 技術指標
         positions = query_db(_conn, "SELECT symbol FROM positions", ())

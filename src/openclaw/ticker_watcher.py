@@ -1,15 +1,17 @@
 """ticker_watcher.py — 自動看盤與模擬交易引擎
 
 每 POLL_INTERVAL_SEC 秒掃描 active watchlist 一次：
-1. 每日開盤前，從 config/watchlist.json universe 篩選 top movers → active watchlist
+1. 每日開盤前，合併雙來源清單：
+   a. config/watchlist.json manual_watchlist（手動追蹤）
+   b. stock_screener DB system_candidates（系統自動篩選，盤後 EOD 產生）
 2. 取得行情 (Shioaji snapshots 或 mock random walk)
 3. rule-based 訊號判斷
 4. 7 層 risk_engine 風控
 5. insert_llm_trace → SSE /api/stream/logs 推前端
 6. 若 approved → SimBrokerAdapter → persist orders/fills to DB
 
-維護股票清單：編輯 config/watchlist.json（universe / max_active）
-不需重啟：watcher 每日重新讀取並篩選
+維護股票清單：編輯 config/watchlist.json（manual_watchlist）
+不需重啟：watcher 每日重新讀取並合併
 回滾方式：pm2 stop ai-trader-watcher
 """
 
@@ -209,43 +211,20 @@ _BASE_PRICE_DEFAULT: Dict[str, float] = {
 }
 
 
-def _load_universe() -> tuple[List[str], int]:
-    """讀取 config/watchlist.json，回傳 (universe, max_active)。讀取失敗時用 fallback。"""
+def _load_manual_watchlist() -> List[str]:
+    """讀取 config/watchlist.json，回傳手動追蹤清單。讀取失敗時用 fallback。"""
     try:
         cfg = json.loads(_WATCHLIST_CFG.read_text(encoding="utf-8"))
-        universe = [str(s).strip() for s in cfg.get("universe", []) if str(s).strip()]
-        max_active = int(cfg.get("max_active", 5))
-        if not universe:
-            raise ValueError("universe is empty")
-        return universe, max_active
+        # 優先讀 manual_watchlist，向後相容 universe
+        wl = cfg.get("manual_watchlist") or cfg.get("universe") or []
+        result = [str(s).strip() for s in wl if str(s).strip()]
+        if not result:
+            raise ValueError("manual_watchlist is empty")
+        return result
     except Exception as e:
         log.warning("watchlist.json read failed (%s) — using fallback %s", e, _FALLBACK_UNIVERSE)
-        return _FALLBACK_UNIVERSE, len(_FALLBACK_UNIVERSE)
+        return list(_FALLBACK_UNIVERSE)
 
-
-def _screen_top_movers(api, universe: List[str], max_active: int) -> List[str]:
-    """從 universe 篩選漲跌幅絕對值最大的 max_active 支股票。
-
-    Shioaji 可用時用真實 snapshots；否則用 mock 隨機漂移模擬。
-    結果寫入 log，並以 llm_trace 形式推 SSE（由呼叫端傳入 conn 寫入）。
-    """
-    import random
-    scores: List[tuple[float, str]] = []
-
-    for symbol in universe:
-        snap = _get_snapshot(api, symbol)
-        ref = snap["reference"]
-        close = snap["close"]
-        if ref > 0:
-            pct = abs(close - ref) / ref
-        else:
-            pct = abs(random.uniform(0, 0.01))
-        scores.append((pct, symbol))
-
-    scores.sort(reverse=True)
-    selected = [sym for _, sym in scores[:max_active]]
-    log.info("[SCREEN] universe=%d → active=%d: %s", len(universe), len(selected), selected)
-    return selected
 
 
 # ── 行情取得 (Shioaji 或 mock random walk) ──────────────────────────────────
@@ -609,9 +588,9 @@ def run_watcher() -> None:
     active_watchlist: List[str] = []
     last_screen_date: Optional[dt.date] = None
 
-    universe, max_active = _load_universe()
-    log.info("Ticker watcher started | universe=%d stocks | max_active=%d | INTERVAL=%ds | DB=%s",
-             len(universe), max_active, POLL_INTERVAL_SEC, DB_PATH)
+    manual_watchlist = _load_manual_watchlist()
+    log.info("Ticker watcher started | manual_watchlist=%d stocks | INTERVAL=%ds | DB=%s",
+             len(manual_watchlist), POLL_INTERVAL_SEC, DB_PATH)
 
     while True:  # pragma: no cover
         if not _is_market_open():
@@ -633,18 +612,29 @@ def run_watcher() -> None:
 
         today = dt.datetime.now(tz=_TZ_TWN).date()
 
-        # 每日重新讀取 universe 並篩選 active watchlist（開盤後第一次掃描觸發）
+        # 每日重新載入手動清單 + 系統候選 → 合併 active watchlist
         if last_screen_date != today:
-            universe, max_active = _load_universe()
-            log.info("[SCREEN] New day %s — screening top movers from universe (%d stocks)…",
-                     today, len(universe))
-            active_watchlist = _screen_top_movers(api, universe, max_active)
+            manual_watchlist = _load_manual_watchlist()
+            sys_candidates: List[str] = []
+            try:
+                from openclaw.stock_screener import load_system_candidates
+                _conn_sc = _open_conn()
+                try:
+                    sys_candidates = load_system_candidates(_conn_sc)
+                finally:
+                    _conn_sc.close()
+            except Exception as _sc_e:
+                log.warning("[SCREEN] load_system_candidates failed: %s", _sc_e)
+            active_watchlist = list(dict.fromkeys(manual_watchlist + sys_candidates))
+            log.info("[SCREEN] New day %s — manual=%d + system=%d → active=%d: %s",
+                     today, len(manual_watchlist), len(sys_candidates),
+                     len(active_watchlist), active_watchlist)
             last_screen_date = today
 
             # 篩選結果寫 SSE trace
             conn_tmp = _open_conn()
             try:
-                _log_screen_trace(conn_tmp, universe=universe, active=active_watchlist)
+                _log_screen_trace(conn_tmp, universe=manual_watchlist, active=active_watchlist)
             finally:
                 conn_tmp.close()
 

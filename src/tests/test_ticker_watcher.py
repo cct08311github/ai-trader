@@ -7,8 +7,7 @@
 - _evaluate_cash_mode()：資料不足保持現狀 / bull market 正常 / bear market cash mode
 - _open_conn()：DB 連線
 - _utc_now_iso()：UTC 時間格式
-- _load_universe()：watchlist.json 讀取與 fallback
-- _screen_top_movers()：篩選排行
+- _load_manual_watchlist()：watchlist.json 讀取與 fallback
 - _get_snapshot()：Shioaji / mock 行情取得
 - _persist_decision()/_persist_risk_check()/_persist_order()/_persist_fill()/_insert_order_event()
 - _log_trace()/_log_screen_trace()：SSE trace 寫入
@@ -40,8 +39,7 @@ from openclaw.ticker_watcher import (
     _utc_now_iso,
     _t2_settlement_date,
     _open_conn,
-    _load_universe,
-    _screen_top_movers,
+    _load_manual_watchlist,
     _get_snapshot,
     _persist_decision,
     _persist_risk_check,
@@ -487,27 +485,35 @@ class TestUtcNowIso:
         assert diff < 5.0
 
 
-# ── _load_universe() ──────────────────────────────────────────────────────────
+# ── _load_manual_watchlist() ──────────────────────────────────────────────────
 
-class TestLoadUniverse:
-    def test_reads_valid_watchlist(self, tmp_path, monkeypatch):
-        """有效的 watchlist.json 應正確讀取 universe 與 max_active"""
+class TestLoadManualWatchlist:
+    def test_reads_manual_watchlist_key(self, tmp_path, monkeypatch):
+        """有效的 watchlist.json 應優先讀取 manual_watchlist"""
+        cfg = {"manual_watchlist": ["2330", "2317", "2454"]}
+        cfg_file = tmp_path / "watchlist.json"
+        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        import openclaw.ticker_watcher as tw
+        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
+        result = tw._load_manual_watchlist()
+        assert result == ["2330", "2317", "2454"]
+
+    def test_backward_compat_universe_key(self, tmp_path, monkeypatch):
+        """向後相容：無 manual_watchlist 時讀取 universe"""
         cfg = {"universe": ["2330", "2317", "2454"], "max_active": 2}
         cfg_file = tmp_path / "watchlist.json"
         cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
         monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
-        universe, max_active = tw._load_universe()
-        assert universe == ["2330", "2317", "2454"]
-        assert max_active == 2
+        result = tw._load_manual_watchlist()
+        assert result == ["2330", "2317", "2454"]
 
     def test_missing_file_uses_fallback(self, tmp_path, monkeypatch):
         """watchlist.json 不存在時應使用 fallback"""
         import openclaw.ticker_watcher as tw
         monkeypatch.setattr(tw, "_WATCHLIST_CFG", tmp_path / "nonexistent.json")
-        universe, max_active = tw._load_universe()
-        assert universe == tw._FALLBACK_UNIVERSE
-        assert max_active == len(tw._FALLBACK_UNIVERSE)
+        result = tw._load_manual_watchlist()
+        assert result == list(tw._FALLBACK_UNIVERSE)
 
     def test_invalid_json_uses_fallback(self, tmp_path, monkeypatch):
         """無效 JSON 應使用 fallback"""
@@ -515,40 +521,30 @@ class TestLoadUniverse:
         cfg_file.write_text("not_json{{", encoding="utf-8")
         import openclaw.ticker_watcher as tw
         monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
-        universe, max_active = tw._load_universe()
-        assert universe == tw._FALLBACK_UNIVERSE
+        result = tw._load_manual_watchlist()
+        assert result == list(tw._FALLBACK_UNIVERSE)
 
-    def test_empty_universe_uses_fallback(self, tmp_path, monkeypatch):
-        """universe 為空陣列時應使用 fallback"""
-        cfg = {"universe": [], "max_active": 5}
+    def test_empty_list_uses_fallback(self, tmp_path, monkeypatch):
+        """manual_watchlist 為空陣列時應使用 fallback"""
+        cfg = {"manual_watchlist": []}
         cfg_file = tmp_path / "watchlist.json"
         cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
         monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
-        universe, max_active = tw._load_universe()
-        assert universe == tw._FALLBACK_UNIVERSE
-
-    def test_default_max_active(self, tmp_path, monkeypatch):
-        """未設定 max_active 時預設為 5"""
-        cfg = {"universe": ["2330", "2317"]}
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
-        import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
-        _, max_active = tw._load_universe()
-        assert max_active == 5
+        result = tw._load_manual_watchlist()
+        assert result == list(tw._FALLBACK_UNIVERSE)
 
     def test_strips_whitespace_from_symbols(self, tmp_path, monkeypatch):
         """symbol 前後空白應被清除，空白 symbol 被濾掉"""
-        cfg = {"universe": [" 2330 ", "  ", "2317"], "max_active": 2}
+        cfg = {"manual_watchlist": [" 2330 ", "  ", "2317"]}
         cfg_file = tmp_path / "watchlist.json"
         cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
         monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
-        universe, _ = tw._load_universe()
-        assert "2330" in universe
-        assert "" not in universe
-        assert " " not in universe
+        result = tw._load_manual_watchlist()
+        assert "2330" in result
+        assert "" not in result
+        assert " " not in result
 
 
 # ── _get_snapshot() ───────────────────────────────────────────────────────────
@@ -629,52 +625,6 @@ class TestGetSnapshot:
 
         snap = _get_snapshot(mock_api, "2330")
         assert snap["source"] == "mock"
-
-
-# ── _screen_top_movers() ──────────────────────────────────────────────────────
-
-class TestScreenTopMovers:
-    def test_returns_max_active_symbols(self):
-        """應回傳 max_active 支股票"""
-        universe = ["2330", "2317", "2454", "2308"]
-        result = _screen_top_movers(None, universe, 2)
-        assert len(result) == 2
-        assert all(s in universe for s in result)
-
-    def test_returns_all_if_less_than_max(self):
-        """universe 少於 max_active 時應回傳全部"""
-        universe = ["2330", "2317"]
-        result = _screen_top_movers(None, universe, 10)
-        assert set(result) == set(universe)
-
-    def test_orders_by_price_movement(self):
-        """應依漲跌幅降序排列並取前 N 名"""
-        import openclaw.ticker_watcher as tw
-
-        def mock_snapshot(api, symbol):
-            # 讓 2330 有最大漲幅，2454 其次，2317 最小
-            return {
-                "2330": {"close": 950.0, "reference": 900.0, "bid": 949.0, "ask": 951.0, "volume": 1000},
-                "2317": {"close": 200.2, "reference": 200.0, "bid": 200.1, "ask": 200.3, "volume": 500},
-                "2454": {"close": 1300.0, "reference": 1200.0, "bid": 1299.0, "ask": 1301.0, "volume": 800},
-            }[symbol]
-
-        with patch.object(tw, "_get_snapshot", side_effect=mock_snapshot):
-            result = _screen_top_movers(None, ["2330", "2317", "2454"], 2)
-        # 2454 最大漲幅(8.33%)，2330 次之(5.56%)，2317 最小(0.1%)
-        assert result[0] == "2454"
-        assert result[1] == "2330"
-
-    def test_handles_zero_reference_price(self):
-        """reference=0 時不應除以零"""
-        import openclaw.ticker_watcher as tw
-
-        def mock_snapshot(api, symbol):
-            return {"close": 100.0, "reference": 0.0, "bid": 99.0, "ask": 101.0, "volume": 1000}
-
-        with patch.object(tw, "_get_snapshot", side_effect=mock_snapshot):
-            result = _screen_top_movers(None, ["2330"], 1)
-        assert result == ["2330"]
 
 
 # ── DB persist helpers ────────────────────────────────────────────────────────
@@ -1089,7 +1039,7 @@ class TestRunWatcherInit:
 
         # Make _open_conn return our in-memory db so positions restore works
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330", "2317"], 2))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330", "2317"])
 
         # Make _is_market_open raise StopIteration on first call to exit while loop
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
@@ -1111,7 +1061,7 @@ class TestRunWatcherInit:
         monkeypatch.delenv("SHIOAJI_SECRET_KEY", raising=False)
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
 
         with pytest.raises(StopIteration):
@@ -1129,7 +1079,7 @@ class TestRunWatcherInit:
         monkeypatch.delenv("SHIOAJI_SECRET_KEY", raising=False)
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: bad_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
 
         with pytest.raises(StopIteration):
@@ -1145,7 +1095,7 @@ class TestRunWatcherInit:
         monkeypatch.setenv("SHIOAJI_SECRET_KEY", "fake_secret")
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
 
         mock_api = MagicMock()
@@ -1171,7 +1121,7 @@ class TestRunWatcherInit:
         monkeypatch.setenv("SHIOAJI_SECRET_KEY", "fake_secret")
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
 
         mock_api = MagicMock()
@@ -1195,7 +1145,7 @@ class TestRunWatcherInit:
         monkeypatch.setenv("SHIOAJI_SECRET_KEY", "bad_secret")
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
-        monkeypatch.setattr(tw, "_load_universe", lambda: (["2330"], 1))
+        monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
         monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
 
         mock_api = MagicMock()
