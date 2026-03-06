@@ -41,6 +41,10 @@ pm2 status
 # 重啟所有 AI Trader 服務
 pm2 restart ai-trader-api ai-trader-web ai-trader-watcher ai-trader-agents
 
+# 啟用/重載排程運維工作
+pm2 start ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
+pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
+
 # 查看 log
 pm2 logs ai-trader-api --lines 50
 tail -f logs/gateway.err.log
@@ -107,6 +111,9 @@ cd frontend/web && npm test -- --run
 | `ai-trader-web` | React Vite Dev Server（port 3000） |
 | `ai-trader-watcher` | 每 3 分鐘掃盤，Shioaji 真實行情 |
 | `ai-trader-agents` | 5 個 Gemini agent 角色排程 |
+| `ai-trader-ops-summary` | 每 15 分鐘輸出運維健康快照至 `data/ops/ops_summary/` |
+| `ai-trader-reconciliation` | 每交易日 16:45 執行 broker/local reconciliation，輸出至 `data/ops/reconciliation/` |
+| `ai-trader-incident-hygiene` | 每交易日 16:55 清理由重複 payload 造成的 unresolved incident 噪音，輸出至 `data/ops/incident_hygiene/` |
 
 ## 版本歷史
 

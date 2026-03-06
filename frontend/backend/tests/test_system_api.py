@@ -46,6 +46,54 @@ def _init_system_db(path: Path) -> None:
             sector TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS proposal_execution_journal (
+            execution_key TEXT PRIMARY KEY,
+            proposal_id TEXT,
+            target_rule TEXT,
+            symbol TEXT,
+            qty INTEGER,
+            price REAL,
+            state TEXT,
+            attempt_count INTEGER,
+            last_order_id TEXT,
+            last_error TEXT,
+            created_at INTEGER,
+            updated_at INTEGER
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS incidents (
+            incident_id TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            source TEXT NOT NULL,
+            code TEXT NOT NULL,
+            detail_json TEXT NOT NULL,
+            resolved INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS order_events (
+            event_id TEXT PRIMARY KEY,
+            ts TEXT NOT NULL,
+            order_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            from_status TEXT,
+            to_status TEXT,
+            source TEXT NOT NULL,
+            reason_code TEXT,
+            payload_json TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS reconciliation_reports (
+            report_id TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            mismatch_count INTEGER NOT NULL,
+            summary_json TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -98,6 +146,50 @@ class TestSystemHealth:
         c, _, _ = sys_client
         r = c.get("/api/system/health")
         assert r.status_code == 401
+
+    def test_ops_summary_returns_metrics(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO strategy_proposals (proposal_id, status, created_at) VALUES ('p2', 'queued', 1)")
+        conn.execute(
+            "INSERT INTO proposal_execution_journal VALUES ('ek1', 'p2', 'POSITION_REBALANCE', '2330', 100, 500.0, 'failed', 1, 'o1', 'err', 1, 1)"
+        )
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i1', '2026-03-06T00:00:00Z', 'warning', 'recon', 'CODE', '{}', 0)"
+        )
+        conn.execute(
+            "INSERT INTO order_events VALUES ('e1', datetime('now'), 'o1', 'rejected', NULL, 'rejected', 'pre_trade_guard', 'RISK', '{}')"
+        )
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r1', ?, 2, '{}')",
+            (int(__import__('time').time() * 1000),),
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/ops-summary", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["overall"] == "critical"
+        assert data["metrics"]["pending_proposals"] >= 1
+        assert data["metrics"]["failed_executions"] == 1
+        assert data["metrics"]["open_incidents"] == 1
+
+    def test_latest_reconciliation_returns_latest_report(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r2', 1234567890, 1, '{\"ok\": false}')"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/reconciliation/latest", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["available"] is True
+        assert data["report_id"] == "r2"
+        assert data["mismatch_count"] == 1
 
 
 class TestSystemQuota:

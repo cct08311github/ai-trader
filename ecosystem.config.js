@@ -49,6 +49,49 @@ module.exports = {
       restart_delay: 10000,
       max_restarts: 5,
       watch: false,
+    },
+    {
+      name: "ai-trader-ops-summary",
+      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_ops_summary.sh",
+      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      interpreter: "bash",
+      instances: 1,
+      autorestart: false,
+      watch: false,
+      cron_restart: "*/15 * * * *",
+      env: {
+        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
+        OPS_SUMMARY_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/ops_summary"
+      }
+    },
+    {
+      name: "ai-trader-reconciliation",
+      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_reconciliation.sh",
+      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      interpreter: "bash",
+      instances: 1,
+      autorestart: false,
+      watch: false,
+      cron_restart: "45 16 * * 1-5",
+      env: {
+        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
+        RECON_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/reconciliation",
+        RECON_BROKER_SOURCE: "shioaji"
+      }
+    },
+    {
+      name: "ai-trader-incident-hygiene",
+      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_incident_hygiene.sh",
+      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      interpreter: "bash",
+      instances: 1,
+      autorestart: false,
+      watch: false,
+      cron_restart: "55 16 * * 1-5",
+      env: {
+        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
+        INCIDENT_HYGIENE_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/incident_hygiene"
+      }
     }
   ]
 };

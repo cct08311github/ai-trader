@@ -181,11 +181,15 @@ trading_enabled = true
 | `ai-trader-web` | React Vite Dev Server（port 3000） |
 | `ai-trader-watcher` | ticker_watcher，每 3 分鐘掃盤，使用真實 Shioaji 行情 |
 | `ai-trader-agents` | agent_orchestrator.py，5 個 Gemini agent 角色排程 |
+| `ai-trader-ops-summary` | PM2 cron job：每 15 分鐘輸出 ops summary JSON 至 `data/ops/ops_summary/` |
+| `ai-trader-reconciliation` | PM2 cron job：每交易日 16:45 執行 broker/local reconciliation，輸出至 `data/ops/reconciliation/` |
+| `ai-trader-incident-hygiene` | PM2 cron job：每交易日 16:55 去重 unresolved incidents，輸出至 `data/ops/incident_hygiene/` |
 
 ```bash
 pm2 status                  # 查看所有服務
 pm2 restart ai-trader-api   # 重啟 API
 pm2 logs ai-trader-watcher  # 看掃盤 log
+pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
 ```
 
 **Broker 說明**：

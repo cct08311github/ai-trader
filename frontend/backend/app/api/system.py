@@ -86,6 +86,44 @@ def system_health():
     }
 
 
+@router.get("/ops-summary")
+def ops_summary():
+    from openclaw.ops_health import collect_ops_health_summary
+
+    with READONLY_POOL.conn() as conn:
+        data = collect_ops_health_summary(conn)
+    return data
+
+
+@router.get("/reconciliation/latest")
+def latest_reconciliation():
+    with READONLY_POOL.conn() as conn:
+        try:
+            row = conn.execute(
+                """
+                SELECT report_id, created_at, mismatch_count, summary_json
+                  FROM reconciliation_reports
+              ORDER BY created_at DESC
+                 LIMIT 1
+                """
+            ).fetchone()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    if row is None:
+        return {"available": False}
+    try:
+        summary = json.loads(row["summary_json"] or "{}")
+    except Exception:
+        summary = {}
+    return {
+        "available": True,
+        "report_id": row["report_id"],
+        "created_at": row["created_at"],
+        "mismatch_count": row["mismatch_count"],
+        "summary": summary,
+    }
+
+
 @router.get("/quota")
 def system_quota():
     """API quota usage calculated from llm_traces and openclaw.json costs."""

@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+from typing import Any
+
+
+def _has_table(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    except sqlite3.Error:
+        return False
+    return any(str(r[1]) == column for r in rows)
+
+
+def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
+    now_ms = int(time.time() * 1000)
+    last_24h_ms = now_ms - 86_400_000
+
+    summary = {
+        "ts": now_ms,
+        "metrics": {
+            "pending_proposals": 0,
+            "queued_executions": 0,
+            "failed_executions": 0,
+            "open_incidents": 0,
+            "pre_trade_rejects_24h": 0,
+            "llm_calls_24h": 0,
+            "llm_shadow_calls_24h": 0,
+            "reconciliation_mismatches_24h": 0,
+        },
+        "overall": "ok",
+    }
+
+    if _has_table(conn, "strategy_proposals"):
+        row = conn.execute(
+            "SELECT COUNT(*) FROM strategy_proposals WHERE status IN ('pending', 'approved', 'queued', 'executing')"
+        ).fetchone()
+        summary["metrics"]["pending_proposals"] = int(row[0] or 0)
+
+    if _has_table(conn, "proposal_execution_journal"):
+        row = conn.execute(
+            "SELECT state, COUNT(*) FROM proposal_execution_journal GROUP BY state"
+        ).fetchall()
+        counts = {str(r[0]): int(r[1] or 0) for r in row}
+        summary["metrics"]["queued_executions"] = counts.get("prepared", 0) + counts.get("executing", 0)
+        summary["metrics"]["failed_executions"] = counts.get("failed", 0)
+
+    if _has_table(conn, "incidents"):
+        row = conn.execute("SELECT COUNT(*) FROM incidents WHERE resolved=0").fetchone()
+        summary["metrics"]["open_incidents"] = int(row[0] or 0)
+
+    if _has_table(conn, "order_events"):
+        row = conn.execute(
+            """
+            SELECT COUNT(*) FROM order_events
+             WHERE source='pre_trade_guard'
+               AND event_type='rejected'
+               AND ts >= datetime('now', '-1 day')
+            """
+        ).fetchone()
+        summary["metrics"]["pre_trade_rejects_24h"] = int(row[0] or 0)
+
+    if _has_table(conn, "llm_traces"):
+        created_col = "created_at" if _has_column(conn, "llm_traces", "created_at") else None
+        if created_col:
+            row = conn.execute(
+                f"SELECT COUNT(*) FROM llm_traces WHERE {created_col} >= ?",
+                (last_24h_ms,),
+            ).fetchone()
+            summary["metrics"]["llm_calls_24h"] = int(row[0] or 0)
+            if _has_column(conn, "llm_traces", "shadow_mode"):
+                row = conn.execute(
+                    f"SELECT COUNT(*) FROM llm_traces WHERE {created_col} >= ? AND shadow_mode=1",
+                    (last_24h_ms,),
+                ).fetchone()
+                summary["metrics"]["llm_shadow_calls_24h"] = int(row[0] or 0)
+
+    if _has_table(conn, "reconciliation_reports"):
+        row = conn.execute(
+            "SELECT COALESCE(SUM(mismatch_count), 0) FROM reconciliation_reports WHERE created_at >= ?",
+            (last_24h_ms,),
+        ).fetchone()
+        summary["metrics"]["reconciliation_mismatches_24h"] = int(row[0] or 0)
+
+    if summary["metrics"]["open_incidents"] > 0 or summary["metrics"]["failed_executions"] > 0:
+        summary["overall"] = "critical"
+    elif summary["metrics"]["pre_trade_rejects_24h"] > 10 or summary["metrics"]["reconciliation_mismatches_24h"] > 0:
+        summary["overall"] = "warning"
+
+    return summary

@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import json
 import pytest
 from openclaw.network_allowlist import (
     check_ip_whitelist,
@@ -199,6 +200,34 @@ class TestInsertIncidentBestEffort:
         _insert_incident_best_effort(conn=conn, code="FAIL", detail_json='{}')
         conn.close()
 
+    def test_duplicate_open_incident_within_window_is_suppressed(self, monkeypatch):
+        from openclaw.network_allowlist import _insert_incident_best_effort
+
+        conn = setup_memory_db()
+        monkeypatch.setenv("OPENCLAW_INCIDENT_DEDUPE_WINDOW_SEC", "3600")
+        detail_json = '{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}'
+        _insert_incident_best_effort(conn=conn, code="SEC_NETWORK_IP_DENIED", detail_json=detail_json)
+        _insert_incident_best_effort(conn=conn, code="SEC_NETWORK_IP_DENIED", detail_json=detail_json)
+        count = conn.execute("SELECT COUNT(*) FROM incidents WHERE code='SEC_NETWORK_IP_DENIED'").fetchone()[0]
+        assert count == 1
+        conn.close()
+
+    def test_resolved_incident_does_not_block_new_insert(self, monkeypatch):
+        from openclaw.network_allowlist import _insert_incident_best_effort
+
+        conn = setup_memory_db()
+        monkeypatch.setenv("OPENCLAW_INCIDENT_DEDUPE_WINDOW_SEC", "3600")
+        detail_json = '{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}'
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i1', '2026-03-06T00:00:00+00:00', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 1)",
+            (detail_json,),
+        )
+        conn.commit()
+        _insert_incident_best_effort(conn=conn, code="SEC_NETWORK_IP_DENIED", detail_json=detail_json)
+        count = conn.execute("SELECT COUNT(*) FROM incidents WHERE code='SEC_NETWORK_IP_DENIED'").fetchone()[0]
+        assert count == 2
+        conn.close()
+
 
 class TestEnforceNetworkSecurityDbPath:
     """Lines 172-174, 180-181: enforce_network_security creates its own connection when conn=None."""
@@ -256,6 +285,21 @@ class TestEnforceNetworkSecurityDbPath:
             assert count >= 0
         finally:
             conn.close()
+
+    def test_denied_incident_payload_is_canonicalized(self, monkeypatch):
+        conn = setup_memory_db()
+        monkeypatch.setenv("OPENCLAW_CURRENT_IP", "8.8.8.8")
+        monkeypatch.delenv("OPENCLAW_IP_ALLOWLIST", raising=False)
+        try:
+            with pytest.raises(NetworkSecurityError):
+                enforce_network_security(whitelist=["203.0.113.0/28", "192.168.1.0/24"], conn=conn)
+        finally:
+            monkeypatch.delenv("OPENCLAW_CURRENT_IP", raising=False)
+        row = conn.execute("SELECT detail_json FROM incidents WHERE code='SEC_NETWORK_IP_DENIED'").fetchone()
+        detail = json.loads(row[0])
+        assert detail["allowlist"] == ["192.168.1.0/24", "203.0.113.0/28"]
+        assert detail["current_ip"] == "8.8.8.8"
+        conn.close()
 
     def test_inner_exception_swallowed_lines_172_174(self, tmp_path, monkeypatch):
         """Lines 172-174: exception inside inner try block is swallowed."""

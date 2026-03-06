@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import os
 import sqlite3
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 
@@ -103,6 +104,14 @@ def _insert_incident_best_effort(
     try:
         if not _table_exists(conn, "incidents"):
             return
+        if _has_recent_duplicate_incident(
+            conn=conn,
+            code=code,
+            detail_json=detail_json,
+            source=source,
+            dedupe_window_seconds=_incident_dedupe_window_seconds(),
+        ):
+            return
         conn.execute(
             """
             INSERT INTO incidents(incident_id, ts, severity, source, code, detail_json, resolved)
@@ -119,6 +128,66 @@ def _insert_incident_best_effort(
         conn.commit()
     except Exception:
         return
+
+
+def _incident_dedupe_window_seconds() -> int:
+    raw = (os.getenv("OPENCLAW_INCIDENT_DEDUPE_WINDOW_SEC") or "").strip()
+    if not raw:
+        return 900
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 900
+
+
+def _parse_incident_ts(raw: str | None) -> Optional[datetime]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _has_recent_duplicate_incident(
+    *,
+    conn: sqlite3.Connection,
+    code: str,
+    detail_json: str,
+    source: str,
+    dedupe_window_seconds: int,
+) -> bool:
+    if dedupe_window_seconds <= 0:
+        return False
+    row = conn.execute(
+        """
+        SELECT ts
+          FROM incidents
+         WHERE resolved=0
+           AND source=?
+           AND code=?
+           AND detail_json=?
+      ORDER BY ts DESC
+         LIMIT 1
+        """,
+        (source, code, detail_json),
+    ).fetchone()
+    if row is None:
+        return False
+    latest_ts = _parse_incident_ts(row[0])
+    if latest_ts is None:
+        return False
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=dedupe_window_seconds)
+    if latest_ts.tzinfo is None:
+        latest_ts = latest_ts.replace(tzinfo=timezone.utc)
+    return latest_ts >= cutoff
+
+
+def _canonical_detail_json(detail: dict) -> str:
+    return json.dumps(detail, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
 
 
 def enforce_network_security(
@@ -153,7 +222,7 @@ def enforce_network_security(
     if check_ip_whitelist(ip, allow):
         return ip
 
-    detail = {"current_ip": ip, "allowlist": allow}
+    detail = {"allowlist": sorted(allow), "current_ip": ip}
 
     close_after = False
     try:
@@ -165,7 +234,7 @@ def enforce_network_security(
             _insert_incident_best_effort(
                 conn=conn,
                 code="SEC_NETWORK_IP_DENIED",
-                detail_json=str(detail),
+                detail_json=_canonical_detail_json(detail),
                 severity="critical",
                 source="network_security",
             )
