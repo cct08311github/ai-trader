@@ -693,15 +693,36 @@ def get_trade_causal_chain(trade_id: str):
                 }
             }
         }
+def _is_tw_trading_hours() -> bool:
+    """True if current TWN time (UTC+8) is within market hours Mon-Fri 09:00-13:40."""
+    import datetime as _dt
+    tz_twn = _dt.timezone(_dt.timedelta(hours=8))
+    now = _dt.datetime.now(tz=tz_twn)
+    if now.weekday() >= 5:  # Sat/Sun
+        return False
+    t = now.time()
+    return _dt.time(9, 0) <= t <= _dt.time(13, 40)
+
+
 @router.post("/close-position/{symbol}")
 def close_position(symbol: str):
     """
     手動平倉：對 symbol 下反向賣單，透過 SimBrokerAdapter 立即成交並寫入 DB。
-    鎖定部位回傳 403。
+    鎖定部位回傳 403。非交易時間回傳 403。
     """
     import datetime as _dt
 
     symbol = symbol.strip().upper()
+
+    # ── 0. 交易時段檢查（TWN 09:00-13:40，週一至週五）────────────────────
+    if not _is_tw_trading_hours():
+        import datetime as _dt2
+        tz_twn = _dt2.timezone(_dt2.timedelta(hours=8))
+        now_twn = _dt2.datetime.now(tz=tz_twn)
+        raise HTTPException(
+            status_code=403,
+            detail=f"非交易時間（現在 {now_twn.strftime('%H:%M')} TWN），無法平倉。交易時段：週一至週五 09:00-13:40",
+        )
 
     # ── 1. 鎖定檢查 ──────────────────────────────────────────────────────
     if symbol in {s.upper() for s in _read_locked()}:
@@ -978,18 +999,51 @@ async def get_quote_stream(symbol: str, request: Request):
 
 
 @router.get("/kline/{symbol}")
-def get_kline(symbol: str, days: int = 60):
-    """K線歷史資料：查詢 eod_prices 最近 N 日 OHLCV。"""
+def get_kline(symbol: str, days: int = 60, period: str = "daily"):
+    """K線歷史資料：查詢 eod_prices OHLCV。period=daily|weekly|monthly。"""
     symbol = symbol.strip().upper()
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
+
     with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT trade_date, open, high, low, close, volume "
-            "FROM eod_prices WHERE symbol = ? "
-            "ORDER BY trade_date DESC LIMIT ?",
-            (symbol, days),
-        ).fetchall()
-    data = [dict(r) for r in reversed(rows)]
-    return {"symbol": symbol, "data": data}
+        if period == "daily":
+            rows = conn.execute(
+                "SELECT trade_date, open, high, low, close, volume "
+                "FROM eod_prices WHERE symbol = ? "
+                "ORDER BY trade_date DESC LIMIT ?",
+                (symbol, days),
+            ).fetchall()
+            data = [dict(r) for r in reversed(rows)]
+        else:
+            # 週線/月線：以 strftime 群組聚合，取組內第一天 open、最後一天 close
+            fmt = "%Y-%W" if period == "weekly" else "%Y-%m"
+            # 資料範圍：取足夠多的日線再聚合
+            fetch_days = days * (7 if period == "weekly" else 31)
+            raw = conn.execute(
+                "SELECT trade_date, open, high, low, close, volume "
+                "FROM eod_prices WHERE symbol = ? "
+                "ORDER BY trade_date DESC LIMIT ?",
+                (symbol, fetch_days),
+            ).fetchall()
+            # 分組聚合
+            from collections import defaultdict
+            groups = defaultdict(list)
+            for r in raw:
+                key = __import__('datetime').datetime.strptime(r['trade_date'], '%Y-%m-%d').strftime(fmt)
+                groups[key].append(r)
+            aggregated = []
+            for key in sorted(groups):
+                g = sorted(groups[key], key=lambda x: x['trade_date'])
+                aggregated.append({
+                    'trade_date': g[-1]['trade_date'],  # 最後一天代表該週/月
+                    'open':   g[0]['open'],
+                    'high':   max(r['high'] for r in g),
+                    'low':    min(r['low'] for r in g),
+                    'close':  g[-1]['close'],
+                    'volume': sum(r['volume'] or 0 for r in g),
+                })
+            data = aggregated[-days:]  # 取最近 N 根
+    return {"symbol": symbol, "period": period, "data": data}
 
 
 @router.get("/symbol-names")

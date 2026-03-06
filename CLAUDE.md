@@ -58,6 +58,7 @@ trading_enabled = true
 | `trading_engine.py` | 持倉狀態機 + 時間止損（EOD日計：虧損10日/獲利30日） |
 | `lm_signal_cache.py` | LLM 信號快取層（TTL/fallback/purge） |
 | `strategy_optimizer.py` | 策略自主優化（StrategyMetricsEngine/OptimizationGateway/ReflectionAgent） |
+| `market_data_fetcher.py` | TWSE 盤後資料抓取：三大法人（T86）+ 融資借券（MI_MARGN）→ eod_institution_flows / eod_margin_data |
 
 ---
 
@@ -80,6 +81,7 @@ trading_enabled = true
 | control | `/api/control` | 緊急停止、模式切換 |
 | settings | `/api/settings` | 系統設定讀寫 |
 | analysis | `/api/analysis` | 盤後分析快照（latest/dates/{date}） |
+| chips | `/api/chips` | 法人籌碼：institution-flows / margin / summary / dates |
 
 **portfolio 路由重要 endpoint**：
 - `GET /api/portfolio/quote/{symbol}` — 即時快照；Shioaji 失敗時 fallback 到 `eod_prices` 最後收盤（`source: "eod"`）
@@ -301,6 +303,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.12.x | Sprint 2：signal_aggregator Regime-based 動態權重；trading_engine 持倉狀態機 + 時間止損；lm_signal_cache LLM 快取；strategy_optimizer 自主優化三層架構 |
 | v4.12.1 | google-genai SDK 遷移（棄用 google.generativeai）；strategy_proposals.created_at 毫秒修正 |
 | v4.12.2 | tg_approver 端對端修復：auth middleware proposals 路徑、get_conn_rw、chat_id=-1003772422881；test fixture 補 eod_prices |
+| v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
 
 ---
 

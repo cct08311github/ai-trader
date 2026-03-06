@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { getToken } from '../lib/auth'
+import { getToken, authFetch, getApiBase } from '../lib/auth'
+import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
+import KlineChart from '../components/KlineChart'
 
 const TABS = ['今日市場概覽', '個股技術分析', 'AI 明日策略']
 
@@ -88,49 +90,159 @@ function MarketOverviewTab({ report }) {
   )
 }
 
+function StockChipsPanel({ symbol }) {
+  const [data, setData] = useState(null)
+  const [chipsDate, setChipsDate] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  useEffect(() => {
+    if (!symbol) return
+    setLoading(true); setData(null); setMsg(null)
+    authFetch(`${getApiBase()}/api/chips/dates`)
+      .then(r => r.json())
+      .then(d => {
+        const date = d.dates?.[0]
+        if (!date) { setMsg('尚無籌碼資料'); setLoading(false); return null }
+        setChipsDate(date)
+        return authFetch(`${getApiBase()}/api/chips/${date}/summary?symbol=${symbol.toUpperCase()}`)
+      })
+      .then(r => {
+        if (!r) return
+        if (r.status === 404) { setMsg('此股票無籌碼資料'); setLoading(false); return null }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
+      .then(d => { if (d) { setData(d.data?.[0] ?? null); setLoading(false) } })
+      .catch(e => { setMsg(String(e?.message || e)); setLoading(false) })
+  }, [symbol])
+
+  if (!symbol) return null
+  if (loading) return <div className="text-xs text-[rgb(var(--muted))]">載入籌碼中…</div>
+  if (msg || !data) return (
+    <div className="rounded-xl border border-slate-500/20 bg-slate-500/5 px-4 py-3 text-xs text-[rgb(var(--muted))]">
+      {msg || '無籌碼資料'}
+    </div>
+  )
+  return (
+    <Panel title={`法人籌碼（${chipsDate}）`}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+        {[
+          ['外資', data.foreign_net],
+          ['投信', data.trust_net],
+          ['自營商', data.dealer_net],
+          ['三大合計', data.total_net],
+        ].map(([label, val]) => (
+          <div key={label}>
+            <div className="text-[rgb(var(--muted))]">{label}</div>
+            <div className={`mt-0.5 font-mono font-semibold ${netCls(val)}`}>
+              {fmtShares(val)} 萬股
+            </div>
+          </div>
+        ))}
+      </div>
+      {(data.margin_balance != null || data.short_balance != null) && (
+        <div className="mt-3 flex gap-6 text-xs">
+          <div>
+            <span className="text-[rgb(var(--muted))]">融資餘額 </span>
+            <span className="font-mono text-sky-300">{fmtLots(data.margin_balance)} 張</span>
+          </div>
+          <div>
+            <span className="text-[rgb(var(--muted))]">融券餘額 </span>
+            <span className="font-mono text-amber-300">{fmtLots(data.short_balance)} 張</span>
+          </div>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
 function TechnicalTab({ report }) {
   const technical = report.technical || {}
   const symbols = Object.keys(technical)
   const [selected, setSelected] = useState(symbols[0] || '')
+  const [searchInput, setSearchInput] = useState('')
+  const symbolNames = useSymbolNames()
 
   const sym = technical[selected]
+
+  const handleSearch = () => {
+    const code = searchInput.trim().split(/\s+/)[0].toUpperCase()
+    if (code) { setSelected(code); setSearchInput('') }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {symbols.map(s => (
           <button key={s}
-            onClick={() => setSelected(s)}
+            onClick={() => { setSelected(s); setSearchInput('') }}
             className={`rounded-lg px-3 py-1 text-xs font-mono transition-colors ${
-              selected === s
+              selected === s && !searchInput
                 ? 'bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30'
                 : 'bg-[rgb(var(--surface))/0.3] text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]'
             }`}
-          >{s}</button>
+          >{formatSymbol(s, symbolNames)}</button>
         ))}
       </div>
-      {sym && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
-            ['收盤', sym.close],
-            ['MA5', sym.ma5],
-            ['MA20', sym.ma20],
-            ['MA60', sym.ma60],
-            ['RSI14', sym.rsi14?.toFixed(1)],
-            ['MACD', sym.macd?.macd?.toFixed(2)],
-            ['Signal', sym.macd?.signal?.toFixed(2)],
-            ['支撐', sym.support],
-            ['壓力', sym.resistance],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.2] px-3 py-2">
-              <div className="text-xs text-[rgb(var(--muted))]">{label}</div>
-              <div className="mt-1 font-mono text-sm">{value ?? '—'}</div>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="查詢其他股票（輸入代號，如 2330）"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSearch()}
+          className="flex-1 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.3] px-3 py-1.5 text-sm text-[rgb(var(--text))] outline-none focus:border-emerald-500/50 placeholder:text-[rgb(var(--muted))]"
+        />
+        <button
+          onClick={handleSearch}
+          className="rounded-lg bg-emerald-500/20 px-4 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/30 transition-colors"
+        >查詢</button>
+      </div>
+
+      {selected && (
+        <>
+          <div className="flex items-baseline gap-2 border-b border-[rgb(var(--border))] pb-2">
+            <span className="font-mono text-lg font-semibold text-[rgb(var(--text))]">{selected}</span>
+            {symbolNames[selected] && (
+              <span className="text-sm text-[rgb(var(--muted))]">{symbolNames[selected]}</span>
+            )}
+          </div>
+          <KlineChart symbol={selected} />
+          {sym && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[
+                ['收盤', sym.close],
+                ['MA5', sym.ma5],
+                ['MA20', sym.ma20],
+                ['MA60', sym.ma60],
+                ['RSI14', sym.rsi14?.toFixed(1)],
+                ['MACD', sym.macd?.macd?.toFixed(2)],
+                ['Signal', sym.macd?.signal?.toFixed(2)],
+                ['支撐', sym.support],
+                ['壓力', sym.resistance],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.2] px-3 py-2">
+                  <div className="text-xs text-[rgb(var(--muted))]">{label}</div>
+                  <div className="mt-1 font-mono text-sm">{value ?? '—'}</div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+          <StockChipsPanel symbol={selected} />
+        </>
       )}
     </div>
   )
 }
+
+// 股數轉萬股：550000 → "55.0"（用於三大法人買賣超）
+const fmtShares = v => (v == null ? '—' : (v / 10000).toFixed(1))
+// 張數格式化：12000 → "12,000"（用於融資借券餘額）
+const fmtLots = v => (v == null ? '—' : Number(v).toLocaleString())
+const netCls = v => (v == null || v >= 0 ? 'text-emerald-400' : 'text-rose-400')
+
 
 function StrategyTab({ report }) {
   const strategy = report.strategy || {}
@@ -138,6 +250,7 @@ function StrategyTab({ report }) {
   const actions = strategy.position_actions || []
   const opportunities = strategy.watchlist_opportunities || []
   const risks = strategy.risk_notes || []
+  const symbolNames = useSymbolNames()
 
   return (
     <div className="space-y-4">
@@ -156,7 +269,7 @@ function StrategyTab({ report }) {
           {actions.map(a => (
             <div key={a.symbol} className="border-b border-[rgb(var(--border))] py-2 last:border-0">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm">{a.symbol}</span>
+                <span className="font-mono text-sm">{formatSymbol(a.symbol, symbolNames)}</span>
                 <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                   a.action === 'hold' ? 'bg-slate-500/20 text-slate-300' :
                   a.action === 'reduce' ? 'bg-amber-500/20 text-amber-300' :
@@ -172,7 +285,7 @@ function StrategyTab({ report }) {
         <Panel title="觀察名單機會">
           {opportunities.map(o => (
             <div key={o.symbol} className="border-b border-[rgb(var(--border))] py-2 last:border-0">
-              <span className="font-mono text-sm">{o.symbol}</span>
+              <span className="font-mono text-sm">{formatSymbol(o.symbol, symbolNames)}</span>
               <p className="text-xs text-[rgb(var(--muted))]">{o.entry_condition}</p>
               {o.stop_loss && <p className="text-xs text-rose-400">Stop loss: {o.stop_loss}</p>}
             </div>
