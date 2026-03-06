@@ -54,6 +54,7 @@ def main() -> int:
         simulation=simulation,
         resolved_simulation=snapshot.get("resolved_simulation"),
         broker_accounts=list(snapshot.get("accounts") or []),
+        system_state_path=os.environ.get("SYSTEM_STATE_PATH"),
     )
     print(
         json.dumps(

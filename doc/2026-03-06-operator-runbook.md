@@ -97,6 +97,7 @@ Watch for:
 - `failed_executions > 0`
 - `open_incidents > 0`
 - `reconciliation_mismatches_24h > 0`
+- `auto_lock.active = true`
 - abnormal `pre_trade_rejects_24h`
 
 Current verified state after hygiene rollout on `2026-03-06`:
@@ -123,6 +124,7 @@ Interpretation:
 - `missing_broker_position`: local DB shows inventory broker does not have
 - `quantity_mismatch`: same symbol exists in both places but quantities differ
 - `missing_broker_order`: local order is open but broker snapshot does not contain it
+- `auto_lock_applied = true`: reconciliation has disabled `trading_enabled` in `config/system_state.json`
 
 ## Incident Response
 
@@ -150,14 +152,21 @@ sqlite3 data/sqlite/trades.db \
 
 4. If mismatch is real:
 
-- stop automatic trading with API control endpoint or system switch
+- auto-trading is now disabled automatically when reconciliation reports `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
 - verify Shioaji account position manually
 - repair DB only after broker truth is confirmed
 - rerun reconciliation after repair
+- only re-enable auto-trading after broker truth and local positions are reconciled:
+
+```bash
+curl -sk -X POST https://127.0.0.1:8080/api/control/enable \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
+```
 
 ### Ops summary critical
 
 1. Read `latest.json`.
+   If `auto_lock.active = true`, treat reconciliation as the primary incident until proven otherwise.
 2. Check PM2 logs:
 
 ```bash

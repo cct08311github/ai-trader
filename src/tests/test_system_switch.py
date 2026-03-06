@@ -99,6 +99,26 @@ def test_state_file_disabled_returns_false(tmp_path):
     assert "disabled" in reason.lower()
 
 
+def test_state_file_auto_lock_returns_specific_reason(tmp_path):
+    state_file = str(tmp_path / "system_state.json")
+    with open(state_file, "w") as f:
+        json.dump(
+            {
+                "trading_enabled": True,
+                "auto_lock_active": True,
+                "auto_lock_source": "broker_reconciliation",
+                "auto_lock_reason_code": "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED",
+                "auto_lock_reason": "verify account and simulation mode",
+            },
+            f,
+        )
+
+    allowed, reason = check_system_switch(state_file)
+    assert allowed is False
+    assert "broker_reconciliation" in reason
+    assert "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED" in reason
+
+
 def test_state_file_not_found_api_fallback_disabled(tmp_path):
     missing_file = str(tmp_path / "nonexistent.json")
     with patch("openclaw.system_switch._read_trading_enabled_from_api", return_value=(False, None)):

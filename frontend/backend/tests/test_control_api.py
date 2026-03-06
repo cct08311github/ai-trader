@@ -80,6 +80,20 @@ class TestEnableAutoTrading:
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
 
+    def test_enable_clears_auto_lock_fields(self, patched_client):
+        client, _, p = patched_client
+        state = json.loads(p.read_text())
+        state["auto_lock_active"] = True
+        state["auto_lock_source"] = "broker_reconciliation"
+        state["auto_lock_reason_code"] = "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"
+        state["auto_lock_reason"] = "verify account"
+        p.write_text(json.dumps(state))
+        r = client.post("/api/control/enable", headers=_AUTH)
+        assert r.status_code == 200
+        updated = json.loads(p.read_text())
+        assert updated["trading_enabled"] is True
+        assert "auto_lock_active" not in updated
+
     def test_enable_no_auth(self, client):
         r = client.post("/api/control/enable")
         assert r.status_code == 401
@@ -160,6 +174,22 @@ class TestControlStatus:
         r = client.get("/api/control/status", headers=_AUTH)
         data = r.json()
         assert "mode_warning" in data
+
+    def test_status_includes_auto_lock_fields(self, patched_client):
+        client, _, p = patched_client
+        state = json.loads(p.read_text())
+        state["auto_lock_active"] = True
+        state["auto_lock_source"] = "broker_reconciliation"
+        state["auto_lock_reason_code"] = "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"
+        state["auto_lock_reason"] = "verify account"
+        state["auto_lock_report_id"] = "r-1"
+        p.write_text(json.dumps(state))
+        r = client.get("/api/control/status", headers=_AUTH)
+        data = r.json()
+        assert data["auto_lock_active"] is True
+        assert data["auto_lock_source"] == "broker_reconciliation"
+        assert data["auto_lock_reason_code"] == "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"
+        assert data["auto_lock_report_id"] == "r-1"
 
     def test_status_reads_emergency_stop_reason(self, patched_client):
         """When .EMERGENCY_STOP file exists, status reads its content (covers lines 152-153)."""

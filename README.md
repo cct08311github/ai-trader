@@ -88,6 +88,8 @@ simulation_mode = true  →  模擬盤（預設，不影響真實部位）
 
 切換至實際盤前，務必確認 `simulation_mode: false` + `trading_enabled: true`。
 
+若 broker reconciliation 判定 `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`，系統會自動把 `trading_enabled` 關閉並寫入 auto lock metadata，必須人工確認後再重新啟用。
+
 ## 測試
 
 ```bash

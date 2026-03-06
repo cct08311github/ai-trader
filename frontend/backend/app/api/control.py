@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-import json
 import os
-from datetime import datetime
+from openclaw.system_state_store import (
+    read_system_state,
+    update_system_state,
+)
 
 def _clear_shioaji_cache():
     """Best-effort: clear Shioaji API cache so mode switch takes effect immediately."""
@@ -54,16 +56,12 @@ def enable_auto_trading():
     Enable auto-trading (主開關 ON).
     """
     try:
-        with open(SYSTEM_STATE_PATH, "r") as f:
-            data = json.load(f)
-        
-        data["trading_enabled"] = True
-        data["last_modified"] = datetime.now().isoformat()
-        data["last_modified_by"] = "user (via API)"
-        
-        with open(SYSTEM_STATE_PATH, "w") as f:
-            json.dump(data, f, indent=2)
-            
+        update_system_state(
+            path=SYSTEM_STATE_PATH,
+            modified_by="user (via API)",
+            updates={"trading_enabled": True},
+            clear_auto_lock=True,
+        )
         return {"status": "ok", "message": "Auto-trading enabled. System will start processing signals when market is open."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -74,16 +72,11 @@ def disable_auto_trading():
     Disable auto-trading (主開關 OFF).
     """
     try:
-        with open(SYSTEM_STATE_PATH, "r") as f:
-            data = json.load(f)
-        
-        data["trading_enabled"] = False
-        data["last_modified"] = datetime.now().isoformat()
-        data["last_modified_by"] = "user (via API)"
-        
-        with open(SYSTEM_STATE_PATH, "w") as f:
-            json.dump(data, f, indent=2)
-            
+        update_system_state(
+            path=SYSTEM_STATE_PATH,
+            modified_by="user (via API)",
+            updates={"trading_enabled": False},
+        )
         return {"status": "ok", "message": "Auto-trading disabled. System will not process any new signals."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -94,16 +87,11 @@ def switch_to_simulation():
     Switch to simulation mode (模擬盤).
     """
     try:
-        with open(SYSTEM_STATE_PATH, "r") as f:
-            data = json.load(f)
-        
-        data["simulation_mode"] = True
-        data["last_modified"] = datetime.now().isoformat()
-        data["last_modified_by"] = "user (via API: simulation)"
-        
-        with open(SYSTEM_STATE_PATH, "w") as f:
-            json.dump(data, f, indent=2)
-            
+        update_system_state(
+            path=SYSTEM_STATE_PATH,
+            modified_by="user (via API: simulation)",
+            updates={"simulation_mode": True},
+        )
         _clear_shioaji_cache()  # ← clears cached Shioaji session so next call re-logins in simulation mode
         return {"status": "ok", "message": "Switched to simulation mode (模擬盤). No real money will be traded."}
     except Exception as e:
@@ -116,17 +104,11 @@ def switch_to_live():
     Automatically disables auto-trading for safety.
     """
     try:
-        with open(SYSTEM_STATE_PATH, "r") as f:
-            data = json.load(f)
-        
-        # Force disable auto-trading when switching to live mode
-        data["trading_enabled"] = False
-        data["simulation_mode"] = False
-        data["last_modified"] = datetime.now().isoformat()
-        data["last_modified_by"] = "user (via API: live)"
-        
-        with open(SYSTEM_STATE_PATH, "w") as f:
-            json.dump(data, f, indent=2)
+        update_system_state(
+            path=SYSTEM_STATE_PATH,
+            modified_by="user (via API: live)",
+            updates={"trading_enabled": False, "simulation_mode": False},
+        )
 
         _clear_shioaji_cache()  # ← clears cached simulation session so next call connects to live account
         return {
@@ -142,8 +124,7 @@ def get_control_status():
     Get current control status (emergency stop + auto-trading enabled + simulation mode).
     """
     try:
-        with open(SYSTEM_STATE_PATH, "r") as f:
-            system_state = json.load(f)
+        system_state = read_system_state(SYSTEM_STATE_PATH)
         
         stop_file = os.path.join(os.path.dirname(__file__), "../../../../.EMERGENCY_STOP")
         emergency_stop = os.path.exists(stop_file)
@@ -159,8 +140,12 @@ def get_control_status():
             "auto_trading_enabled": system_state["trading_enabled"],
             "simulation_mode": system_state["simulation_mode"],
             "last_modified": system_state["last_modified"],
+            "auto_lock_active": bool(system_state.get("auto_lock_active", False)),
+            "auto_lock_source": system_state.get("auto_lock_source"),
+            "auto_lock_reason_code": system_state.get("auto_lock_reason_code"),
+            "auto_lock_reason": system_state.get("auto_lock_reason"),
+            "auto_lock_report_id": system_state.get("auto_lock_report_id"),
             "mode_warning": "REAL MONEY AT RISK" if not system_state["simulation_mode"] else "Simulation (safe)"
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

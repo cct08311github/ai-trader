@@ -9,6 +9,7 @@ from typing import Any
 from openclaw.broker_reconciliation import reconcile_broker_state
 from openclaw.incident_hygiene import dedupe_open_incidents
 from openclaw.ops_health import collect_ops_health_summary
+from openclaw.system_state_store import apply_reconciliation_auto_lock, system_state_path_from_env
 
 
 def _ts_label(now: dt.datetime | None = None) -> str:
@@ -73,6 +74,7 @@ def run_reconciliation_job(
     simulation: bool | None = None,
     resolved_simulation: bool | None = None,
     broker_accounts: list[str] | None = None,
+    system_state_path: str | Path | None = None,
 ) -> dict[str, Any]:
     conn = sqlite3.connect(str(db_path))
     try:
@@ -97,6 +99,18 @@ def run_reconciliation_job(
         "broker_accounts": sorted({str(a) for a in (broker_accounts or []) if str(a)}),
         "report": report,
     }
+    auto_lock_state = apply_reconciliation_auto_lock(
+        report=report,
+        path=str(system_state_path or system_state_path_from_env()),
+    )
+    payload["auto_lock_applied"] = auto_lock_state is not None
+    if auto_lock_state is not None:
+        payload["system_state"] = {
+            "trading_enabled": bool(auto_lock_state.get("trading_enabled", False)),
+            "auto_lock_active": bool(auto_lock_state.get("auto_lock_active", False)),
+            "auto_lock_reason_code": auto_lock_state.get("auto_lock_reason_code"),
+            "auto_lock_report_id": auto_lock_state.get("auto_lock_report_id"),
+        }
     history_path = write_snapshot(output_dir, name="reconciliation", payload=payload)
     return {"report": report, "output_path": str(history_path)}
 

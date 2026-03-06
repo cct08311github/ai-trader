@@ -158,6 +158,14 @@ Recommended action:
 4. If broker really has zero holdings, freeze auto-trading until local `positions` is repaired or regenerated.
 5. Rerun reconciliation after repair.
 
+Update after control hardening:
+
+- `bin/run_reconciliation.sh` now auto-disables `trading_enabled` when diagnostics contain `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+- current `config/system_state.json` is therefore expected to show:
+  - `trading_enabled = false`
+  - `auto_lock_active = true`
+  - `auto_lock_reason_code = MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+
 ## Priority Queue
 
 ### P0
@@ -202,3 +210,4 @@ If deduped at the logical-cause level rather than payload level, the count is `2
 2. If the 9 broker mismatches are confirmed real, stop automatic trading until local `positions` is corrected.
 3. Fix `network_allowlist` configuration so the runtime egress IP matches policy.
 4. Keep `bin/run_incident_hygiene.sh` in the operator flow so future duplicate incidents are collapsed automatically after reconciliation.
+5. Only clear the reconciliation auto lock after broker truth and local `positions` are reconciled.

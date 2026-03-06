@@ -192,6 +192,8 @@ pm2 logs ai-trader-watcher  # 看掃盤 log
 pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
 ```
 
+`broker_reconciliation` 若診斷出 `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`，會自動把 `config/system_state.json` 的 `trading_enabled` 關閉，並寫入 `auto_lock_*` 欄位；operator 必須先確認帳戶/模式與持倉真值，再手動重新 enable。
+
 **Broker 說明**：
 - Shioaji 憑證已設定於 `frontend/backend/.env`（`SHIOAJI_API_KEY` / `SHIOAJI_SECRET_KEY`）
 - watcher 啟動時會自動登入，行情為**真實市場資料**

@@ -109,23 +109,50 @@ def make_db(path: Path) -> None:
     conn.close()
 
 
-def test_run_ops_summary_job_writes_snapshot(tmp_path):
+def make_system_state(path: Path, *, trading_enabled: bool = True, simulation_mode: bool = True) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "trading_enabled": trading_enabled,
+                "simulation_mode": simulation_mode,
+                "last_modified": "2026-03-06T00:00:00",
+                "last_modified_by": "test",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_run_ops_summary_job_writes_snapshot(tmp_path, monkeypatch):
     db_path = tmp_path / "trades.db"
     out_dir = tmp_path / "ops"
+    system_state_path = tmp_path / "system_state.json"
     make_db(db_path)
+    make_system_state(system_state_path, trading_enabled=False)
+    state = json.loads(system_state_path.read_text(encoding="utf-8"))
+    state["auto_lock_active"] = True
+    state["auto_lock_source"] = "broker_reconciliation"
+    state["auto_lock_reason_code"] = "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"
+    state["auto_lock_reason"] = "verify account"
+    system_state_path.write_text(json.dumps(state), encoding="utf-8")
 
+    monkeypatch.setenv("SYSTEM_STATE_PATH", str(system_state_path))
     result = run_ops_summary_job(db_path=db_path, output_dir=out_dir)
 
     assert Path(result["output_path"]).exists()
     latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest["overall"] == "critical"
     assert latest["metrics"]["failed_executions"] == 1
+    assert latest["metrics"]["auto_lock_active"] == 1
+    assert latest["auto_lock"]["source"] == "broker_reconciliation"
 
 
 def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
     db_path = tmp_path / "trades.db"
     out_dir = tmp_path / "recon"
+    system_state_path = tmp_path / "system_state.json"
     make_db(db_path)
+    make_system_state(system_state_path)
 
     result = run_reconciliation_job(
         db_path=db_path,
@@ -135,6 +162,7 @@ def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
         simulation=True,
         resolved_simulation=True,
         broker_accounts=["SIMULATION"],
+        system_state_path=system_state_path,
     )
 
     assert Path(result["output_path"]).exists()
@@ -143,12 +171,15 @@ def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
     assert latest["resolved_simulation"] is True
     assert latest["broker_accounts"] == ["SIMULATION"]
     assert latest["report"]["mismatch_count"] >= 1
+    assert latest["auto_lock_applied"] is False
 
 
 def test_run_reconciliation_job_includes_diagnostics_when_broker_empty(tmp_path):
     db_path = tmp_path / "trades.db"
     out_dir = tmp_path / "recon"
+    system_state_path = tmp_path / "system_state.json"
     make_db(db_path)
+    make_system_state(system_state_path)
 
     result = run_reconciliation_job(
         db_path=db_path,
@@ -158,12 +189,18 @@ def test_run_reconciliation_job_includes_diagnostics_when_broker_empty(tmp_path)
         simulation=None,
         resolved_simulation=True,
         broker_accounts=[],
+        system_state_path=system_state_path,
     )
 
     diagnostics = result["report"]["diagnostics"]
     assert diagnostics["suspected_mode_or_account_mismatch"] is True
     latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest["report"]["diagnostics"]["resolved_simulation"] is True
+    assert latest["auto_lock_applied"] is True
+    state = json.loads(system_state_path.read_text(encoding="utf-8"))
+    assert state["trading_enabled"] is False
+    assert state["auto_lock_active"] is True
+    assert state["auto_lock_reason_code"] == "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"
 
 
 def test_fetch_broker_snapshot_maps_service_payload(monkeypatch):

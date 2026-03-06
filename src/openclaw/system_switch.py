@@ -72,6 +72,12 @@ def check_system_switch(
         with open(system_state_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        if bool(data.get("auto_lock_active", False)):
+            source = str(data.get("auto_lock_source") or "system")
+            code = str(data.get("auto_lock_reason_code") or "AUTO_LOCK")
+            reason = str(data.get("auto_lock_reason") or "Auto lock is active.")
+            return False, f"{source}:{code}: {reason}"
+
         trading_enabled = bool(data.get("trading_enabled", False))
         if not trading_enabled:
             return False, "Auto-trading is disabled (master switch OFF)"

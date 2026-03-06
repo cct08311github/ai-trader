@@ -5,6 +5,8 @@ import sqlite3
 import time
 from typing import Any
 
+from openclaw.system_state_store import system_state_path_from_env
+
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
@@ -37,9 +39,32 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "llm_calls_24h": 0,
             "llm_shadow_calls_24h": 0,
             "reconciliation_mismatches_24h": 0,
+            "auto_lock_active": 0,
+        },
+        "auto_lock": {
+            "active": False,
+            "source": None,
+            "reason_code": None,
+            "reason": None,
+            "report_id": None,
         },
         "overall": "ok",
     }
+
+    try:
+        with open(system_state_path_from_env(), "r", encoding="utf-8") as f:
+            system_state = json.load(f)
+        auto_lock_active = bool(system_state.get("auto_lock_active", False))
+        summary["metrics"]["auto_lock_active"] = int(auto_lock_active)
+        summary["auto_lock"] = {
+            "active": auto_lock_active,
+            "source": system_state.get("auto_lock_source"),
+            "reason_code": system_state.get("auto_lock_reason_code"),
+            "reason": system_state.get("auto_lock_reason"),
+            "report_id": system_state.get("auto_lock_report_id"),
+        }
+    except Exception:
+        pass
 
     if _has_table(conn, "strategy_proposals"):
         row = conn.execute(
@@ -92,7 +117,11 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
         ).fetchone()
         summary["metrics"]["reconciliation_mismatches_24h"] = int(row[0] or 0)
 
-    if summary["metrics"]["open_incidents"] > 0 or summary["metrics"]["failed_executions"] > 0:
+    if (
+        summary["metrics"]["open_incidents"] > 0
+        or summary["metrics"]["failed_executions"] > 0
+        or summary["metrics"]["auto_lock_active"] > 0
+    ):
         summary["overall"] = "critical"
     elif summary["metrics"]["pre_trade_rejects_24h"] > 10 or summary["metrics"]["reconciliation_mismatches_24h"] > 0:
         summary["overall"] = "warning"
