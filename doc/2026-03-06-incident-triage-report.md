@@ -165,6 +165,9 @@ Update after control hardening:
   - `trading_enabled = false`
   - `auto_lock_active = true`
   - `auto_lock_reason_code = MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+- a dry-run remediation command is available:
+  - `python3 tools/run_reconciliation_quarantine.py --db-path data/sqlite/trades.db --snapshot-path data/ops/reconciliation/latest.json`
+  - current dry-run output marks all `9` affected symbols as eligible for quarantine because local open orders are `0`
 
 ## Priority Queue
 

@@ -20,6 +20,14 @@ from typing import Tuple
 
 # ── Cost basis ──────────────────────────────────────────────────────────────
 
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
 def get_avg_cost(conn: sqlite3.Connection, symbol: str) -> Tuple[float, int]:
     """Return (avg_buy_price, net_qty) for a symbol from orders+fills.
 
@@ -139,24 +147,48 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
     Does NOT update current_price or unrealized_pnl (requires live feed).
     """
     conn.execute("DELETE FROM positions")
-    conn.execute(
-        """
-        INSERT INTO positions (symbol, quantity, avg_price)
-        SELECT
-          o.symbol,
-          SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
-        - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty,
-          ROUND(
-            SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
-            / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
-          4) AS avg_price
-        FROM orders o
-        JOIN fills f ON f.order_id = o.order_id
-        WHERE o.status IN ('filled', 'partially_filled')
-        GROUP BY o.symbol
-        HAVING net_qty > 0
-        """
-    )
+    if _table_exists(conn, "position_quarantine"):
+        conn.execute(
+            """
+            INSERT INTO positions (symbol, quantity, avg_price)
+            SELECT
+              o.symbol,
+              SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
+            - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty,
+              ROUND(
+                SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
+                / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
+              4) AS avg_price
+            FROM orders o
+            JOIN fills f ON f.order_id = o.order_id
+            LEFT JOIN position_quarantine q
+              ON UPPER(q.symbol) = UPPER(o.symbol)
+             AND q.active = 1
+            WHERE o.status IN ('filled', 'partially_filled')
+              AND q.symbol IS NULL
+            GROUP BY o.symbol
+            HAVING net_qty > 0
+            """
+        )
+    else:
+        conn.execute(
+            """
+            INSERT INTO positions (symbol, quantity, avg_price)
+            SELECT
+              o.symbol,
+              SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
+            - SUM(CASE WHEN o.side='sell' THEN f.qty ELSE 0 END) AS net_qty,
+              ROUND(
+                SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
+                / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
+              4) AS avg_price
+            FROM orders o
+            JOIN fills f ON f.order_id = o.order_id
+            WHERE o.status IN ('filled', 'partially_filled')
+            GROUP BY o.symbol
+            HAVING net_qty > 0
+            """
+        )
     conn.commit()
 
 

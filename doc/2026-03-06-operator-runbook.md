@@ -163,6 +163,23 @@ curl -sk -X POST https://127.0.0.1:8080/api/control/enable \
   -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 ```
 
+5. Build a quarantine plan before changing local positions:
+
+```bash
+python3 tools/run_reconciliation_quarantine.py \
+  --db-path data/sqlite/trades.db \
+  --snapshot-path data/ops/reconciliation/latest.json
+```
+
+6. Only after broker truth is confirmed, apply the quarantine plan:
+
+```bash
+python3 tools/run_reconciliation_quarantine.py \
+  --db-path data/sqlite/trades.db \
+  --snapshot-path data/ops/reconciliation/latest.json \
+  --apply
+```
+
 ### Ops summary critical
 
 1. Read `latest.json`.
@@ -226,6 +243,25 @@ Explicit simulation override:
 ```bash
 RECON_SIMULATION=true bin/run_reconciliation.sh
 RECON_SIMULATION=false bin/run_reconciliation.sh
+```
+
+### Build or apply reconciliation quarantine
+
+Dry-run:
+
+```bash
+python3 tools/run_reconciliation_quarantine.py \
+  --db-path data/sqlite/trades.db \
+  --snapshot-path data/ops/reconciliation/latest.json
+```
+
+Apply:
+
+```bash
+python3 tools/run_reconciliation_quarantine.py \
+  --db-path data/sqlite/trades.db \
+  --snapshot-path data/ops/reconciliation/latest.json \
+  --apply
 ```
 
 ### Force incident de-duplication
