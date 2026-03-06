@@ -837,6 +837,7 @@ class TestPortfolioClosePositionBrokerFlow:
         """Cover lines 770-771: poll_order_status returns None (sleep branch)."""
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -916,6 +917,7 @@ class TestPortfolioClosePositionBrokerFlow:
         """Cover lines 832-839: pnl_engine hook called on close_position."""
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock2.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -1002,6 +1004,7 @@ class TestPortfolioClosePositionBrokerFlow:
         """Cover line 786: time.sleep in the poll loop body."""
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock3.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -1284,6 +1287,7 @@ class TestPortfolioClosePositionWithCurrentPrice:
         """When positions table has current_price, line 731 sets sell_price from it."""
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         import app.api.portfolio as port_mod
 
         conn = sqlite3.connect(str(db_path))

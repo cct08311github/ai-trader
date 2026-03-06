@@ -446,6 +446,7 @@ class TestClosePosition:
     def test_close_locked_symbol(self, full_client, tmp_path, monkeypatch):
         c, _ = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "locked.json"
         locked_file.write_text(json.dumps({"locked": ["2330"]}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -455,6 +456,7 @@ class TestClosePosition:
     def test_close_no_position(self, full_client, tmp_path, monkeypatch):
         c, _ = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "locked.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -588,6 +590,7 @@ class TestTradeFilters:
         """close-position returns 503 when broker module can't be imported."""
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -886,11 +889,12 @@ class TestTradeCausalLlmTracesException:
 class TestClosePositionExceptionPaths:
     def test_close_no_sell_price_raises_400(self, full_client, tmp_path, monkeypatch):
         """Covers line 736: sell_price <= 0 raises HTTPException(400)."""
+        c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock2.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
-        c, db_path = full_client
         conn = sqlite3.connect(str(db_path))
         # Insert order with price=0 and no positions row (so current_price is None)
         conn.execute(
@@ -915,6 +919,7 @@ class TestClosePositionExceptionPaths:
 
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock3.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -997,6 +1002,7 @@ class TestClosePositionExceptionPaths:
 
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock4.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
@@ -1062,6 +1068,7 @@ class TestClosePositionExceptionPaths:
 
         c, db_path = full_client
         import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
         locked_file = tmp_path / "nolock5.json"
         locked_file.write_text(json.dumps({"locked": []}))
         monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))

@@ -107,7 +107,7 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
            FROM strategy_proposals
            WHERE status = 'pending'
              AND (expires_at IS NULL OR expires_at > ?)""",
-        (int(time.time()),),
+        (int(time.time() * 1000),),
     ).fetchall()
 
     if not rows:
@@ -138,7 +138,7 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
             conn.execute(
                 "UPDATE strategy_proposals SET status=?, decided_at=? "
                 "WHERE proposal_id=?",
-                (new_status, int(time.time()), proposal_id),
+                (new_status, int(time.time() * 1000), proposal_id),
             )
             conn.commit()
 
