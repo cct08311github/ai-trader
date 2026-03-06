@@ -93,7 +93,7 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                 n_noted += 1
 
         except Exception as e:
-            log.error("Error processing proposal %s: %s", proposal_id, e)
+            log.error("Error processing proposal %s: %s", proposal_id, e, exc_info=True)
 
     return intents, n_noted
 
@@ -103,7 +103,7 @@ def mark_intent_executed(conn: sqlite3.Connection, proposal_id: str) -> None:
     conn.execute(
         "UPDATE strategy_proposals SET status='executed', decided_at=? "
         "WHERE proposal_id=?",
-        (int(time.time()), proposal_id)
+        (int(time.time() * 1000), proposal_id)
     )
     conn.commit()
 
@@ -114,6 +114,6 @@ def mark_intent_failed(conn: sqlite3.Connection, proposal_id: str, reason: str =
         "UPDATE strategy_proposals SET status='failed', decided_at=?, "
         "supporting_evidence=COALESCE(supporting_evidence,'') || ? "
         "WHERE proposal_id=?",
-        (int(time.time()), f" | broker_reject: {reason}", proposal_id)
+        (int(time.time() * 1000), f" | broker_reject: {reason}", proposal_id)
     )
     conn.commit()

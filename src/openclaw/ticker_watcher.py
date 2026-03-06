@@ -917,31 +917,39 @@ def run_watcher() -> None:
                         )
                         conn.commit()
                         if ok:
-                            mark_intent_executed(conn, intent.proposal_id)
+                            try:
+                                mark_intent_executed(conn, intent.proposal_id)
+                            except Exception as mark_err:
+                                log.critical("[proposals] BROKER EXECUTED sell %s %d shares but "
+                                             "failed to mark proposal %s as executed — "
+                                             "RISK OF DUPLICATE EXECUTION: %s",
+                                             intent.symbol, intent.qty,
+                                             intent.proposal_id, mark_err, exc_info=True)
                             log.info("[proposals] Executed rebalance sell %s %d @ %.2f via broker",
                                      intent.symbol, intent.qty, intent.price)
                         else:
                             mark_intent_failed(conn, intent.proposal_id, "broker_rejected")
                             log.warning("[proposals] Broker rejected rebalance sell %s → marked failed", intent.symbol)
-                    except Exception as _ie:
-                        mark_intent_failed(conn, intent.proposal_id, str(_ie))
-                        log.warning("[proposals] intent execution error for %s: %s → marked failed", intent.symbol, _ie)
+                    except Exception as intent_err:
+                        mark_intent_failed(conn, intent.proposal_id, str(intent_err))
+                        log.error("[proposals] intent execution error for %s: %s → marked failed",
+                                  intent.symbol, intent_err, exc_info=True)
                         try:
                             conn.execute("ROLLBACK")
-                        except Exception:
-                            pass
+                        except Exception as rb_err:
+                            log.error("[proposals] ROLLBACK failed — DB state may be inconsistent: %s", rb_err)
                 if sell_intents or n_noted:
                     log.info("[proposals] Processed %d sell intents, %d noted", len(sell_intents), n_noted)
-            except Exception as _pe:
-                log.warning("[proposals] executor error: %s", _pe)
+            except Exception as pe:
+                log.error("[proposals] executor error: %s", pe, exc_info=True)
 
             try:
                 from openclaw.concentration_guard import check_concentration
                 c_proposals = check_concentration(conn)
                 if c_proposals:
                     log.info("[concentration] Generated %d concentration proposals", len(c_proposals))
-            except Exception as _ce:
-                log.warning("[concentration] guard error: %s", _ce)
+            except Exception as ce:
+                log.error("[concentration] guard error: %s", ce, exc_info=True)
 
             # ── Gemini 自動審查 pending proposals → 核准/拒絕 + Telegram 通知 ──
             try:
@@ -949,8 +957,8 @@ def run_watcher() -> None:
                 n_reviewed = auto_review_pending_proposals(conn)
                 if n_reviewed > 0:
                     log.info("[reviewer] Auto-reviewed %d pending proposals", n_reviewed)
-            except Exception as _rv:
-                log.warning("[reviewer] proposal reviewer error: %s", _rv)
+            except Exception as rv:
+                log.error("[reviewer] proposal reviewer error: %s", rv, exc_info=True)
 
             # ── Telegram 提案通知 + 老闆 inline 核准 ──────────────────────────
             try:

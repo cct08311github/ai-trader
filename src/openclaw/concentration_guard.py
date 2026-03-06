@@ -43,11 +43,16 @@ def check_concentration(conn: sqlite3.Connection) -> list[ConcentrationProposal]
         return []
 
     # Dedup: skip symbols that already have pending submitted sell orders
-    pending_symbols = {
-        r[0] for r in conn.execute(
-            "SELECT DISTINCT symbol FROM orders WHERE side='sell' AND status='submitted'"
-        ).fetchall()
-    }
+    try:
+        pending_symbols = {
+            r[0] for r in conn.execute(
+                "SELECT DISTINCT symbol FROM orders WHERE side='sell' AND status='submitted'"
+            ).fetchall()
+        }
+    except Exception as e:
+        log.error("Dedup query failed, proceeding WITHOUT dedup — "
+                  "duplicate proposals may be generated: %s", e)
+        pending_symbols = set()
 
     proposals: list[ConcentrationProposal] = []
     for symbol, qty, price in rows:
@@ -88,7 +93,7 @@ def check_concentration(conn: sqlite3.Connection) -> list[ConcentrationProposal]
              0.9, int(not auto_approve), status,
              json.dumps({"symbol": symbol, "reduce_pct": reduce_pct,
                          "type": "rebalance", "auto": auto_approve}),
-             int(time.time()))
+             int(time.time() * 1000))
         )
         conn.commit()
         log.info("Concentration %s: %.1f%% → %s proposal (reduce_pct=%.1f%%)",
