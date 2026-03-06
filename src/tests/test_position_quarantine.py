@@ -6,7 +6,9 @@ from openclaw.pnl_engine import sync_positions_table
 from openclaw.position_quarantine import (
     apply_quarantine_plan,
     build_reconciliation_quarantine_plan,
+    clear_quarantine_symbols,
     ensure_position_quarantine_schema,
+    get_quarantine_status,
 )
 
 
@@ -125,3 +127,38 @@ def test_sync_positions_table_excludes_active_quarantine():
 
     count = conn.execute("SELECT COUNT(*) FROM positions WHERE symbol='2330'").fetchone()[0]
     assert count == 0
+
+
+def test_clear_quarantine_symbols_restores_positions_from_fills():
+    conn = make_db()
+    ensure_position_quarantine_schema(conn)
+    conn.execute("DELETE FROM positions")
+    conn.execute(
+        "INSERT INTO orders VALUES ('o1', 'd1', NULL, '2026-03-06T00:00:00Z', '2330', 'buy', 100, 500.0, 'limit', 'DAY', 'filled', 'v1')"
+    )
+    conn.execute("INSERT INTO fills VALUES ('o1', 100, 500.0, 10.0, 0.0)")
+    conn.execute(
+        "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
+    )
+    conn.commit()
+
+    result = clear_quarantine_symbols(conn, symbols=["2330"])
+
+    assert result["remaining_active_count"] == 0
+    row = conn.execute("SELECT quantity, avg_price FROM positions WHERE symbol='2330'").fetchone()
+    assert row["quantity"] == 100
+    assert row["avg_price"] == 500.0
+
+
+def test_get_quarantine_status_returns_items():
+    conn = make_db()
+    ensure_position_quarantine_schema(conn)
+    conn.execute(
+        "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
+    )
+    conn.commit()
+
+    status = get_quarantine_status(conn)
+
+    assert status["active_count"] == 1
+    assert status["items"][0]["symbol"] == "2330"

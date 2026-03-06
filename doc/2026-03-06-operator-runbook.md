@@ -115,6 +115,8 @@ Primary checks:
 cat data/ops/reconciliation/latest.json
 curl -sk https://127.0.0.1:8080/api/system/reconciliation/latest \
   -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
+curl -sk https://127.0.0.1:8080/api/system/quarantine-status \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 ```
 
 Interpretation:
@@ -262,6 +264,14 @@ python3 tools/run_reconciliation_quarantine.py \
   --db-path data/sqlite/trades.db \
   --snapshot-path data/ops/reconciliation/latest.json \
   --apply
+```
+
+Clear and rebuild from fills:
+
+```bash
+python3 tools/run_reconciliation_quarantine.py \
+  --db-path data/sqlite/trades.db \
+  --clear
 ```
 
 ### Force incident de-duplication

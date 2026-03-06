@@ -5,6 +5,8 @@ import sqlite3
 import time
 from typing import Any
 
+from openclaw.pnl_engine import sync_positions_table
+
 
 def ensure_position_quarantine_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
@@ -145,3 +147,85 @@ def apply_quarantine_plan(
     result["applied_symbols"] = applied
     result["applied_count"] = len(applied)
     return result
+
+
+def get_quarantine_status(conn: sqlite3.Connection) -> dict[str, Any]:
+    if not _table_exists(conn, "position_quarantine"):
+        return {"active_count": 0, "items": []}
+    position_columns = {str(row[1]) for row in conn.execute("PRAGMA table_info(positions)").fetchall()} if _table_exists(conn, "positions") else set()
+    select_parts = [
+        "q.symbol",
+        "q.source",
+        "q.reason_code",
+        "q.reason",
+        "q.report_id",
+        "q.created_at",
+        "q.payload_json",
+        "p.quantity" if "quantity" in position_columns else "NULL AS quantity",
+        "p.avg_price" if "avg_price" in position_columns else "NULL AS avg_price",
+        "p.current_price" if "current_price" in position_columns else "NULL AS current_price",
+        "p.state" if "state" in position_columns else "NULL AS state",
+    ]
+    rows = conn.execute(
+        f"""
+        SELECT {", ".join(select_parts)}
+          FROM position_quarantine q
+          LEFT JOIN positions p ON UPPER(p.symbol)=UPPER(q.symbol)
+         WHERE q.active=1
+      ORDER BY q.created_at DESC, q.symbol
+        """
+    ).fetchall()
+    items = []
+    for row in rows:
+        try:
+            payload = json.loads(row[6] or "{}")
+        except Exception:
+            payload = {}
+        items.append(
+            {
+                "symbol": str(row[0]),
+                "source": str(row[1]),
+                "reason_code": str(row[2]),
+                "reason": row[3],
+                "report_id": row[4],
+                "created_at": int(row[5] or 0),
+                "payload": payload,
+                "position": {
+                    "quantity": int(row[7] or 0) if row[7] is not None else 0,
+                    "avg_price": float(row[8] or 0.0) if row[8] is not None else 0.0,
+                    "current_price": float(row[9] or 0.0) if row[9] is not None else 0.0,
+                    "state": row[10],
+                },
+            }
+        )
+    return {"active_count": len(items), "items": items}
+
+
+def clear_quarantine_symbols(
+    conn: sqlite3.Connection,
+    *,
+    symbols: list[str] | None = None,
+    auto_commit: bool = True,
+) -> dict[str, Any]:
+    ensure_position_quarantine_schema(conn)
+    targets = [symbol.upper() for symbol in (symbols or []) if str(symbol).strip()]
+    now_ms = int(time.time() * 1000)
+    if targets:
+        conn.executemany(
+            "UPDATE position_quarantine SET active=0, cleared_at=? WHERE UPPER(symbol)=UPPER(?) AND active=1",
+            [(now_ms, symbol) for symbol in targets],
+        )
+    else:
+        conn.execute(
+            "UPDATE position_quarantine SET active=0, cleared_at=? WHERE active=1",
+            (now_ms,),
+        )
+    sync_positions_table(conn)
+    if auto_commit:
+        conn.commit()
+    status = get_quarantine_status(conn)
+    return {
+        "cleared_symbols": targets,
+        "cleared_count": len(targets) if targets else None,
+        "remaining_active_count": status["active_count"],
+    }

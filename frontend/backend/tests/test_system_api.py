@@ -94,6 +94,19 @@ def _init_system_db(path: Path) -> None:
             summary_json TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS position_quarantine (
+            symbol TEXT PRIMARY KEY,
+            active INTEGER NOT NULL DEFAULT 1,
+            source TEXT NOT NULL,
+            reason_code TEXT NOT NULL,
+            reason TEXT,
+            report_id TEXT,
+            created_at INTEGER NOT NULL,
+            cleared_at INTEGER,
+            payload_json TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -190,6 +203,22 @@ class TestSystemHealth:
         assert data["available"] is True
         assert data["report_id"] == "r2"
         assert data["mismatch_count"] == 1
+
+    def test_quarantine_status_returns_active_items(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO positions VALUES ('2330', 0, 500.0, 0.0, NULL, NULL)")
+        conn.execute(
+            "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/quarantine-status", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["active_count"] == 1
+        assert data["items"][0]["symbol"] == "2330"
 
 
 class TestSystemQuota:

@@ -124,6 +124,15 @@ def latest_reconciliation():
     }
 
 
+@router.get("/quarantine-status")
+def quarantine_status():
+    from openclaw.position_quarantine import get_quarantine_status
+
+    with READONLY_POOL.conn() as conn:
+        data = get_quarantine_status(conn)
+    return data
+
+
 @router.get("/quota")
 def system_quota():
     """API quota usage calculated from llm_traces and openclaw.json costs."""
