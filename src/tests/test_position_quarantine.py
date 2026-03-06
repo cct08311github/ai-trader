@@ -109,6 +109,11 @@ def test_apply_quarantine_plan_updates_positions_and_table():
     qrow = conn.execute("SELECT active, reason_code FROM position_quarantine WHERE symbol='2330'").fetchone()
     assert qrow["active"] == 1
     assert qrow["reason_code"] == "BROKER_POSITION_MISSING"
+    log_row = conn.execute(
+        "SELECT action_type, target_ref, status FROM operator_remediation_log WHERE target_ref='2330'"
+    ).fetchone()
+    assert log_row["action_type"] == "quarantine_apply"
+    assert log_row["status"] == "applied"
 
 
 def test_sync_positions_table_excludes_active_quarantine():
@@ -145,9 +150,15 @@ def test_clear_quarantine_symbols_restores_positions_from_fills():
     result = clear_quarantine_symbols(conn, symbols=["2330"])
 
     assert result["remaining_active_count"] == 0
+    assert result["cleared_symbols"] == ["2330"]
     row = conn.execute("SELECT quantity, avg_price FROM positions WHERE symbol='2330'").fetchone()
     assert row["quantity"] == 100
     assert row["avg_price"] == 500.0
+    log_row = conn.execute(
+        "SELECT action_type, target_ref, status FROM operator_remediation_log WHERE target_ref='2330' ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    assert log_row["action_type"] == "quarantine_clear"
+    assert log_row["status"] == "cleared"
 
 
 def test_get_quarantine_status_returns_items():

@@ -5,6 +5,7 @@ import sqlite3
 import time
 from typing import Any
 
+from openclaw.operator_remediation import record_operator_remediation
 from openclaw.pnl_engine import sync_positions_table
 
 
@@ -163,6 +164,20 @@ def apply_quarantine_plan(
                 f"UPDATE positions SET {', '.join(updates)} WHERE UPPER(symbol)=UPPER(?)",
                 (symbol,),
             )
+        record_operator_remediation(
+            conn,
+            action_type="quarantine_apply",
+            target_type="symbol",
+            target_ref=symbol,
+            actor=source,
+            status="applied",
+            payload={
+                "report_id": plan.get("report_id"),
+                "reason_code": plan.get("reason_code"),
+                "diagnostics": plan.get("diagnostics") or {},
+            },
+            auto_commit=False,
+        )
         applied.append(symbol)
     if auto_commit:
         conn.commit()
@@ -234,6 +249,21 @@ def clear_quarantine_symbols(
     targets = [symbol.upper() for symbol in (symbols or []) if str(symbol).strip()]
     now_ms = int(time.time() * 1000)
     if targets:
+        active_before = {
+            str(row[0]).upper()
+            for row in conn.execute(
+                "SELECT symbol FROM position_quarantine WHERE active=1 AND UPPER(symbol) IN ({})".format(
+                    ",".join("?" for _ in targets)
+                ),
+                tuple(targets),
+            ).fetchall()
+        }
+    else:
+        active_before = {
+            str(row[0]).upper()
+            for row in conn.execute("SELECT symbol FROM position_quarantine WHERE active=1").fetchall()
+        }
+    if targets:
         conn.executemany(
             "UPDATE position_quarantine SET active=0, cleared_at=? WHERE UPPER(symbol)=UPPER(?) AND active=1",
             [(now_ms, symbol) for symbol in targets],
@@ -245,11 +275,26 @@ def clear_quarantine_symbols(
         )
     if _table_exists(conn, "orders") and _table_exists(conn, "fills"):
         sync_positions_table(conn)
+    cleared_symbols = sorted(active_before)
+    for symbol in cleared_symbols:
+        record_operator_remediation(
+            conn,
+            action_type="quarantine_clear",
+            target_type="symbol",
+            target_ref=symbol,
+            actor="operator",
+            status="cleared",
+            payload={
+                "requested_symbols": targets,
+                "cleared_at": now_ms,
+            },
+            auto_commit=False,
+        )
     if auto_commit:
         conn.commit()
     status = get_quarantine_status(conn)
     return {
-        "cleared_symbols": targets,
-        "cleared_count": len(targets) if targets else None,
+        "cleared_symbols": cleared_symbols,
+        "cleared_count": len(cleared_symbols),
         "remaining_active_count": status["active_count"],
     }

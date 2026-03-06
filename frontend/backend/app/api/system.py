@@ -139,6 +139,15 @@ def quarantine_status():
     return data
 
 
+@router.get("/remediation-history")
+def remediation_history(limit: int = 20):
+    from openclaw.operator_remediation import list_operator_remediations
+
+    with READONLY_POOL.conn() as conn:
+        data = list_operator_remediations(conn, limit=limit)
+    return data
+
+
 def _load_latest_reconciliation_report(conn: sqlite3.Connection) -> dict:
     try:
         row = conn.execute(

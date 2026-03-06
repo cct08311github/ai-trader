@@ -304,6 +304,27 @@ class TestSystemHealth:
         r = c.get("/api/system/quarantine-plan", headers=_AUTH)
         assert r.status_code == 404
 
+    def test_remediation_history_returns_latest_actions(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r-history', 1234567893, 1, ?)",
+            (json.dumps({"report_id": "r-history", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
+        )
+        conn.commit()
+        conn.close()
+
+        apply_resp = c.post("/api/system/quarantine/apply", headers=_AUTH)
+        assert apply_resp.status_code == 200
+
+        r = c.get("/api/system/remediation-history?limit=5", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] >= 1
+        assert data["items"][0]["action_type"] == "quarantine_apply"
+        assert data["items"][0]["target_ref"] == "2330"
+
 
 class TestSystemQuota:
     def test_quota_returns_200(self, sys_client):
