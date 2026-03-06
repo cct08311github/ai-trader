@@ -78,17 +78,28 @@ _T86_PAYLOAD = {
 
 # ── MI_MARGN sample data ──────────────────────────────────────────────────────
 
+# MI_MARGN actual format: 16+ fields per row
+# idx: 0=代號, 1=名稱, 2=融資買進, 3=融資賣出, 4=融資現金償還, 5=融資前日餘額,
+#      6=融資今日餘額, 7=融資限額, 8=融券賣出, 9=融券買進, 10=融券現金償還,
+#      11=融券前日餘額, 12=融券今日餘額, 13=融券限額, 14=資券互抵, 15=備註
 _MARGIN_ROW = [
     "2330", "台積電",
     "5000", "3000", "0",   # idx 2-4: 融資買進/賣出/現金償還
-    "12000",               # idx 5: margin_balance ← 融資餘額
-    "1000", "800", "0",    # idx 6-8: 融券賣出/買進/現金償還
-    "500",                 # idx 9: short_balance  ← 融券餘額
-    "200",                 # idx 10: 資券互抵
+    "10000",               # idx 5: 融資前日餘額
+    "12000",               # idx 6: margin_balance ← 融資今日餘額
+    "50000",               # idx 7: 融資限額
+    "1000", "800", "0",    # idx 8-10: 融券賣出/買進/現金償還
+    "400",                 # idx 11: 融券前日餘額
+    "500",                 # idx 12: short_balance ← 融券今日餘額
+    "5000",                # idx 13: 融券限額
+    "200",                 # idx 14: 資券互抵
+    "",                    # idx 15: 備註
 ]
 _MARGIN_PAYLOAD = {
     "stat": "OK",
-    "data": [_MARGIN_ROW],
+    "tables": [
+        {"title": "融資融券彙總", "fields": ["代號", "名稱"], "data": [_MARGIN_ROW]},
+    ],
 }
 
 
@@ -308,7 +319,9 @@ class TestFetchMarginData:
         assert rows == []
 
     def test_skips_short_rows(self):
-        payload = {"stat": "OK", "data": [["2330", "台積電"]]}
+        payload = {"stat": "OK", "tables": [
+            {"fields": ["代號", "名稱"], "data": [["2330", "台積電"]]}
+        ]}
         with patch("urllib.request.urlopen", return_value=_fake_response(payload)):
             rows = fetch_margin_data("2026-03-03")
         assert rows == []
@@ -316,10 +329,10 @@ class TestFetchMarginData:
     def test_skips_non_numeric_symbol(self):
         payload = {
             "stat": "OK",
-            "data": [
-                ["上市合計", "全市場", *["0"] * 9],
+            "tables": [{"fields": ["代號", "名稱"], "data": [
+                ["上市合計", "全市場", *["0"] * 14],
                 _MARGIN_ROW,
-            ],
+            ]}],
         }
         with patch("urllib.request.urlopen", return_value=_fake_response(payload)):
             rows = fetch_margin_data("2026-03-03")
@@ -340,9 +353,11 @@ class TestFetchMarginData:
 
     def test_zero_balances_allowed(self):
         row = [*_MARGIN_ROW]
-        row[5] = "0"
-        row[9] = "0"
-        payload = {"stat": "OK", "data": [row]}
+        row[6] = "0"   # margin_balance at idx 6
+        row[12] = "0"  # short_balance at idx 12
+        payload = {"stat": "OK", "tables": [
+            {"fields": ["代號", "名稱"], "data": [row]}
+        ]}
         with patch("urllib.request.urlopen", return_value=_fake_response(payload)):
             rows = fetch_margin_data("2026-03-03")
         assert rows[0]["margin_balance"] == 0.0

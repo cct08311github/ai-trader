@@ -3,7 +3,7 @@ import { getToken, authFetch, getApiBase } from '../lib/auth'
 import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
 import KlineChart from '../components/KlineChart'
 
-const TABS = ['今日市場概覽', '個股技術分析', 'AI 明日策略']
+const TABS = ['今日市場概覽', '個股技術分析', '法人籌碼', 'AI 明日策略']
 
 function Panel({ title, children }) {
   return (
@@ -205,7 +205,7 @@ function TechnicalTab({ report }) {
         <>
           <div className="flex items-baseline gap-2 border-b border-[rgb(var(--border))] pb-2">
             <span className="font-mono text-lg font-semibold text-[rgb(var(--text))]">{selected}</span>
-            {symbolNames[selected] && (
+            {symbolNames?.[selected] && (
               <span className="text-sm text-[rgb(var(--muted))]">{symbolNames[selected]}</span>
             )}
           </div>
@@ -243,6 +243,85 @@ const fmtShares = v => (v == null ? '—' : (v / 10000).toFixed(1))
 const fmtLots = v => (v == null ? '—' : Number(v).toLocaleString())
 const netCls = v => (v == null || v >= 0 ? 'text-emerald-400' : 'text-rose-400')
 
+
+function ChipsTab({ report }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const symbolNames = useSymbolNames()
+  const tradeDate = report?.trade_date
+
+  useEffect(() => {
+    if (!tradeDate) { setError('本日尚無法人籌碼資料'); setLoading(false); return }
+    setLoading(true); setError(null)
+    fetch(`/api/chips/${tradeDate}/summary`, { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then(r => {
+        if (r.status === 404) { setError('本日尚無法人籌碼資料'); setLoading(false); return null }
+        if (!r.ok) throw new Error(`無法載入籌碼資料 (HTTP ${r.status})`)
+        return r.json()
+      })
+      .then(d => { if (d) { setData(d); setLoading(false) } })
+      .catch(() => { setError('無法載入籌碼資料'); setLoading(false) })
+  }, [tradeDate])
+
+  if (loading) return <div className="text-sm text-[rgb(var(--muted))]">讀取籌碼資料中…</div>
+  if (error) return <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-[rgb(var(--muted))]">{error}</div>
+  if (!data?.data?.length) return <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-[rgb(var(--muted))]">本日尚無法人籌碼資料</div>
+
+  const rows = data.data
+  const hasMargin = rows.some(r => r.margin_balance != null)
+
+  return (
+    <div className="space-y-4">
+      <Panel title="三大法人買賣超（萬股）">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead><tr className="text-[rgb(var(--muted))]">
+              <th className="text-left py-1 pr-3">代碼</th>
+              <th className="text-right py-1 pr-3">外資</th>
+              <th className="text-right py-1 pr-3">投信</th>
+              <th className="text-right py-1 pr-3">自營</th>
+              <th className="text-right py-1">合計</th>
+            </tr></thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.symbol} className="border-t border-[rgb(var(--border))]">
+                  <td className="py-1 pr-3 font-mono">{formatSymbol(r.symbol, symbolNames || {})}</td>
+                  <td className={`py-1 pr-3 text-right font-mono ${netCls(r.foreign_net)}`}>{fmtShares(r.foreign_net)}</td>
+                  <td className={`py-1 pr-3 text-right font-mono ${netCls(r.trust_net)}`}>{fmtShares(r.trust_net)}</td>
+                  <td className={`py-1 pr-3 text-right font-mono ${netCls(r.dealer_net)}`}>{fmtShares(r.dealer_net)}</td>
+                  <td className={`py-1 text-right font-mono font-semibold ${netCls(r.total_net)}`}>{fmtShares(r.total_net)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+      {hasMargin && (
+        <Panel title="融資借券餘額（張）">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="text-[rgb(var(--muted))]">
+                <th className="text-left py-1 pr-3">代碼</th>
+                <th className="text-right py-1 pr-3">融資餘額</th>
+                <th className="text-right py-1">融券餘額</th>
+              </tr></thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.symbol} className="border-t border-[rgb(var(--border))]">
+                    <td className="py-1 pr-3 font-mono">{formatSymbol(r.symbol, symbolNames || {})}</td>
+                    <td className="py-1 pr-3 text-right font-mono text-sky-300">{fmtLots(r.margin_balance)}</td>
+                    <td className="py-1 text-right font-mono text-amber-300">{fmtLots(r.short_balance)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+    </div>
+  )
+}
 
 function StrategyTab({ report }) {
   const strategy = report.strategy || {}
@@ -371,7 +450,8 @@ export default function AnalysisPage() {
 
           {activeTab === 0 && <MarketOverviewTab report={report} />}
           {activeTab === 1 && <TechnicalTab report={report} />}
-          {activeTab === 2 && <StrategyTab report={report} />}
+          {activeTab === 2 && <ChipsTab report={report} />}
+          {activeTab === 3 && <StrategyTab report={report} />}
         </>
       )}
     </div>

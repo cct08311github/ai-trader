@@ -63,26 +63,26 @@ describe('KlineChart — empty / error states', () => {
   it('shows empty message when data is empty array', async () => {
     authFetch.mockReturnValue(makeOkResponse([]))
     render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('無 K 線歷史資料'))
+    await waitFor(() => screen.getByText('無 日線歷史資料'))
   })
 
   it('shows empty message when API returns no data key', async () => {
     authFetch.mockReturnValue(makeOkResponseNoDataKey())
     render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('無 K 線歷史資料'))
+    await waitFor(() => screen.getByText('無 日線歷史資料'))
   })
 
   it('shows empty message when fetch rejects (network error)', async () => {
     authFetch.mockReturnValue(Promise.reject(new Error('Network error')))
     render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('無 K 線歷史資料'))
+    await waitFor(() => screen.getByText('無 日線歷史資料'))
   })
 
   it('shows empty message when fetch rejects with non-Error value', async () => {
     // authFetch may reject with a string or null in edge cases
     authFetch.mockReturnValue(Promise.reject('timeout'))
     render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('無 K 線歷史資料'))
+    await waitFor(() => screen.getByText('無 日線歷史資料'))
   })
 })
 
@@ -90,7 +90,7 @@ describe('KlineChart — normal rendering with data', () => {
   it('renders SVG chart with multiple candles', async () => {
     authFetch.mockReturnValue(makeOkResponse(multipleCandles))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     // SVG should be present
     expect(container.querySelector('svg')).toBeTruthy()
   })
@@ -104,7 +104,7 @@ describe('KlineChart — normal rendering with data', () => {
   it('renders candle rectangles for each data point', async () => {
     authFetch.mockReturnValue(makeOkResponse(multipleCandles))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     // Each candle has body rect + volume rect = 2 rects per candle, plus potential others
     const rects = container.querySelectorAll('rect')
     expect(rects.length).toBeGreaterThanOrEqual(multipleCandles.length)
@@ -113,7 +113,7 @@ describe('KlineChart — normal rendering with data', () => {
   it('renders wick lines for each candle', async () => {
     authFetch.mockReturnValue(makeOkResponse(multipleCandles))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     const lines = container.querySelectorAll('line')
     // At minimum: candle wicks (1 per candle) + grid lines + separator
     expect(lines.length).toBeGreaterThanOrEqual(multipleCandles.length)
@@ -124,7 +124,7 @@ describe('KlineChart — single candle edge case', () => {
   it('renders correctly with a single candle', async () => {
     authFetch.mockReturnValue(makeOkResponse([upCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     expect(container.querySelector('svg')).toBeTruthy()
     expect(screen.getByText(/2026-01-02/)).toBeTruthy()
   })
@@ -134,7 +134,7 @@ describe('KlineChart — flat candle edge case (open === close)', () => {
   it('does not crash when open equals close (flat candle)', async () => {
     authFetch.mockReturnValue(makeOkResponse([upCandle, flatCandle, downCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     expect(container.querySelector('svg')).toBeTruthy()
   })
 })
@@ -149,11 +149,11 @@ describe('KlineChart — URL construction', () => {
     expect(authFetch.mock.calls[0][0]).toContain('days=60')
   })
 
-  it('passes custom days prop to URL', async () => {
+  it('includes period=daily in default URL', async () => {
     authFetch.mockReturnValue(makeOkResponse([]))
-    render(<KlineChart symbol="2330" days={30} />)
+    render(<KlineChart symbol="2330" />)
     await waitFor(() => expect(authFetch).toHaveBeenCalledWith(
-      expect.stringContaining('days=30')
+      expect.stringContaining('period=daily')
     ))
   })
 
@@ -187,14 +187,14 @@ describe('KlineChart — re-fetch on prop change', () => {
     expect(authFetch.mock.calls[1][0]).toContain('2412')
   })
 
-  it('fetches again when days changes', async () => {
+  it('fetches again when symbol changes', async () => {
     authFetch.mockReturnValue(makeOkResponse([]))
-    const { rerender } = render(<KlineChart symbol="2330" days={60} />)
+    const { rerender } = render(<KlineChart symbol="2330" />)
     await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(1))
 
-    rerender(<KlineChart symbol="2330" days={30} />)
+    rerender(<KlineChart symbol="3008" />)
     await waitFor(() => expect(authFetch).toHaveBeenCalledTimes(2))
-    expect(authFetch.mock.calls[1][0]).toContain('days=30')
+    expect(authFetch.mock.calls[1][0]).toContain('3008')
   })
 })
 
@@ -202,7 +202,7 @@ describe('KlineChart — candle color logic', () => {
   it('up candle (close >= open) uses green', async () => {
     authFetch.mockReturnValue(makeOkResponse([upCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     // Green emerald color: #10b981
     const rects = Array.from(container.querySelectorAll('rect'))
     const greenRects = rects.filter(r => r.getAttribute('fill') === '#10b981')
@@ -212,7 +212,7 @@ describe('KlineChart — candle color logic', () => {
   it('down candle (close < open) uses red', async () => {
     authFetch.mockReturnValue(makeOkResponse([downCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     // Red rose color: #f43f5e
     const rects = Array.from(container.querySelectorAll('rect'))
     const redRects = rects.filter(r => r.getAttribute('fill') === '#f43f5e')
@@ -223,7 +223,7 @@ describe('KlineChart — candle color logic', () => {
     const zeroVolCandle = { ...upCandle, volume: 0 }
     authFetch.mockReturnValue(makeOkResponse([zeroVolCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖（日線）'))
+    await waitFor(() => screen.getByText('K 線圖'))
     expect(container.querySelector('svg')).toBeTruthy()
   })
 })
