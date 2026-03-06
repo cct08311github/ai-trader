@@ -69,6 +69,11 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                 qty_to_sell = max(1, int(pos[0] * reduce_pct))
                 price = pos[1] or 0.0
 
+                if price <= 0:
+                    log.warning("Proposal %s: %s has no valid price (%.2f), skipping",
+                                proposal_id, symbol, price)
+                    continue
+
                 intents.append(SellIntent(
                     proposal_id=proposal_id,
                     symbol=symbol,
@@ -99,5 +104,16 @@ def mark_intent_executed(conn: sqlite3.Connection, proposal_id: str) -> None:
         "UPDATE strategy_proposals SET status='executed', decided_at=? "
         "WHERE proposal_id=?",
         (int(time.time()), proposal_id)
+    )
+    conn.commit()
+
+
+def mark_intent_failed(conn: sqlite3.Connection, proposal_id: str, reason: str = "") -> None:
+    """Broker 拒絕或執行異常時標記 proposal 為 failed，防止無限重試。"""
+    conn.execute(
+        "UPDATE strategy_proposals SET status='failed', decided_at=?, "
+        "supporting_evidence=COALESCE(supporting_evidence,'') || ? "
+        "WHERE proposal_id=?",
+        (int(time.time()), f" | broker_reject: {reason}", proposal_id)
     )
     conn.commit()

@@ -896,7 +896,7 @@ def run_watcher() -> None:
 
             # ── 每輪掃盤後：執行 approved proposals + 集中度守衛 ─────────────
             try:
-                from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed, SellIntent
+                from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed, mark_intent_failed, SellIntent
                 from openclaw.risk_engine import OrderCandidate
                 sell_intents, n_noted = execute_pending_proposals(conn)
                 for intent in sell_intents:
@@ -921,9 +921,11 @@ def run_watcher() -> None:
                             log.info("[proposals] Executed rebalance sell %s %d @ %.2f via broker",
                                      intent.symbol, intent.qty, intent.price)
                         else:
-                            log.warning("[proposals] Broker rejected rebalance sell %s", intent.symbol)
+                            mark_intent_failed(conn, intent.proposal_id, "broker_rejected")
+                            log.warning("[proposals] Broker rejected rebalance sell %s → marked failed", intent.symbol)
                     except Exception as _ie:
-                        log.warning("[proposals] intent execution error for %s: %s", intent.symbol, _ie)
+                        mark_intent_failed(conn, intent.proposal_id, str(_ie))
+                        log.warning("[proposals] intent execution error for %s: %s → marked failed", intent.symbol, _ie)
                         try:
                             conn.execute("ROLLBACK")
                         except Exception:

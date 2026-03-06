@@ -117,6 +117,36 @@ def test_executor_skips_no_position(db_with_proposal):
     assert status == "skipped"
 
 
+def test_price_zero_skips_intent(db_with_proposal):
+    """current_price=0 時不應產生 SellIntent（防止零價賣單）"""
+    from openclaw.proposal_executor import execute_pending_proposals
+    db_with_proposal.execute("UPDATE positions SET current_price=0 WHERE symbol='3008'")
+    db_with_proposal.commit()
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    assert len(intents) == 0
+
+
+def test_price_null_skips_intent(db_with_proposal):
+    """current_price=NULL 時不應產生 SellIntent"""
+    from openclaw.proposal_executor import execute_pending_proposals
+    db_with_proposal.execute("UPDATE positions SET current_price=NULL WHERE symbol='3008'")
+    db_with_proposal.commit()
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    assert len(intents) == 0
+
+
+def test_mark_intent_failed(db_with_proposal):
+    """broker 拒絕後 mark_intent_failed 應標記為 failed 並記錄原因"""
+    from openclaw.proposal_executor import mark_intent_failed
+    mark_intent_failed(db_with_proposal, "p1", "broker_rejected")
+    row = db_with_proposal.execute(
+        "SELECT status, decided_at, supporting_evidence FROM strategy_proposals WHERE proposal_id='p1'"
+    ).fetchone()
+    assert row[0] == "failed"
+    assert row[1] is not None  # decided_at should be set
+    assert "broker_reject" in row[2]
+
+
 def test_strategy_direction_marked_as_noted(tmp_path):
     """STRATEGY_DIRECTION proposal 應標記為 noted"""
     from openclaw.proposal_executor import execute_pending_proposals
