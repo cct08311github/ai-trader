@@ -202,21 +202,29 @@ def test_notify_message_includes_symbol_name(conn_with_data, monkeypatch):
     assert any("3008 大立光" in t for t in call_texts)
 
 
-def test_notify_skips_strategy_direction(conn, monkeypatch):
-    """STRATEGY_DIRECTION proposals should NOT be notified."""
+def test_notify_strategy_direction(conn, monkeypatch):
+    """STRATEGY_DIRECTION proposals should be notified with longer text limit."""
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    long_text = "建議採取謹慎保守策略，逐步降低對高估值科技股的曝險，提高現金部位以應對潛在的市場波動。" * 3
     conn.execute(
         "INSERT INTO strategy_proposals VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-        (str(uuid.uuid4()), "agents", "STRATEGY_DIRECTION", None, None,
-         json.dumps({"direction": "bullish"}), "reason", 0.8, 0, "pending", "{}", 1772700000000),
+        (str(uuid.uuid4()), "strategy_committee", "STRATEGY_DIRECTION", None, None,
+         long_text, "多空辯論結論", 0.8, 0, "pending", "{}", 1772700000000),
     )
     conn.commit()
 
-    with patch("openclaw.tg_notify.send_message_with_buttons", return_value=True) as mock_send:
+    call_texts = []
+
+    def fake_send(text, buttons, chat_id=None):
+        call_texts.append(text)
+        return True
+
+    with patch("openclaw.tg_notify.send_message_with_buttons", side_effect=fake_send):
         n = notify_pending_proposals(conn)
 
-    assert n == 0
-    assert mock_send.call_count == 0
+    assert n == 1
+    assert any("📊" in t for t in call_texts), "STRATEGY_DIRECTION should use 📊 emoji"
+    assert any("策略提案審查" in t for t in call_texts)
 
 
 # ── poll_approval_callbacks (no-op in URL-button mode) ───────────────────────

@@ -27,7 +27,7 @@ import uuid
 log = logging.getLogger(__name__)
 
 _DEFAULT_CHAT_ID = "-1003772422881"
-_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS"}
+_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS", "STRATEGY_DIRECTION"}
 
 
 # ── 內部工具 ──────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
                   supporting_evidence, confidence, proposal_json
              FROM strategy_proposals
             WHERE status='pending'
-              AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS')
+              AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS', 'STRATEGY_DIRECTION')
             ORDER BY created_at DESC""",
     ).fetchall()
 
@@ -188,7 +188,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         # 持倉現況
         pos_ctx = _get_position_context(conn, symbol) if symbol else ""
 
-        emoji = "🔄" if rule == "POSITION_REBALANCE" else "🎯"
+        emoji = {"POSITION_REBALANCE": "🔄", "SECTOR_FOCUS": "🎯", "STRATEGY_DIRECTION": "📊"}.get(rule, "📋")
         lines = [
             f"{emoji} <b>策略提案審查</b>",
             f"<b>類型</b>：{rule}",
@@ -198,8 +198,9 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         if pos_ctx:
             lines.append(f"<b>現況</b>：{pos_ctx}")
 
-        # 建議動作（proposed_value 直接顯示，最多 120 字）
-        action_text = proposed_value[:120] + ("…" if len(proposed_value) > 120 else "")
+        # 建議動作（STRATEGY_DIRECTION 內容較長，給 300 字；其他 120 字）
+        max_len = 300 if rule == "STRATEGY_DIRECTION" else 120
+        action_text = proposed_value[:max_len] + ("…" if len(proposed_value) > max_len else "")
         lines.append(f"\n📋 <b>建議</b>：{action_text}")
 
         # 理由（supporting_evidence，最多 200 字）

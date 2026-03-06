@@ -665,6 +665,14 @@ def run_watcher() -> None:
                 _log_trace(conn, symbol="ALL", signal="none",
                            snap={"close": 0, "reference": 0, "bid": 0, "ask": 0, "volume": 0},
                            approved=False, reject_code="PM_NOT_APPROVED")
+                # PM 未審核也需發送提案通知（讓用戶審核）
+                try:
+                    from openclaw.tg_approver import notify_pending_proposals
+                    n_tg = notify_pending_proposals(conn)
+                    if n_tg > 0:
+                        log.info("[tg_approver] Sent %d proposal notifications (PM not approved)", n_tg)
+                except Exception as _tge:
+                    log.debug("[tg_approver] error: %s", _tge)
                 conn.close()
                 time.sleep(POLL_INTERVAL_SEC)
                 continue
