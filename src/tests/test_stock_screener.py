@@ -4,6 +4,7 @@ from datetime import date as _date
 
 import pytest
 
+import openclaw.stock_screener as screener_mod
 from openclaw.stock_screener import (
     ensure_screener_schema,
     _load_market_symbols,
@@ -13,6 +14,8 @@ from openclaw.stock_screener import (
     _check_short_term_rules,
     _check_long_term_rules,
     screen_candidates,
+    load_system_candidates,
+    load_system_candidates_full,
     MIN_SCORE_THRESHOLD,
 )
 
@@ -526,3 +529,137 @@ class TestScreenCandidates:
         for label in ("short_term", "long_term"):
             scores = [r["score"] for r in results if r["label"] == label]
             assert scores == sorted(scores, reverse=True)
+
+
+# ── LLM refinement (Task 5) ─────────────────────────────────────────────────
+
+class TestLLMRefinement:
+    def _setup_qualifying_symbol(self, conn, symbol):
+        """Reuse setup from TestScreenCandidates."""
+        base = _date(2025, 12, 1)
+        data = []
+        for i in range(80):
+            d = (base + __import__("datetime").timedelta(days=i)).isoformat()
+            price = 100 + i * 0.5
+            vol = 1000 if i < 79 else 3000
+            data.append((d, price - 1, price + 1, price - 2, price, vol))
+        _seed_eod_prices(conn, symbol, data)
+        last_date = data[-1][0]
+        flow_base = _date(2026, 2, 14)
+        flows = []
+        for i in range(5):
+            d = (flow_base + __import__("datetime").timedelta(days=i)).isoformat()
+            flows.append((d, 200, 100))
+        _seed_institution_flows(conn, symbol, flows)
+        _seed_margin_data(conn, symbol, [
+            ("2026-02-15", 10000),
+            ("2026-02-16", 9500),
+            ("2026-02-17", 9000),
+        ])
+        return last_date
+
+    def test_llm_refine_success_sets_flag(self, conn, monkeypatch):
+        """When Gemini succeeds, llm_filtered=1."""
+        td = self._setup_qualifying_symbol(conn, "2330")
+
+        def fake_llm(c, trade_date, candidates):
+            # Return candidates unchanged
+            return candidates
+
+        monkeypatch.setattr(screener_mod, "_llm_refine_candidates", fake_llm)
+        results = screen_candidates(
+            conn, td, manual_watchlist=set(), max_candidates=10, llm_refine=True,
+        )
+        assert len(results) > 0
+        assert all(r["llm_filtered"] == 1 for r in results)
+
+    def test_llm_refine_failure_fallback(self, conn, monkeypatch):
+        """When Gemini fails, llm_filtered=0 and candidates still saved."""
+        td = self._setup_qualifying_symbol(conn, "2330")
+
+        def broken_llm(c, trade_date, candidates):
+            raise RuntimeError("Gemini unavailable")
+
+        monkeypatch.setattr(screener_mod, "_llm_refine_candidates", broken_llm)
+        results = screen_candidates(
+            conn, td, manual_watchlist=set(), max_candidates=10, llm_refine=True,
+        )
+        assert len(results) > 0
+        assert all(r["llm_filtered"] == 0 for r in results)
+
+
+# ── load_system_candidates (Task 6) ─────────────────────────────────────────
+
+class TestLoadSystemCandidates:
+    def test_loads_unexpired(self, conn):
+        """Only unexpired candidates returned."""
+        ensure_screener_schema(conn)
+        now_ms = int(__import__("time").time() * 1000)
+        conn.execute(
+            "INSERT INTO system_candidates "
+            "(symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, 'rule_screener', ?, 0, ?, ?)",
+            ("2330", "2026-03-01", "short_term", 0.7, "量能爆發", "2099-12-31", now_ms),
+        )
+        conn.execute(
+            "INSERT INTO system_candidates "
+            "(symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, 'rule_screener', ?, 0, ?, ?)",
+            ("2317", "2026-03-01", "short_term", 0.5, "法人連2買", "2020-01-01", now_ms),
+        )
+        conn.commit()
+        result = load_system_candidates(conn)
+        assert "2330" in result
+        assert "2317" not in result
+
+    def test_load_full_returns_details(self, conn):
+        """load_system_candidates_full returns parsed dicts."""
+        ensure_screener_schema(conn)
+        now_ms = int(__import__("time").time() * 1000)
+        reasons_json = '["量能爆發","法人連2買"]'
+        conn.execute(
+            "INSERT INTO system_candidates "
+            "(symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, 'rule_screener', ?, 1, ?, ?)",
+            ("2330", "2026-03-01", "short_term", 0.75, reasons_json, "2099-12-31", now_ms),
+        )
+        conn.commit()
+        result = load_system_candidates_full(conn)
+        assert len(result) == 1
+        r = result[0]
+        assert r["symbol"] == "2330"
+        assert r["label"] == "short_term"
+        assert r["score"] == 0.75
+        assert r["reasons"] == ["量能爆發", "法人連2買"]
+        assert r["llm_filtered"] is True
+        assert r["expires_at"] == "2099-12-31"
+        assert r["trade_date"] == "2026-03-01"
+
+    def test_load_full_empty_reasons(self, conn):
+        """Empty reasons field returns empty list."""
+        ensure_screener_schema(conn)
+        now_ms = int(__import__("time").time() * 1000)
+        conn.execute(
+            "INSERT INTO system_candidates "
+            "(symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, 'rule_screener', ?, 0, ?, ?)",
+            ("2330", "2026-03-01", "short_term", 0.5, "", "2099-12-31", now_ms),
+        )
+        conn.commit()
+        result = load_system_candidates_full(conn)
+        assert len(result) == 1
+        assert result[0]["reasons"] == []
+
+    def test_load_excludes_expired(self, conn):
+        """load_system_candidates_full excludes expired rows."""
+        ensure_screener_schema(conn)
+        now_ms = int(__import__("time").time() * 1000)
+        conn.execute(
+            "INSERT INTO system_candidates "
+            "(symbol, trade_date, label, score, source, reasons, llm_filtered, expires_at, created_at) "
+            "VALUES (?, ?, ?, ?, 'rule_screener', ?, 0, ?, ?)",
+            ("9999", "2020-01-01", "long_term", 0.6, "過期", "2020-01-05", now_ms),
+        )
+        conn.commit()
+        result = load_system_candidates_full(conn)
+        assert len(result) == 0

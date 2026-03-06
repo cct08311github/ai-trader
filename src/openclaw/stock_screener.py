@@ -3,10 +3,12 @@
 從 eod_prices / eod_institution_flows / eod_margin_data 掃描全市場，
 產出 system_candidates 候選名單。
 
-Tasks 1-4: schema, data loading, short/long term rules, orchestrator.
+Tasks 1-6: schema, data loading, short/long term rules, orchestrator,
+           LLM refinement, load helpers.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -290,15 +292,65 @@ def _check_long_term_rules(
     return round(score, 2), reasons
 
 
-# ── Task 5 placeholder ──────────────────────────────────────────────────────
+# ── Task 5: LLM refinement ─────────────────────────────────────────────────
 
 
 def _llm_refine_candidates(
-    candidates: List[Dict],
+    conn: sqlite3.Connection,
     trade_date: str,
+    candidates: List[Dict],
 ) -> List[Dict]:
-    """LLM refinement pass — Task 5 will implement this."""
-    raise NotImplementedError("LLM refinement not yet implemented")
+    """Use Gemini to review rule-based candidates and filter/adjust scores."""
+    from openclaw.agents.base import call_agent_llm, DEFAULT_MODEL, write_trace
+
+    summary = json.dumps(
+        [
+            {
+                "symbol": c["symbol"],
+                "label": c["label"],
+                "score": c["score"],
+                "reasons": c["reasons"],
+            }
+            for c in candidates
+        ],
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    prompt = (
+        f"你是 AI Trader 選股篩選器。以下是 {trade_date} 規則引擎篩出的候選股票：\n\n"
+        f"{summary}\n\n"
+        "請審查每支候選股，移除明顯不適合的（如近期有重大利空、被處置、流動性不足等）。\n"
+        "對剩餘候選微調分數（0.0~1.0），並補充理由。\n\n"
+        "輸出 JSON 陣列（僅保留通過審查的）：\n"
+        '[{"symbol": "2330", "label": "short_term", "score": 0.8, "reasons": ["..."]}, ...]'
+    )
+    result = call_agent_llm(prompt, model=DEFAULT_MODEL)
+    write_trace(conn, agent="screener_llm", prompt=prompt[:500], result=result)
+
+    # Parse — expect list or dict with "candidates" key
+    refined: List[Dict] = []
+    if isinstance(result, list):
+        refined = result
+    elif isinstance(result, dict) and "candidates" in result:
+        refined = result["candidates"]
+    else:
+        log.warning("[SCREENER] LLM returned unexpected format, keeping rule results")
+        return candidates
+
+    # Validate
+    valid: List[Dict] = []
+    for item in refined:
+        if isinstance(item, dict) and "symbol" in item and "label" in item:
+            valid.append(
+                {
+                    "symbol": item["symbol"],
+                    "label": item.get("label", "short_term"),
+                    "score": float(item.get("score", 0.5)),
+                    "reasons": item.get("reasons", []),
+                }
+            )
+    return valid if valid else candidates
 
 
 # ── Task 4: Orchestrator ────────────────────────────────────────────────────
@@ -362,7 +414,7 @@ def screen_candidates(
     llm_filtered = 0
     if llm_refine:
         try:
-            candidates = _llm_refine_candidates(candidates, trade_date)
+            candidates = _llm_refine_candidates(conn, trade_date, candidates)
             llm_filtered = 1
         except (NotImplementedError, Exception) as exc:
             log.warning("LLM refinement failed, fallback: %s", exc)
@@ -415,3 +467,50 @@ def screen_candidates(
         trade_date,
     )
     return results
+
+
+# ── Task 6: Load helpers ──────────────────────────────────────────────────
+
+
+def load_system_candidates(conn: sqlite3.Connection) -> List[str]:
+    """Load unexpired system candidate symbols for ticker_watcher merge."""
+    ensure_screener_schema(conn)
+    rows = conn.execute(
+        "SELECT DISTINCT symbol FROM system_candidates WHERE expires_at >= date('now')"
+    ).fetchall()
+    return [r[0] if isinstance(r, tuple) else r["symbol"] for r in rows]
+
+
+def load_system_candidates_full(conn: sqlite3.Connection) -> List[Dict]:
+    """Load full candidate details for API response."""
+    ensure_screener_schema(conn)
+    rows = conn.execute(
+        "SELECT symbol, trade_date, label, score, reasons, llm_filtered, expires_at "
+        "FROM system_candidates WHERE expires_at >= date('now') ORDER BY score DESC"
+    ).fetchall()
+    result: List[Dict] = []
+    for r in rows:
+        if isinstance(r, tuple):
+            sym, td, label, score, reasons_json, llm_f, exp = r
+        else:
+            sym, td, label, score, reasons_json, llm_f, exp = (
+                r["symbol"],
+                r["trade_date"],
+                r["label"],
+                r["score"],
+                r["reasons"],
+                r["llm_filtered"],
+                r["expires_at"],
+            )
+        result.append(
+            {
+                "symbol": sym,
+                "trade_date": td,
+                "label": label,
+                "score": score,
+                "reasons": json.loads(reasons_json) if reasons_json else [],
+                "llm_filtered": bool(llm_f),
+                "expires_at": exp,
+            }
+        )
+    return result
