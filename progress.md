@@ -1,6 +1,6 @@
 # AI Trader Hardening Progress
 
-Last updated: 2026-03-07 17:35 Asia/Taipei
+Last updated: 2026-03-07 22:15 Asia/Taipei
 
 ## Coordination
 
@@ -227,14 +227,16 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
 
 ### Batch 25: Dashboard Optimization & API Hardening (2026-03-07)
 
-- [x] **Workstream I: SSE Throttle & State Consolidation** — `24fbe24`
+- [x] **Workstream I: SSE Throttle & State Consolidation** — `fc279d5`
   - [x] `LogTerminal.jsx`: implemented rAF-based log buffer flush to handle message bursts
   - [x] `QuotePanel`: rAF-throttled bid/ask updates to prevent UI flickering
   - [x] `Portfolio.jsx`: refactored to `useReducer` for atomic state transitions
 - [x] **API Resilience & Accuracy** — `7563488`
-  - [x] fixed `reports API` real_holdings always returning empty array when file exists
-  - [x] synchronized margin data query to reduce report lag
-  - [x] QA: verified report context with live simulation holdings (pass)
+  - [x] `frontend/backend/run.sh`: load local backend `.env` so `PORTFOLIO_JSON_PATH` reaches the API process
+  - [x] `frontend/backend/.env.example`: documented `PORTFOLIO_JSON_PATH`
+  - [x] fixed `reports API` real_holdings always returning empty array when portfolio file exists
+  - [x] margin data gap for 2026-03-06 was operationally backfilled via `eod_ingest` (data fix, not query refactor)
+  - [x] verification recorded in PR #162: `real_holdings` restored and `institution_chips._trade_date` aligned
 
 ---
 
@@ -242,10 +244,10 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
 
 ### Workstream I: Dashboard Throughput Optimization
 - [ ] **SSE Stream Throttling**
-  - [ ] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
-  - [ ] implement `requestAnimationFrame` or `lodash.throttle` for log message rendering
+  - [x] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
+  - [x] implement `requestAnimationFrame` throttling for log and quote rendering
 - [ ] **State Update Consolidation**
-  - [ ] implement `useReducer` or `useSyncExternalStore` in `PortfolioPage` to avoid cascaded re-renders
+  - [x] implement `useReducer` in `PortfolioPage` to avoid cascaded re-renders
   - [ ] evaluate `TanStack Query` (React Query) for API polling instead of manual `useEffect`
 - [ ] **Stress Testing**
   - [ ] build `tools/stress_test_sse.py` to emit 200+ events/sec
@@ -303,17 +305,18 @@ bin/venv/bin/python -m pytest -q \
 cd frontend/web && npm test -- --run && npm run build
 ```
 
-## Handoff Notes (Batch 24)
+## Handoff Notes (Batch 25)
 
 - branch: `main` — sole active line
 - 0 open incidents in DB
 - **Workstream G completed**: Simulation-mode reconciliation bypassed by default (`da72c03`).
 - **Workstream H completed**: Frontend React warnings eliminated (`54dfdf5`).
-- next task: **Workstream I: Dashboard Throughput Optimization**
-- last batch (Batch 24) completed successfully.
+- **Workstream I partially completed**: rAF throttling and `useReducer` landed (`fc279d5`).
+- next task: complete Workstream I verification (`stress_test_sse.py`, soak test, low-CPU validation) or start Workstream J.
+- last batch (Batch 25) completed successfully.
 - last batch:
-  - `880a9ee` — suppress duplicate strategy proposals
-  - `6b48c52` — surface duplicate proposal alerts
+  - `fc279d5` — throttle dashboard SSE updates and consolidate portfolio state
+  - `7563488` — restore reports API real holdings env wiring
 - P2 items are independent — safe for parallel AI sessions
 - do not re-open retired codex worktrees
 - **Workstream E completed**: all hardcoded `/Users/` paths eliminated from production code
