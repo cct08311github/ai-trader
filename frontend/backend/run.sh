@@ -1,24 +1,27 @@
 #!/bin/bash
-cd /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Get absolute path to the venv
-VENV_PYTHON="/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python"
+VENV_PYTHON="$REPO/bin/venv/bin/python"
 
 # Ensure requirements are met (optional on every start, but safe)
 # $VENV_PYTHON -m pip install -r requirements.txt > /dev/null 2>&1
 
 # Load shared API keys from openclaw root .env (GEMINI_API_KEY etc.)
-if [ -f /Users/openclaw/.openclaw/.env ]; then
+OPENCLAW_ENV="${OPENCLAW_ROOT_ENV:-$HOME/.openclaw/.env}"
+if [ -f "$OPENCLAW_ENV" ]; then
     set -a
-    source /Users/openclaw/.openclaw/.env
+    source "$OPENCLAW_ENV"
     set +a
 fi
 
-export PYTHONPATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/src:/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend"
-export DB_PATH="/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db"
+export PYTHONPATH="${PYTHONPATH:-$REPO/src:$REPO/frontend/backend}"
+export DB_PATH="${DB_PATH:-$REPO/data/sqlite/trades.db}"
 
 # SSL certificates from agent-monitor-web
-CERT_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/cert.pem"
-KEY_PATH="/Users/openclaw/.openclaw/shared/projects/agent-monitor-web/cert/key.pem"
+CERT_DIR="${OPENCLAW_CERT_DIR:-$(dirname "$REPO")/agent-monitor-web/cert}"
+CERT_PATH="$CERT_DIR/cert.pem"
+KEY_PATH="$CERT_DIR/key.pem"
 
 if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
     echo "Using SSL certificates for HTTPS (Localhost only)"

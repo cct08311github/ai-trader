@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 
 # ── 讀取根目錄 .env（AUTH_TOKEN / GEMINI_API_KEY）──────────────────────────
-_ROOT_ENV = Path("/Users/openclaw/.openclaw/.env")
+_ROOT_ENV = Path(os.getenv("OPENCLAW_ROOT_ENV", Path.home() / ".openclaw" / ".env"))
 _PROJ_ENV = Path(__file__).parent.parent / "frontend/backend/.env"
 
 def _load_dotenv(path: Path) -> None:

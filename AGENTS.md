@@ -16,6 +16,9 @@
 | 設定 | `config/` | system_state.json、daily_pm_state.json、watchlist.json |
 | 資料庫 | `data/sqlite/trades.db` | 唯一共用 SQLite，前後端與 watcher 共用 |
 
+**分支策略（Branching）**：
+- `main` 是目前 **唯一運行中且活躍的主線（sole active line）**。所有其他的 `codex/*` 實驗分支已經被合併或刪除，請直接對 `main` 操作。
+
 ---
 
 ## 二、系統安全模型
@@ -29,6 +32,15 @@ trading_enabled = true
 - `simulation_mode: true` = 模擬盤（預設）；`false` = 實際盤
 - 切換至實際盤會自動停用 auto trading（雙重保險）
 - `config/system_state.json` 為主開關，不要直接手動改，用 API
+
+### Runtime Config Baseline Policy (設定檔治理)
+專案內的 `config/` 遵循嚴格的區分：
+1. **Deploy Baselines（部署基準配置）**：
+   - *例子*：`capital.json` (資金分配), `drawdown_policy_v1.json`, `locked_symbols.json` 等。
+   - *政策*：這些檔案 **必須** 保留在 Git 中追蹤。如果你要在生產環境放寬這些限制（例如調高部位上限），必須透過正規的 Git Commit 與 PR 審查。不允許透過後台修改直接覆寫生產策略。
+2. **Runtime State（執行期狀態）**：
+   - *例子*：`system_state.json` (主開關), `daily_pm_state.json` (每日審核結果)。
+   - *政策*：這些檔案會被系統頻繁讀寫（如 Operator 觸發緊急停止，或每日盤前 LLM PM 產生報告）。為了避免污染 Git 工作區，它們已加入 `.gitignore`，**不再被追蹤**。若新部署環境缺乏這些檔案，系統程式碼 (`system_state_store.py`, `daily_pm_review.py`) 會自動 fail-safe 並提供安全預設值（例如：預設封鎖交易 `trading_enabled=False`）。
 
 ---
 
@@ -83,11 +95,22 @@ trading_enabled = true
 | settings | `/api/settings` | 系統設定讀寫 |
 | analysis | `/api/analysis` | 盤後分析快照（latest/dates/{date}） |
 | chips | `/api/chips` | 法人籌碼：institution-flows / margin / summary / dates |
+| reports | `/api/reports` | 投資報告結構化資料（`/context?type=morning\|evening\|weekly`） |
 
 **portfolio 路由重要 endpoint**：
 - `GET /api/portfolio/quote/{symbol}` — 即時快照；Shioaji 失敗時 fallback 到 `eod_prices` 最後收盤（`source: "eod"`）
 - `GET /api/portfolio/kline/{symbol}?days=60` — K 線歷史 OHLCV（查 `eod_prices`）
 - `GET /api/portfolio/quote-stream/{symbol}` — BidAsk SSE（五檔即時推送）
+
+**reports 路由重要 endpoint**：
+- `GET /api/reports/context?type=morning|evening|weekly` — 投資報告結構化資料
+- 驗證：需 `Authorization: Bearer <token>`
+- 回傳主要欄位：`status`, `report_type`, `real_holdings`, `simulated_positions`, `technical_indicators`, `institution_chips`, `recent_trades`, `eod_analysis`, `system_state`
+- `PORTFOLIO_JSON_PATH` 未設定或檔案不存在時，`real_holdings.holdings` 會回空陣列，不視為 API 錯誤
+- **Production Consumer Path（整合途徑）**：
+  外部 Agent 或腳本需要取得報告時，建議透過官方封裝的 Helper，避免重複寫 HTTP 呼叫邏輯：
+  1. Python Client: `from openclaw.report_context_client import fetch_and_format_report_context` (`src/openclaw/report_context_client.py`)
+  2. CLI 工具: `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --type morning`
 
 ### Auth Middleware
 
@@ -186,7 +209,14 @@ trading_enabled = true
 pm2 status                  # 查看所有服務
 pm2 restart ai-trader-api   # 重啟 API
 pm2 logs ai-trader-watcher  # 看掃盤 log
+pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
 ```
+
+### Portable Path Convention (可攜帶路徑慣例)
+為確保部署與 CI 可攜性，所有 Production 代碼 **禁止硬編碼 `/Users/openclaw` 或 `~/.openclaw`（少數例外為 `.env` 載入 fallback）**：
+- Shell Script 部署：統一使用 `SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"` 與 `REPO="$(cd "$SCRIPT_DIR/.." && pwd)"` 模式推導。
+- Node.js：使用 `path.join(__dirname, ...)` 推導。
+- Python：使用 `Path(__file__).resolve().parents...` 或透過 `OPENCLAW_ROOT_ENV` 環境變數指定。
 
 **Broker 說明**：
 - Shioaji 憑證已設定於 `frontend/backend/.env`（`SHIOAJI_API_KEY` / `SHIOAJI_SECRET_KEY`）
@@ -250,6 +280,7 @@ pytest -q   # 根目錄 pytest.ini
 - **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
 - **`full_client` fixture 陷阱**：`importlib.reload()` 會覆蓋 autouse fixture 的 monkeypatch → 必須在 test method 內、`full_client` 解構後才 monkeypatch
 - **`close_position` 時段檢查**：`_is_tw_trading_hours()` 在非交易時段回 403，測試必須 `monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)`
+- **Simulation-aware reconciliation 測試**：模擬盤下 broker 持倉為空屬預期，不應直接斷言 auto-lock 或 unresolved incident；需同時檢查 `resolved_simulation` 與 incident suppression 行為
 
 ### 前端 JavaScript（vitest）
 
@@ -310,6 +341,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
 | v4.13.1 | proposal_executor intent-based 重構（修 phantom orders）；concentration_guard dedup；price=0 guard；mark_intent_failed 防無限重試；silent failure hardening；timestamp 統一毫秒；CI 全綠（close_position 403 修復） |
 | v4.13.2 | eod_ingest 統一法人籌碼管線（T86+MI_MARGN 寫入 eod_institution_flows）；market_data_fetcher 獨立錯誤隔離；移除冗餘 institution_ingest cron 步驟 |
+| v4.14.0 | Operator hardening：quarantine/remediation/incident API+CLI+UI；simulation-aware reconciliation（skip false-positive auto-lock）；`/api/reports/context`；`utcnow()` deprecation cleanup；pre-trade guard env overrides |
 
 ---
 

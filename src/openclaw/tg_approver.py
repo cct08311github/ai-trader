@@ -124,6 +124,15 @@ def _extract_symbol(proposed_value: str, proposal_json_str: str) -> str:
     return m.group(1) if m else ""
 
 
+def _extract_duplicate_alerts(proposal_json_str: str) -> list[dict]:
+    try:
+        payload = json.loads(proposal_json_str or "{}")
+    except Exception:
+        return []
+    alerts = payload.get("duplicate_alerts")
+    return alerts if isinstance(alerts, list) else []
+
+
 def _get_position_context(conn: sqlite3.Connection, symbol: str) -> str:
     """查 positions 表，回傳持倉摘要文字（比重 + 損益）。"""
     if not symbol:
@@ -180,6 +189,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         conf = row["confidence"] or 0.0
         proposed_value = (row["proposed_value"] or "").strip()
         evidence = (row["supporting_evidence"] or "").strip()
+        duplicate_alerts = _extract_duplicate_alerts(row["proposal_json"] or "")
 
         # 提取標的代號
         symbol = _extract_symbol(proposed_value, row["proposal_json"] or "")
@@ -207,6 +217,15 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         if evidence:
             ev_text = evidence[:200] + ("…" if len(evidence) > 200 else "")
             lines.append(f"\n💡 <b>理由</b>：{ev_text}")
+
+        if duplicate_alerts:
+            alert = duplicate_alerts[0] or {}
+            dup_id = str(alert.get("duplicate_of", ""))[:8]
+            similarity = alert.get("similarity", "-")
+            lines.append(
+                f"\n⚠️ <b>重複告警</b>：與近期提案 {dup_id}… 高度相似"
+                f"（similarity={similarity}）"
+            )
 
         lines.append(f"\n信心度：{conf:.0%}　<i>ID：{pid[:8]}…</i>")
 

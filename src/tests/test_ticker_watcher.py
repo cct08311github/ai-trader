@@ -998,6 +998,219 @@ class TestExecuteSimOrder:
         assert event["reason_code"] == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
 
 
+def _make_proposal_flow_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(
+        """
+        CREATE TABLE strategy_proposals (
+            proposal_id TEXT PRIMARY KEY,
+            generated_by TEXT,
+            target_rule TEXT,
+            rule_category TEXT,
+            current_value TEXT,
+            proposed_value TEXT,
+            supporting_evidence TEXT,
+            confidence REAL,
+            requires_human_approval INTEGER,
+            status TEXT,
+            expires_at INTEGER,
+            proposal_json TEXT,
+            created_at INTEGER,
+            decided_at INTEGER
+        );
+        CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY,
+            quantity INTEGER,
+            avg_price REAL,
+            current_price REAL
+        );
+        CREATE TABLE decisions (
+            decision_id TEXT PRIMARY KEY,
+            ts TEXT,
+            symbol TEXT,
+            strategy_id TEXT,
+            strategy_version TEXT,
+            signal_side TEXT,
+            signal_score REAL,
+            signal_ttl_ms INTEGER,
+            llm_ref TEXT,
+            reason_json TEXT
+        );
+        CREATE TABLE risk_checks (
+            check_id TEXT PRIMARY KEY,
+            decision_id TEXT,
+            ts TEXT,
+            passed INTEGER,
+            reject_code TEXT,
+            metrics_json TEXT
+        );
+        CREATE TABLE orders (
+            order_id TEXT PRIMARY KEY,
+            decision_id TEXT,
+            broker_order_id TEXT,
+            ts_submit TEXT,
+            symbol TEXT,
+            side TEXT,
+            qty INTEGER,
+            price REAL,
+            order_type TEXT,
+            tif TEXT,
+            status TEXT,
+            strategy_version TEXT,
+            settlement_date TEXT
+        );
+        CREATE TABLE fills (
+            fill_id TEXT PRIMARY KEY,
+            order_id TEXT,
+            ts_fill TEXT,
+            qty INTEGER,
+            price REAL,
+            fee REAL DEFAULT 0,
+            tax REAL DEFAULT 0
+        );
+        CREATE TABLE order_events (
+            event_id TEXT PRIMARY KEY,
+            ts TEXT,
+            order_id TEXT,
+            event_type TEXT,
+            from_status TEXT,
+            to_status TEXT,
+            source TEXT,
+            reason_code TEXT,
+            payload_json TEXT
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO strategy_proposals VALUES (
+            'p1', 'portfolio_review', 'POSITION_REBALANCE', 'portfolio',
+            NULL, 'reduce 30%', 'evidence', 0.8, 0, 'approved', NULL, ?, ?, NULL
+        )
+        """,
+        (json.dumps({"symbol": "2330", "reduce_pct": 0.3, "type": "rebalance"}), int(dt.datetime.now(tz=dt.timezone.utc).timestamp())),
+    )
+    conn.execute("INSERT INTO positions VALUES ('2330', 100, 880.0, 890.0)")
+    conn.commit()
+    return conn
+
+
+class TestProposalExecutionWatcherFlow:
+    def _make_candidate(self, *, qty: int, price: float):
+        from openclaw.risk_engine import OrderCandidate
+
+        return OrderCandidate(
+            symbol="2330",
+            side="sell",
+            qty=qty,
+            price=price,
+            order_type="limit",
+            tif="ROD",
+            opens_new_position=False,
+        )
+
+    def test_stale_recovered_intent_executes_successfully(self):
+        from openclaw.broker import SimBrokerAdapter
+        from openclaw.proposal_executor import (
+            execute_pending_proposals,
+            mark_intent_executed,
+            mark_intent_executing,
+        )
+
+        conn = _make_proposal_flow_db()
+        intents, _ = execute_pending_proposals(conn)
+        assert len(intents) == 1
+        intent = intents[0]
+
+        mark_intent_executing(conn, intent.proposal_id, intent.execution_key)
+        conn.execute(
+            "UPDATE proposal_execution_journal SET updated_at=0 WHERE execution_key=?",
+            (intent.execution_key,),
+        )
+        conn.commit()
+
+        recovered, _ = execute_pending_proposals(conn)
+        assert len(recovered) == 1
+        assert recovered[0].execution_key == intent.execution_key
+        assert recovered[0].attempt_count == 1
+
+        candidate = self._make_candidate(qty=recovered[0].qty, price=recovered[0].price)
+        broker = SimBrokerAdapter()
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn,
+                broker=broker,
+                decision_id=str(uuid.uuid4()),
+                symbol=recovered[0].symbol,
+                side="sell",
+                qty=recovered[0].qty,
+                price=recovered[0].price,
+                candidate=candidate,
+            )
+        assert ok is True
+
+        mark_intent_executed(
+            conn,
+            recovered[0].proposal_id,
+            execution_key=recovered[0].execution_key,
+            order_id=order_id,
+        )
+        journal = conn.execute(
+            "SELECT state, attempt_count, last_order_id FROM proposal_execution_journal WHERE execution_key=?",
+            (intent.execution_key,),
+        ).fetchone()
+        assert journal["state"] == "completed"
+        assert journal["attempt_count"] == 1
+        assert journal["last_order_id"] == order_id
+
+    def test_failed_intent_is_not_requeued_after_watcher_failure(self):
+        from openclaw.broker import BrokerSubmission
+        from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executing, mark_intent_failed
+
+        conn = _make_proposal_flow_db()
+        intents, _ = execute_pending_proposals(conn)
+        intent = intents[0]
+        mark_intent_executing(conn, intent.proposal_id, intent.execution_key)
+
+        candidate = self._make_candidate(qty=intent.qty, price=intent.price)
+        broker = MagicMock()
+        broker.submit_order.return_value = BrokerSubmission(
+            broker_order_id="",
+            status="rejected",
+            reason="insufficient inventory",
+        )
+
+        ok, order_id = _execute_sim_order(
+            conn,
+            broker=broker,
+            decision_id=str(uuid.uuid4()),
+            symbol=intent.symbol,
+            side="sell",
+            qty=intent.qty,
+            price=intent.price,
+            candidate=candidate,
+        )
+        assert ok is False
+
+        mark_intent_failed(
+            conn,
+            intent.proposal_id,
+            "broker_rejected",
+            execution_key=intent.execution_key,
+            order_id=order_id,
+        )
+
+        follow_up, _ = execute_pending_proposals(conn)
+        assert follow_up == []
+        journal = conn.execute(
+            "SELECT state, last_error FROM proposal_execution_journal WHERE execution_key=?",
+            (intent.execution_key,),
+        ).fetchone()
+        assert journal["state"] == "failed"
+        assert journal["last_error"] == "broker_rejected"
+
+
 # ── Integration: _persist_* functions work together ──────────────────────────
 
 class TestPersistIntegration:

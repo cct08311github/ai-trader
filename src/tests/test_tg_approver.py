@@ -227,6 +227,40 @@ def test_notify_strategy_direction(conn, monkeypatch):
     assert any("策略提案審查" in t for t in call_texts)
 
 
+def test_notify_includes_duplicate_alert_when_present(conn, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    payload = {
+        "duplicate_alerts": [
+            {
+                "duplicate_of": "dup-proposal-12345678",
+                "similarity": 0.91,
+            }
+        ]
+    }
+    conn.execute(
+        "INSERT INTO strategy_proposals VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            str(uuid.uuid4()), "strategy_committee", "STRATEGY_DIRECTION", None, None,
+            "維持中性並轉向高股息", "輪動跡象增加", 0.72, 1, "pending",
+            json.dumps(payload, ensure_ascii=False), 1772702000000,
+        ),
+    )
+    conn.commit()
+
+    call_texts = []
+
+    def fake_send(text, buttons, chat_id=None):
+        call_texts.append(text)
+        return True
+
+    with patch("openclaw.tg_notify.send_message_with_buttons", side_effect=fake_send):
+        n = notify_pending_proposals(conn)
+
+    assert n == 1
+    assert any("重複告警" in t for t in call_texts)
+    assert any("similarity=0.91" in t for t in call_texts)
+
+
 # ── poll_approval_callbacks (no-op in URL-button mode) ───────────────────────
 
 def test_poll_is_noop(conn):

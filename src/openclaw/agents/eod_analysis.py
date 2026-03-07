@@ -206,8 +206,31 @@ def run_eod_analysis(
             )
 
         # 3. 持倉 + watchlist 技術指標
-        positions = query_db(_conn, "SELECT symbol FROM positions", ())
-        pos_symbols = [r["symbol"] for r in positions]
+        import os
+        from openclaw.report_context_client import fetch_report_context
+        
+        api_url = os.environ.get("AI_TRADER_API_BASE_URL", "https://127.0.0.1:8080")
+        token = os.environ.get("AUTH_TOKEN", "")
+        
+        pos_symbols = []
+        if token:
+            try:
+                ctx_data = fetch_report_context(
+                    base_url=api_url, token=token, report_type="evening", verify_tls=False
+                )
+                real_h = ctx_data.get("real_holdings", {}).get("holdings", [])
+                sim_p = ctx_data.get("simulated_positions", {}).get("positions", [])
+                for h in real_h:
+                    if h.get("symbol"): pos_symbols.append(str(h["symbol"]))
+                for p in sim_p:
+                    if p.get("symbol"): pos_symbols.append(str(p["symbol"]))
+            except Exception as e:
+                log.warning("[eod_analysis] fetch_report_context 失敗: %s", e)
+        
+        if not pos_symbols:
+            # Fallback to direct DB query if API is unavailable or empty
+            positions = query_db(_conn, "SELECT symbol FROM positions", ())
+            pos_symbols = [r["symbol"] for r in positions]
 
         watchlist_path = _REPO_ROOT / "config" / "watchlist.json"
         watchlist_symbols: list = []

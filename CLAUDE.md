@@ -14,6 +14,9 @@
 | FastAPI 後端 | `frontend/backend/` | REST API + SSE，SQLite 讀寫 |
 | React 前端 | `frontend/web/` | Vite + Tailwind，即時儀表板 |
 | 設定 | `config/` | system_state.json、daily_pm_state.json、watchlist.json |
+
+**分支策略（Branching）**：
+- `main` 是目前 **唯一運行中且活躍的主線（sole active line）**。所有其他的 `codex/*` 實驗分支已經被合併或刪除，請直接對 `main` 操作。
 | 資料庫 | `data/sqlite/trades.db` | 唯一共用 SQLite，前後端與 watcher 共用 |
 
 ---
@@ -29,6 +32,15 @@ trading_enabled = true
 - `simulation_mode: true` = 模擬盤（預設）；`false` = 實際盤
 - 切換至實際盤會自動停用 auto trading（雙重保險）
 - `config/system_state.json` 為主開關，不要直接手動改，用 API
+
+### Runtime Config Baseline Policy (設定檔治理)
+專案內的 `config/` 遵循嚴格的區分：
+1. **Deploy Baselines（部署基準配置）**：
+   - *例子*：`capital.json` (資金分配), `drawdown_policy_v1.json`, `locked_symbols.json` 等。
+   - *政策*：這些檔案 **必須** 保留在 Git 中追蹤。如果你要在生產環境放寬這些限制（例如調高部位上限），必須透過正規的 Git Commit 與 PR 審查。不允許透過後台修改直接覆寫生產策略。
+2. **Runtime State（執行期狀態）**：
+   - *例子*：`system_state.json` (主開關), `daily_pm_state.json` (每日審核結果)。
+   - *政策*：這些檔案會被系統頻繁讀寫（如 Operator 觸發緊急停止，或每日盤前 LLM PM 產生報告）。為了避免污染 Git 工作區，它們已加入 `.gitignore`，**不再被追蹤**。若新部署環境缺乏這些檔案，系統程式碼 (`system_state_store.py`, `daily_pm_review.py`) 會自動 fail-safe 並提供安全預設值（例如：預設封鎖交易 `trading_enabled=False`）。
 
 ---
 
@@ -51,6 +63,7 @@ trading_enabled = true
 | `proposal_executor.py` | approved proposal 自動執行（建立 sell 訂單） |
 | `proposal_reviewer.py` | Gemini 自動審查 pending proposals + Telegram 通知 |
 | `tg_notify.py` | Telegram Bot API 輕量通知工具 |
+| `agents/strategy_committee.py` | Bull/Bear/Arbiter 三方辯論；保存 `committee_context`；對相似 `STRATEGY_DIRECTION` 做 12 小時內去重 |
 | `agents/eod_analysis.py` | 盤後分析 Agent（每交易日 16:35 TWN Cron） |
 | `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
 | `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
@@ -90,6 +103,16 @@ trading_enabled = true
 - `GET /api/portfolio/kline/{symbol}?days=60` — K 線歷史 OHLCV（查 `eod_prices`）
 - `GET /api/portfolio/quote-stream/{symbol}` — BidAsk SSE（五檔即時推送）
 
+**reports 路由重要 endpoint**：
+- `GET /api/reports/context?type=morning|evening|weekly` — 投資報告結構化資料
+- 驗證：需 `Authorization: Bearer <token>`
+- 回傳主要欄位：`status`, `report_type`, `real_holdings`, `simulated_positions`, `technical_indicators`, `institution_chips`, `recent_trades`, `eod_analysis`, `system_state`
+- `PORTFOLIO_JSON_PATH` 未設定或檔案不存在時，`real_holdings.holdings` 會回空陣列，不視為 API 錯誤
+- **Production Consumer Path（整合途徑）**：
+  外部 Agent 或腳本需要取得報告時，建議透過官方封裝的 Helper，避免重複寫 HTTP 呼叫邏輯：
+  1. Python Client: `from openclaw.report_context_client import fetch_and_format_report_context` (`src/openclaw/report_context_client.py`)
+  2. CLI 工具: `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --type morning`
+
 ### Auth Middleware
 
 - `AuthMiddleware` 強制所有請求帶 `Authorization: Bearer <token>`
@@ -109,6 +132,22 @@ trading_enabled = true
 - URL 按鈕方案（非 callback_data）：點擊直接打 API，繞過 OpenClaw gateway 競爭
 - approve/reject HTML endpoint：`GET /api/strategy/proposals/{id}/approve?token=...`
 - 修改後需 `pm2 restart ai-trader-api` 才能生效（middleware 是 import-time 載入）
+- 若 proposal payload 帶 `duplicate_alerts`，Telegram 訊息會顯示「重複告警」與相似度
+
+### Strategy Committee / Strategy 頁面注意事項
+
+- `strategy_committee` 不再預設輸出保守結論，最終方向需依 Bull/Bear 證據決定
+- `proposal_json` 會保存：
+  - `committee_context.market_data`
+  - `committee_context.bull`
+  - `committee_context.bear`
+  - `committee_context.arbiter`
+- `STRATEGY_DIRECTION` 提案寫入前會比對近 12 小時內的 `strategy_committee` 同類提案：
+  - 高相似內容 → suppress proposal，不新增第二筆 pending proposal
+  - 仍會寫一筆 `llm_traces` duplicate guard 記錄，避免誤判成「沒有執行分析」
+- `frontend/web/src/pages/Strategy.jsx`
+  - Proposal modal 會顯示 committee debate context
+  - Strategy 頁面會顯示 duplicate suppression feed，直接從 strategy logs 提取 suppressed alerts
 
 ---
 
@@ -193,6 +232,12 @@ pm2 logs ai-trader-watcher  # 看掃盤 log
 pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
 ```
 
+### Portable Path Convention (可攜帶路徑慣例)
+為確保部署與 CI 可攜性，所有 Production 代碼 **禁止硬編碼 `/Users/openclaw` 或 `~/.openclaw`（少數例外為 `.env` 載入 fallback）**：
+- Shell Script 部署：統一使用 `SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"` 與 `REPO="$(cd "$SCRIPT_DIR/.." && pwd)"` 模式推導。
+- Node.js：使用 `path.join(__dirname, ...)` 推導。
+- Python：使用 `Path(__file__).resolve().parents...` 或透過 `OPENCLAW_ROOT_ENV` 環境變數指定。
+
 `broker_reconciliation` 若診斷出 `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`，會自動把 `config/system_state.json` 的 `trading_enabled` 關閉，並寫入 `auto_lock_*` 欄位；operator 必須先確認帳戶/模式與持倉真值，再手動重新 enable。
 
 **Broker 說明**：
@@ -257,6 +302,7 @@ pytest -q   # 根目錄 pytest.ini
 - **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
 - **`full_client` fixture 陷阱**：`importlib.reload()` 會覆蓋 autouse fixture 的 monkeypatch → 必須在 test method 內、`full_client` 解構後才 monkeypatch
 - **`close_position` 時段檢查**：`_is_tw_trading_hours()` 在非交易時段回 403，測試必須 `monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)`
+- **Simulation-aware reconciliation 測試**：模擬盤下 broker 持倉為空屬預期，不應直接斷言 auto-lock 或 unresolved incident；需同時驗證 `resolved_simulation` 與 false-positive suppression
 
 ### 前端 JavaScript（vitest）
 

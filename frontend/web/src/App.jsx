@@ -1,15 +1,25 @@
-import React from 'react'
+import React, { Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { isAuthenticated } from './lib/auth'
 import DashboardLayout from './layouts/DashboardLayout'
 import LoginPage from './pages/Login'
-import PortfolioPage from './pages/Portfolio'
-import TradesPage from './pages/Trades'
-import StrategyPage from './pages/Strategy'
-import SystemPage from './pages/System'
-import AgentsPage from './pages/Agents'
-import AnalysisPage from './pages/Analysis'
-import SettingsPage from './pages/Settings'
+
+// Lazy-loaded pages for code-splitting (reduces initial bundle size)
+const PortfolioPage = React.lazy(() => import('./pages/Portfolio'))
+const TradesPage = React.lazy(() => import('./pages/Trades'))
+const StrategyPage = React.lazy(() => import('./pages/Strategy'))
+const SystemPage = React.lazy(() => import('./pages/System'))
+const AgentsPage = React.lazy(() => import('./pages/Agents'))
+const AnalysisPage = React.lazy(() => import('./pages/Analysis'))
+const SettingsPage = React.lazy(() => import('./pages/Settings'))
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[200px]">
+      <div className="text-sm text-slate-400">讀取中…</div>
+    </div>
+  )
+}
 
 /**
  * Route guard — redirects to /login if not authenticated.
@@ -39,13 +49,13 @@ export default function App() {
         }
       >
         <Route path="/" element={<Navigate to="/portfolio" replace />} />
-        <Route path="/portfolio" element={<PortfolioPage />} />
-        <Route path="/trades" element={<TradesPage />} />
-        <Route path="/strategy" element={<StrategyPage />} />
-        <Route path="/agents" element={<AgentsPage />} />
-        <Route path="/analysis" element={<AnalysisPage />} />
-        <Route path="/system" element={<SystemPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/portfolio" element={<Suspense fallback={<PageFallback />}><PortfolioPage /></Suspense>} />
+        <Route path="/trades" element={<Suspense fallback={<PageFallback />}><TradesPage /></Suspense>} />
+        <Route path="/strategy" element={<Suspense fallback={<PageFallback />}><StrategyPage /></Suspense>} />
+        <Route path="/agents" element={<Suspense fallback={<PageFallback />}><AgentsPage /></Suspense>} />
+        <Route path="/analysis" element={<Suspense fallback={<PageFallback />}><AnalysisPage /></Suspense>} />
+        <Route path="/system" element={<Suspense fallback={<PageFallback />}><SystemPage /></Suspense>} />
+        <Route path="/settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
       </Route>
 
       {/* Catch-all → login if no token, else portfolio */}

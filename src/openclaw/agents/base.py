@@ -97,15 +97,19 @@ def write_proposal(
     confidence: float,
     requires_human_approval: int = 0,
     proposal_type: str = "suggest",
+    proposal_payload: Optional[Dict[str, Any]] = None,
 ) -> str:
     """strategy_proposals に書き込む。proposal_id を返す。"""
     proposal_id = str(uuid.uuid4())
-    proposal_json = json.dumps({
+    payload = {
         "generated_by": generated_by,
         "target_rule": target_rule,
         "proposed_value": proposed_value,
         "type": proposal_type,
-    }, ensure_ascii=False)
+    }
+    if proposal_payload:
+        payload.update(proposal_payload)
+    proposal_json = json.dumps(payload, ensure_ascii=False)
     conn.execute(
         """INSERT INTO strategy_proposals
            (proposal_id, generated_by, target_rule, rule_category,

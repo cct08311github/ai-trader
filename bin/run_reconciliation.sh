@@ -1,12 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO="/Users/openclaw/.openclaw/shared/projects/ai-trader"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(cd "$SCRIPT_DIR/.." && pwd)"
 PYTHON="$REPO/bin/venv/bin/python"
 
-if [ -f /Users/openclaw/.openclaw/.env ]; then
+OPENCLAW_ENV="${OPENCLAW_ROOT_ENV:-$HOME/.openclaw/.env}"
+if [ -f "$OPENCLAW_ENV" ]; then
     set -a
-    source /Users/openclaw/.openclaw/.env
+    source "$OPENCLAW_ENV"
     set +a
 fi
 

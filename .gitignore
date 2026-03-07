@@ -59,3 +59,5 @@ coverage.json
 # Firebase / debug logs
 firebase-debug.log
 *.log
+config/daily_pm_state.json
+config/system_state.json

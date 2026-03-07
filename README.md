@@ -23,6 +23,7 @@ agent_orchestrator (Gemini agents)   ─┘
 
 - **Portfolio 管理**：持倉追蹤、未實現損益即時回寫、損益曲線
 - **AI 決策管線**：PM 辯論（Bull/Bear/Arbiter）、每日審核、風控引擎
+- **策略委員會去重**：`STRATEGY_DIRECTION` 會檢查近 12 小時內高相似提案，避免短時間反覆產出幾乎同一方向
 - **全自動策略審查**：Gemini 每日盤前 PM review + 盤中 pending proposals 自動核准/拒絕，Telegram 雙向通知
 - **EOD 驅動信號**：MA5/MA20 黃金交叉 + RSI 確認；Trailing Stop 動態收緊（獲利 >50% 時 5%→3%）
 - **集中度守衛**：單檔 >60% 自動減倉提案；40-60% Gemini 審查後核准
@@ -127,3 +128,15 @@ cd frontend/web && npm test -- --run
 | v4.9.x | 盤後分析（/analysis）；eod_analysis agent；technical_indicators；100% 覆蓋率 |
 | v4.10.x | 持倉 Drawer K 線圖；quote EOD fallback；設定頁 dirty 修正 |
 | v4.11.x | EOD 信號重構（signal_generator）；Trailing Stop；T+2 追蹤；實際費率；全自動策略審查；Telegram 通知 |
+| v4.12.x | Strategy committee 完整辯論脈絡、相似提案去重、duplicate alert 前端/Telegram 顯示 |
+
+## Strategy Committee Notes
+
+- `src/openclaw/agents/strategy_committee.py`
+  - `proposal_json` 會保存 `committee_context`，包含 Bull / Bear / Arbiter 的完整輸出與 `market_data`
+  - `STRATEGY_DIRECTION` 提案在寫入前會做近期相似度檢查；高相似內容會被 suppress，只留下 `llm_traces` duplicate guard 記錄
+- `frontend/web/src/pages/Strategy.jsx`
+  - Proposal modal 會顯示 `committee_context`
+  - Strategy 頁面會顯示 duplicate suppression feed，避免誤判成「根本沒分析」
+- `src/openclaw/tg_approver.py`
+  - 若 proposal payload 帶 `duplicate_alerts`，Telegram 審查訊息會附上重複告警與相似度

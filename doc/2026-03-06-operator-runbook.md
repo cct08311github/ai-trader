@@ -11,7 +11,18 @@ This runbook covers the new operational hardening jobs:
 
 All paths below assume the repository root:
 
-`/Users/openclaw/.openclaw/shared/projects/ai-trader`
+`/Users/openclaw/.openclaw/shared/projects/ai-trader` *(Legacy: production deployment uses Portable Paths computed via SCRIPT_DIR/OPENCLAW_ROOT_ENV).*
+
+## Configuration Governance
+
+Configuration files in `config/` are strictly divided into two categories:
+
+1. **Deploy Baselines** (Tracked in Git)
+   - Examples: `capital.json`, `drawdown_policy_v1.json`, `locked_symbols.json`.
+   - Policy: These dictate production limits (e.g., maximum position size). Any change to these limits requires a PR/Git commit and team review. Do not override these via runtime memory.
+2. **Runtime State** (Untracked, `.gitignore`)
+   - Examples: `system_state.json`, `daily_pm_state.json`.
+   - Policy: These are dynamically generated and updated by the system or operator API actions. They are excluded from version control to prevent Git workspace pollution. Safe defaults are provided in code during bootstrapping.
 
 ## Services
 
@@ -107,6 +118,12 @@ Current verified state after hygiene rollout on `2026-03-06`:
   - `1` reconciliation mismatch cluster
   - `2` distinct network allowlist denial payload variants
 
+Current verified state after batch 16 on `2026-03-07`:
+
+- unresolved incidents are `0`
+- simulation-mode reconciliation no longer raises false-positive auto-lock/incidents when broker positions are structurally empty
+- reconciliation reports still write diagnostics for audit, including `resolved_simulation=true`
+
 ### Reconciliation
 
 Primary checks:
@@ -193,6 +210,16 @@ curl -sk "https://127.0.0.1:8080/api/system/remediation-history?limit=10" \
   -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 ```
 
+Simulation-mode note:
+
+- if `data/ops/reconciliation/latest.json` shows:
+  - `resolved_simulation = true`
+  - `diagnosis_codes` includes `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+  - broker positions are empty while local paper positions exist
+- then treat it as an audit-only simulation mismatch, not a live broker drift incident
+- do not quarantine or auto-lock solely from that signal
+- switch to live-mode verification only after confirming `simulation_mode=false`
+
 ### Ops summary critical
 
 1. Read `latest.json`.
@@ -251,6 +278,11 @@ bin/run_incident_resolution.sh \
   --fingerprint "<cluster fingerprint>" \
   --reason "allowlist updated"
 ```
+
+Verified cleanup used in batch 16:
+
+- false-positive reconciliation cluster resolved after simulation-aware suppression was added
+- two historical `SEC_NETWORK_IP_DENIED` clusters were resolved after confirming they were test artifacts (`8.8.8.8`, `203.0.113.10`) and not active production egress paths
 
 Script-friendly variants:
 

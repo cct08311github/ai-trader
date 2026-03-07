@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import subprocess
+import sys
 from typing import Any
 
 from openclaw.system_state_store import system_state_path_from_env
+from openclaw.position_quarantine import get_quarantine_status
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -24,6 +27,52 @@ def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
     return any(str(r[1]) == column for r in rows)
 
 
+def _sum_actionable_reconciliation_mismatches(conn: sqlite3.Connection, since_ms: int) -> int:
+    if _has_table(conn, "incidents"):
+        rows = conn.execute(
+            """
+            SELECT detail_json
+              FROM incidents
+             WHERE resolved=0
+               AND source='broker_reconciliation'
+               AND code='RECONCILIATION_MISMATCH'
+               AND ts >= datetime('now', '-1 day')
+            """
+        ).fetchall()
+        if rows:
+            actionable = 0
+            for (detail_json,) in rows:
+                try:
+                    payload = json.loads(detail_json or "{}")
+                except Exception:
+                    payload = {}
+                stable_detail = payload.get("stable_detail") if isinstance(payload, dict) else {}
+                actionable += int((stable_detail or {}).get("mismatch_count") or 0)
+            return actionable
+        return 0
+
+    rows = conn.execute(
+        """
+        SELECT mismatch_count, summary_json
+          FROM reconciliation_reports
+         WHERE created_at >= ?
+        """,
+        (since_ms,),
+    ).fetchall()
+    actionable = 0
+    for mismatch_count, summary_json in rows:
+        try:
+            payload = json.loads(summary_json or "{}")
+        except Exception:
+            payload = {}
+        diagnostics = payload.get("diagnostics") if isinstance(payload, dict) else {}
+        resolved_simulation = bool((diagnostics or {}).get("resolved_simulation", False))
+        if resolved_simulation:
+            continue
+        actionable += int(mismatch_count or 0)
+    return actionable
+
+
 def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     now_ms = int(time.time() * 1000)
     last_24h_ms = now_ms - 86_400_000
@@ -38,8 +87,10 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "pre_trade_rejects_24h": 0,
             "llm_calls_24h": 0,
             "llm_shadow_calls_24h": 0,
+            "llm_shadow_calls_24h": 0,
             "reconciliation_mismatches_24h": 0,
             "auto_lock_active": 0,
+            "active_quarantines": 0,
         },
         "auto_lock": {
             "active": False,
@@ -48,8 +99,27 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "reason": None,
             "report_id": None,
         },
+        "environment": {
+            "python": sys.version.split()[0],
+            "node": "unknown",
+            "git_commit": "unknown",
+        },
         "overall": "ok",
     }
+
+    try:
+        summary["environment"]["git_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        pass
+
+    try:
+        summary["environment"]["node"] = subprocess.check_output(
+            ["node", "-v"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        pass
 
     try:
         with open(system_state_path_from_env(), "r", encoding="utf-8") as f:
@@ -111,11 +181,16 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
                 summary["metrics"]["llm_shadow_calls_24h"] = int(row[0] or 0)
 
     if _has_table(conn, "reconciliation_reports"):
-        row = conn.execute(
-            "SELECT COALESCE(SUM(mismatch_count), 0) FROM reconciliation_reports WHERE created_at >= ?",
-            (last_24h_ms,),
-        ).fetchone()
-        summary["metrics"]["reconciliation_mismatches_24h"] = int(row[0] or 0)
+        summary["metrics"]["reconciliation_mismatches_24h"] = _sum_actionable_reconciliation_mismatches(
+            conn,
+            last_24h_ms,
+        )
+
+    try:
+        q_status = get_quarantine_status(conn)
+        summary["metrics"]["active_quarantines"] = q_status.get("active_count", 0)
+    except Exception:
+        pass
 
     if (
         summary["metrics"]["open_incidents"] > 0
