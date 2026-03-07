@@ -536,13 +536,33 @@ function IncidentFilterPanel({ filters, onChange, onPreset, onReset }) {
   )
 }
 
-function RemediationHistoryPanel({ remediation, filters, onFilterChange }) {
+function RemediationHistoryPanel({ remediation, filters, onFilterChange, onPreset, onReset }) {
   const items = remediation?.items || []
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">Remediation History</div>
-        <div className="text-xs text-slate-400">{remediation?.count || 0} actions</div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onPreset?.({ action_type: 'incident_resolve', target_ref: 'network_security' })}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            Incident preset
+          </button>
+          <button
+            onClick={() => onPreset?.({ action_type: 'quarantine_apply', target_ref: '' })}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            Quarantine preset
+          </button>
+          <button
+            onClick={onReset}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            清空
+          </button>
+          <div className="text-xs text-slate-400">{remediation?.count || 0} actions</div>
+        </div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <label className="text-xs text-slate-400">
@@ -657,6 +677,17 @@ export default function SystemPage() {
     setRemediationFilters((prev) => ({ ...prev, [key]: value }))
   }
 
+  const applyRemediationPreset = (preset) => {
+    setRemediationFilters({
+      action_type: preset.action_type || '',
+      target_ref: preset.target_ref || '',
+    })
+  }
+
+  const resetRemediationFilters = () => {
+    setRemediationFilters({ action_type: '', target_ref: '' })
+  }
+
   const handleClusterResolved = async () => {
     await Promise.allSettled([refreshClusters(), refreshRemediation()])
   }
@@ -730,7 +761,13 @@ export default function SystemPage() {
             onPreset={applyIncidentPreset}
             onReset={resetIncidentFilters}
           />
-          <RemediationHistoryPanel remediation={remediation} filters={remediationFilters} onFilterChange={updateRemediationFilter} />
+          <RemediationHistoryPanel
+            remediation={remediation}
+            filters={remediationFilters}
+            onFilterChange={updateRemediationFilter}
+            onPreset={applyRemediationPreset}
+            onReset={resetRemediationFilters}
+          />
           <EventsPanel events={events} />
         </div>
 

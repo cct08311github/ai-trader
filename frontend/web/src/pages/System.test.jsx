@@ -198,9 +198,27 @@ describe('SystemPage', () => {
   it('resets incident filters', () => {
     renderPageAt('/system?incident_source=network_security&incident_code=SEC_NETWORK_IP_DENIED&incident_severity=critical')
 
-    fireEvent.click(screen.getByRole('button', { name: '清空' }))
+    fireEvent.click(screen.getAllByRole('button', { name: '清空' })[0])
 
     expect(screen.getByPlaceholderText('network_security')).toHaveValue('')
     expect(screen.getByPlaceholderText('SEC_NETWORK_IP_DENIED')).toHaveValue('')
+  })
+
+  it('applies remediation preset shortcuts', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Incident preset' }))
+
+    expect(screen.getAllByRole('combobox')[1]).toHaveValue('incident_resolve')
+    expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('network_security')
+  })
+
+  it('resets remediation filters', () => {
+    renderPageAt('/system?remediation_action_type=incident_resolve&remediation_target_ref=network_security')
+
+    fireEvent.click(screen.getAllByRole('button', { name: '清空' })[1])
+
+    expect(screen.getAllByRole('combobox')[1]).toHaveValue('')
+    expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('')
   })
 })
