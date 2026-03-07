@@ -77,6 +77,10 @@ Last updated: 2026-03-07 Asia/Taipei
    - restored `/api/reports/context` into the FastAPI mainline
    - added backend route tests for structured report context and optional-source fallback
    - fixed report technical-indicator generation for short price histories
+15. `2026-03-07 stash recovery batch 3`
+   - restored `AGENTS.md` for future Codex sessions
+   - restored the automated trading hardening plan under `doc/plans/`
+   - left runtime JSON state snapshots in stash instead of committing environment drift
 
 ## Verified Test Commands
 
@@ -116,6 +120,7 @@ Additional smoke checks completed:
   - previous uncommitted `main` work is preserved in `stash@{0}` as `main-wip-before-integration-2026-03-07`
   - stash recovery batch 1 is integrated for pre-trade guard, proposal execution journal, and llm governance
   - stash recovery batch 2 is integrated for report context API
+  - documentation recovery is integrated; only runtime config snapshots remain in `stash@{0}`
   - split implementation worktrees are retired
 - target:
   - use `main` as the sole active line going forward
