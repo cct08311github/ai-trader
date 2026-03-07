@@ -96,11 +96,13 @@ Last updated: 2026-03-07 Asia/Taipei
 ### P2 Product and API Follow-up
 
 - [ ] **Reports API documentation and consumer integration**
-  - [ ] document `/api/reports/context` in CLAUDE.md § FastAPI 後端 → API 路由
+  - [x] document `/api/reports/context` in CLAUDE.md § API 路由 table — `35ecee5`
   - [ ] document in AGENTS.md § FastAPI 後端 → API 路由
   - [ ] document auth: requires `Authorization: Bearer <token>` header
   - [ ] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}`
   - [ ] document query params: `type=morning|evening|weekly` (default: morning)
+  - [x] remove hardcoded `.openclaw` fallback path (CI guardrail fix) — `039ce68`
+  - [ ] set `PORTFOLIO_JSON_PATH` in production `.env` or document that it's intentionally empty
   - [ ] identify actual consumers (OpenClaw finance/researcher agents) and confirm integration
   - acceptance: future AI sessions find the endpoint in docs without reading code
 
@@ -118,13 +120,13 @@ Last updated: 2026-03-07 Asia/Taipei
 
 - [ ] **Sync all operator/hardening docs**
   - [ ] CLAUDE.md updates:
-    - [ ] add `/api/reports/context` to API 路由 table
-    - [ ] add `reports` router to router list
-    - [ ] update § 變更歷史 with batch 16 summary
+    - [x] add `/api/reports/context` to API 路由 table — `35ecee5`
+    - [x] add `reports` router to router list — `35ecee5`
+    - [x] update § 變更歷史 with v4.14.0 summary — `35ecee5`
     - [ ] update § 測試規範 with new test patterns (simulation-aware reconciliation)
   - [ ] AGENTS.md updates:
     - [ ] add `reports` router to § FastAPI 後端 → API 路由
-    - [ ] add batch 16 to § 變更歷史
+    - [ ] add v4.14.0 to § 變更歷史
   - [ ] operator runbook (`doc/2026-03-06-operator-runbook.md`):
     - [ ] add simulation-aware reconciliation behavior note
     - [ ] add incident cleanup procedures used in batch 16
@@ -142,6 +144,11 @@ Last updated: 2026-03-07 Asia/Taipei
   - [ ] wrap state updates in `act()` for: AnalysisPage, InventoryPage, PortfolioPage, PositionDetailDrawer
   - [ ] upgrade React Router to v7 or add `v7_startTransition` future flag
   - acceptance: zero React warnings in test output
+
+- [ ] **CI guardrail hardcoded path audit**
+  - [ ] scan all source files for remaining `~/.openclaw` or `/Users/` references
+  - [ ] migrate any found to env var with safe defaults
+  - acceptance: CI guardrail passes on all commits without exceptions
 
 ---
 
