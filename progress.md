@@ -240,7 +240,13 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
 
 ## Pending Checklist
 
-### Workstream I: Optimization Verification
+### Workstream I: Dashboard Throughput Optimization
+- [ ] **SSE Stream Throttling**
+  - [ ] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
+  - [ ] implement `requestAnimationFrame` or `lodash.throttle` for log message rendering
+- [ ] **State Update Consolidation**
+  - [ ] implement `useReducer` or `useSyncExternalStore` in `PortfolioPage` to avoid cascaded re-renders
+  - [ ] evaluate `TanStack Query` (React Query) for API polling instead of manual `useEffect`
 - [ ] **Stress Testing**
   - [ ] build `tools/stress_test_sse.py` to emit 200+ events/sec
   - [ ] verify browser memory usage remains stable during 10-minute soak test
