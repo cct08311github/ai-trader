@@ -178,89 +178,116 @@ Last updated: 2026-03-07 Asia/Taipei
 
 ## Pending Checklist
 
-### P1 Deferred
+### Workstream A: Runtime Config Governance
 
-- [x] **Execution journal stale recovery test**
-  - [x] build end-to-end-ish watcher/proposal execution regression coverage
-  - [x] test stale journal entry recovery across watcher restart
-  - [x] test `mark_intent_failed` prevents infinite retry
-  - acceptance: execution journal has both success and failure-path coverage in integration context
+- [ ] create isolated worktree `codex/runtime-config-governance`
+- [ ] classify tracked config files by role:
+  - [ ] deploy baseline
+  - [ ] runtime state
+  - [ ] operator override
+- [ ] decide whether [config/daily_pm_state.json](/Users/openclaw/.openclaw/shared/projects/ai-trader/config/daily_pm_state.json) should remain tracked or move to generated/runtime-only handling
+- [ ] decide whether [config/capital.json](/Users/openclaw/.openclaw/shared/projects/ai-trader/config/capital.json) needs explicit approval workflow for production limit changes
+- [ ] document “tracked deploy baseline vs runtime operator override” in:
+  - [ ] [AGENTS.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/AGENTS.md)
+  - [ ] [CLAUDE.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/CLAUDE.md)
+  - [ ] [2026-03-06-operator-runbook.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/doc/2026-03-06-operator-runbook.md)
+- [ ] if runtime-only is chosen, add safe bootstrap/default handling in code and tests
+- [ ] QA:
+  - [ ] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py frontend/backend/tests/test_settings_api.py frontend/backend/tests/test_system_api.py frontend/backend/tests/test_chat_context.py`
+- [ ] acceptance: runtime config changes are intentional, reviewable, and production-safe
 
-### P2 Product and API Follow-up
+### Workstream B: Reports API Consumer Rollout
 
-- [ ] **Reports API documentation and consumer integration**
-  - [x] document `/api/reports/context` in CLAUDE.md § API 路由 table — `35ecee5`
-  - [x] document in AGENTS.md § FastAPI 後端 → API 路由 — batch 17
-  - [x] document auth: requires `Authorization: Bearer <token>` header — batch 17
-  - [x] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}` — batch 17
-  - [x] document query params: `type=morning|evening|weekly` (default: morning) — batch 17
-  - [x] remove hardcoded `.openclaw` fallback path (CI guardrail fix) — `039ce68`
-  - [x] document missing `PORTFOLIO_JSON_PATH` fallback behavior — batch 17
-  - [ ] set `PORTFOLIO_JSON_PATH` in production `.env` or explicitly decide that empty is acceptable
-  - [x] add in-repo consumer helper + CLI (`src/openclaw/report_context_client.py`, `tools/fetch_report_context.py`) — batch 19
-  - [ ] identify external consumers (OpenClaw finance/researcher agents) and confirm integration path
-  - acceptance: future AI sessions find the endpoint in docs without reading code
+- [ ] create isolated worktree `codex/reports-consumer-rollout`
+- [ ] decide production stance for `PORTFOLIO_JSON_PATH`:
+  - [ ] set in production `.env`
+  - [ ] or explicitly document empty/missing as acceptable
+- [ ] identify external consumers of `/api/reports/context`:
+  - [ ] finance/researcher agents
+  - [ ] operator scripts
+  - [ ] external OpenClaw integrations
+- [ ] confirm canonical integration path:
+  - [ ] direct HTTP calls
+  - [ ] `src/openclaw/report_context_client.py`
+  - [ ] `tools/fetch_report_context.py`
+- [ ] add at least one real consumer integration or document why helper-only is sufficient
+- [ ] sync docs so future AI sessions can find the endpoint without code search
+- [ ] QA:
+  - [ ] `PYTHONPATH=src bin/venv/bin/python -m pytest -q src/tests/test_report_context_client.py`
+  - [ ] `bin/venv/bin/python -m pytest -q frontend/backend/tests/test_reports_api.py frontend/backend/tests/test_main.py`
+  - [ ] `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --help`
+- [ ] acceptance: reports context has a documented production consumer path
 
-- [ ] **Runtime config governance follow-up**
-  - [ ] decide whether `config/daily_pm_state.json` should remain tracked or move to generated/runtime-only handling
-  - [ ] decide whether `config/capital.json` needs explicit approval workflow for production limit changes
-  - [ ] add docs/runbook note for “tracked deploy baseline vs runtime operator override”
-  - acceptance: future runtime config changes are intentional and reviewable
+### Workstream C: Operator UI Chunking And UX
 
-- [ ] **Operator UI polish and chunking**
-  - [ ] review `frontend/web` build warning: `index.js` 790KB > 500KB threshold
-  - [ ] evaluate code-splitting options:
-    - [ ] `React.lazy()` for System page operator panels (quarantine/incidents/remediation)
-    - [ ] `React.lazy()` for Analysis page (heavy charts)
-    - [ ] dynamic import for recharts
-  - [ ] tighten operator panel empty-state behavior (no data → clear message)
-  - [ ] verify mobile responsiveness of operator panels
-  - acceptance: chunk warning reduced or consciously documented as accepted debt
+- [ ] create isolated worktree `codex/operator-ui-chunking`
+- [ ] reproduce and measure current build warning in [frontend/web](/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/web)
+- [ ] reduce large bundle risk:
+  - [ ] evaluate `React.lazy()` for System operator panels
+  - [ ] evaluate `React.lazy()` for Analysis page heavy views
+  - [ ] evaluate dynamic import for `recharts`
+- [ ] tighten operator panel empty states so “no data” is explicit and actionable
+- [ ] verify mobile responsiveness for System operator panels
+- [ ] update tests for new lazy-loading/empty-state behavior
+- [ ] QA:
+  - [ ] `cd frontend/web && npm test -- --run src/pages/System.test.jsx`
+  - [ ] `cd frontend/web && npm run build`
+- [ ] acceptance: chunk warning is reduced or explicitly documented as accepted debt
 
-- [ ] **Parallelization candidates for future AI sessions**
-  - [ ] worktree A: operator UI chunking / lazy loading
-  - [ ] worktree B: external reports consumer integration
-  - [ ] worktree C: CI hardcoded path audit
-  - acceptance: future parallel work is split by independent files and test surfaces
+### Workstream D: Ops Summary Semantics
 
-- [ ] **Ops summary metric semantics follow-up**
-  - [ ] decide whether resolved broker reconciliation incidents should contribute to a separate historical metric
-  - [ ] if yes, add a new non-alerting metric instead of overloading `reconciliation_mismatches_24h`
-  - acceptance: warning metrics and historical audit metrics are clearly separated
+- [ ] create isolated worktree `codex/ops-summary-semantics`
+- [ ] decide whether resolved reconciliation incidents need a separate historical metric
+- [ ] if yes, add a non-alerting metric instead of overloading `reconciliation_mismatches_24h`
+- [ ] update ops summary API/tests/docs to reflect final semantics
+- [ ] QA:
+  - [ ] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_operator_jobs.py src/tests/test_broker_reconciliation.py frontend/backend/tests/test_system_api.py`
+  - [ ] `bin/run_ops_summary.sh`
+- [ ] acceptance: alerting metrics and historical audit metrics are clearly separated
 
-### P2 Documentation Maintenance
+### Workstream E: CI Guardrail Hardcoded Path Audit
 
-- [ ] **Sync all operator/hardening docs**
-  - [ ] CLAUDE.md updates:
-    - [x] add `/api/reports/context` to API 路由 table — `35ecee5`
-    - [x] add `reports` router to router list — `35ecee5`
-    - [x] update § 變更歷史 with v4.14.0 summary — `35ecee5`
-    - [x] update § 測試規範 with new test patterns (simulation-aware reconciliation) — batch 17
-  - [ ] AGENTS.md updates:
-    - [x] add `reports` router to § FastAPI 後端 → API 路由 — batch 17
-    - [x] add v4.14.0 to § 變更歷史 — batch 17
-  - [ ] operator runbook (`doc/2026-03-06-operator-runbook.md`):
-    - [x] add simulation-aware reconciliation behavior note — batch 17
-    - [x] add incident cleanup procedures used in batch 16 — batch 17
-  - [x] verify no cross-doc contradictions about active workflow — batch 17
-  - acceptance: all docs agree on endpoints, services, and workflow
+- [ ] create isolated worktree `codex/ci-path-audit`
+- [ ] scan source for remaining `~/.openclaw` or `/Users/` references
+- [ ] classify each hit:
+  - [ ] legitimate doc/example only
+  - [ ] test fixture only
+  - [ ] production code bug
+- [ ] migrate production-code hits to env vars or safe defaults
+- [ ] add/adjust regression coverage for any migrated path behavior
+- [ ] QA:
+  - [ ] `rg -n \"~/.openclaw|/Users/\" src frontend tools config`
+  - [ ] run impacted pytest/vitest suites
+- [ ] acceptance: no unsafe hardcoded path remains in production code
 
-### P3 Future Enhancements (not urgent)
+### Workstream F: Documentation Consistency Sweep
+
+- [ ] create isolated worktree `codex/doc-consistency-sweep`
+- [ ] sync operator/hardening docs:
+  - [ ] [CLAUDE.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/CLAUDE.md)
+  - [ ] [AGENTS.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/AGENTS.md)
+  - [ ] [2026-03-06-operator-runbook.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/doc/2026-03-06-operator-runbook.md)
+  - [ ] [README.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/README.md)
+- [ ] verify docs reflect:
+  - [ ] sole active line is `main`
+  - [ ] runtime config baseline policy
+  - [ ] reports context consumer path
+  - [ ] current operator PM2/cron flow
+- [ ] QA:
+  - [ ] cross-read docs for contradictions
+- [ ] acceptance: docs agree on active workflow, endpoints, and operational rules
+
+### Parked / Future Work
 
 - [ ] **Reconciliation improvement: simulation-mode position tracking**
   - [ ] consider separate reconciliation mode for simulation that compares local DB against expected paper positions
   - [ ] alternative: skip reconciliation entirely in simulation and only enable when `simulation_mode=false`
-  - acceptance: reconciliation provides value in both simulation and live modes
+  - [ ] acceptance: reconciliation provides value in both simulation and live modes
 
 - [ ] **Frontend React warnings cleanup**
   - [ ] wrap state updates in `act()` for: AnalysisPage, InventoryPage, PortfolioPage, PositionDetailDrawer
   - [ ] upgrade React Router to v7 or add `v7_startTransition` future flag
-  - acceptance: zero React warnings in test output
-
-- [ ] **CI guardrail hardcoded path audit**
-  - [ ] scan all source files for remaining `~/.openclaw` or `/Users/` references
-  - [ ] migrate any found to env var with safe defaults
-  - acceptance: CI guardrail passes on all commits without exceptions
+  - [ ] acceptance: zero React warnings in test output
 
 ---
 
