@@ -12,20 +12,20 @@ Last updated: 2026-03-07 Asia/Taipei
 
 - `codex/integration-recovery`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-integration-recovery`
-  - focus: cherry-pick and verify remediation, operator API, and System UI streams on one clean line
+  - focus: single mainline for remediation, operator API, and System UI after integration recovery
   - status: active
 - `codex/remediation-api`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-remediation-api`
   - focus: operator remediation, incident handling, quarantine workflow, CLI/API hardening
-  - status: active
+  - status: retired after integration into `codex/integration-recovery`
 - `codex/system-ops-ui`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-system-ops-ui`
   - focus: System page operator UI for quarantine/incidents/remediation history
-  - status: active
+  - status: retired after integration into `codex/integration-recovery`
 - `codex/operator-drilldown`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-operator-drilldown`
   - focus: backend filtering/query ergonomics for operator APIs
-  - status: active
+  - status: retired after integration into `codex/integration-recovery`
 
 ## Completed Batches
 
@@ -57,6 +57,9 @@ Last updated: 2026-03-07 Asia/Taipei
    - backend operator tests passed on the integrated branch
    - `System.test.jsx` passed on the integrated branch
    - `frontend/web` production build passed on the integrated branch
+11. `2026-03-07 mainline consolidation`
+   - retired split worktrees after successful integration
+   - `codex/integration-recovery` is now the only active operator hardening line
 
 ## Verified Test Commands
 
@@ -90,59 +93,9 @@ Additional smoke checks completed:
   - operator-drilldown API/CLI commits are integrated
   - System operator UI commits are integrated
   - integrated verification is green for backend tests, `System.test.jsx`, and production build
+  - split implementation worktrees are retired
 - target:
-  - keep this branch as the clean merge-ready line until the dirty main worktree is reconciled
-
-### Stream A: Operator Remediation
-
-- branch/worktree: `codex/remediation-api`
-- current state: API + CLI + audit trail complete
-- next useful work:
-  - merge/cherry-pick into integration branch or mainline workflow
-  - optional: attach remediation CLI into richer operator automation
-
-### Stream B: System Operator UI
-
-- branch/worktree: `codex/system-ops-ui`
-- current state:
-  - System page now has operator panels for quarantine, incident clusters, and remediation history
-  - frontend hooks added for `/api/system/quarantine-status`
-  - frontend hooks added for `/api/system/quarantine-plan`
-  - frontend hooks added for `/api/system/incidents/open`
-  - frontend hooks added for `/api/system/incidents/resolve`
-  - frontend hooks added for `/api/system/remediation-history`
-  - System page now supports quarantine apply/clear actions directly from UI
-  - System page now supports per-symbol quarantine clear
-  - System page now shows incident sample payload detail inline
-  - System page now supports incident cluster filters: `source/code/severity`
-  - System page now supports remediation history filters: `action_type/target_ref`
-  - System page now persists operator filters in URL query params
-  - System page now supports incident filter presets and reset
-  - System page now supports remediation filter presets and reset
-  - System page now supports saving/loading operator filter snapshots via localStorage
-- target:
-  - keep UI consistent with existing `System.jsx` visual language
-  - optional next step: add saved filter presets and richer payload formatting
-
-### Stream C: Operator Drilldown API
-
-- branch/worktree: `codex/operator-drilldown`
-- current state:
-  - remediation history supports `action_type` filter
-  - remediation history supports `target_ref` substring filter
-  - incident cluster listing supports `source` filter
-  - incident cluster listing supports `code` filter
-  - incident cluster listing supports `severity` filter
-  - CLI supports `--source`, `--code`, `--severity`, `--action-type`, `--target-ref`
-  - CLI supports `--summary-only`
-  - CLI supports `--jsonl`
-  - runbook documents script-friendly CLI output modes
-- verified by:
-  - `PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py`
-  - `python3 tools/run_incident_resolution.py --db-path <db> --source network_security --code SEC_NETWORK_IP_DENIED --severity critical --action-type incident_resolve --target-ref network_security`
-  - `python3 tools/run_incident_resolution.py --db-path <db> --jsonl`
-- target:
-  - optional next step: keep backend filter/query ergonomics aligned with UI controls
+  - use this branch as the sole active mainline until the dirty `main` worktree is intentionally reconciled
 
 ## Rules For Other AI Sessions
 
