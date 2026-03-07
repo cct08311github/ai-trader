@@ -1,6 +1,6 @@
 # AI Trader Hardening Progress
 
-Last updated: 2026-03-07 Asia/Taipei
+Last updated: 2026-03-07 17:35 Asia/Taipei
 
 ## Coordination
 
@@ -64,7 +64,7 @@ Last updated: 2026-03-07 Asia/Taipei
 - [x] **P1: Expand regression coverage** — `c45d9f2`
   - [x] reports API: invalid type, missing auth, DB error, missing chips/analysis tables
   - [x] pre-trade guard: 3 env override tests
-  - [ ] execution journal stale recovery (deferred — requires end-to-end broker mock)
+  - [x] execution journal stale recovery (completed in Batch 19)
 
 ### Batch 17: Documentation Sync + QA Refresh (2026-03-07)
 
@@ -124,55 +124,69 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] restored conservative `max_single_position_pct=0.33299999999999996`
   - [x] QA: `daily_pm_review`, `risk_engine`, `settings_api`, `system_api`, `chat_context`
 
-### QA Snapshot (2026-03-07)
+### Batch 21: CI Path Audit + Test Fix (2026-03-07) — `25d9da2`
+
+- [x] **Workstream E: CI Guardrail Hardcoded Path Audit**
+  - [x] scanned source for `/Users/` and `~/.openclaw` references across `src/`, `frontend/`, `tools/`, `config/`, `bin/`, `ecosystem.config.js`
+  - [x] classified each hit:
+    - [x] `tools/trigger_pm_review.py` — **production code bug** → fixed: `Path.home() / ".openclaw" / ".env"` with `OPENCLAW_ROOT_ENV` env override
+    - [x] `ecosystem.config.js` — **deployment config** → fixed: `path.join(__dirname, ...)` for all paths
+    - [x] `frontend/backend/run.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `bin/run_watcher.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `bin/run_agents.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `bin/run_ops_summary.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `bin/run_reconciliation.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `bin/run_incident_hygiene.sh` — **deployment script** → fixed: `SCRIPT_DIR` based path derivation
+    - [x] `src/openclaw/db_router.py` — uses `expanduser("~/.openclaw")` — already portable ✓
+    - [x] `frontend/web/README.md` — doc/example only ✓
+    - [x] `frontend/backend/.env` — deployment config ✓
+  - [x] verified zero `/Users/openclaw` references remain in production code after changes
+  - [x] QA: all impacted test suites pass
+    - [x] `rg -n '/Users/openclaw' src/ tools/ bin/ frontend/backend/ ecosystem.config.js --glob '!bin/venv/**' --glob '!frontend/backend/.env'` → 0 hits
+    - [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_broker_reconciliation.py src/tests/test_operator_jobs.py src/tests/test_proposal_executor.py src/tests/test_ticker_watcher.py` → pass
+    - [x] `bin/venv/bin/python -m pytest -q frontend/backend/tests/` → all pass (including 4 previously failing)
+  - [x] acceptance: no unsafe hardcoded path remains in production code
+- [x] **Pre-existing test fix: 4 broken tests in test_coverage_gaps.py**
+  - [x] root cause: `MockOrderCandidate.__init__` didn't store attributes; `pre_trade_guard.evaluate_pre_trade_guard()` accesses `candidate.qty` → AttributeError
+  - [x] fix: all 4 `MockOrderCandidate` classes now store `symbol`, `side`, `qty`, `price`, `order_type`, `opens_new_position`
+  - [x] 4 tests now pass: `TestPortfolioClosePositionBrokerFlow` (3) + `TestPortfolioClosePositionWithCurrentPrice` (1)
+
+### Batch 22: Strategy Committee De-dup And UX Visibility (2026-03-07)
+
+- [x] **Suppress near-duplicate `STRATEGY_DIRECTION` proposals** — `880a9ee`
+  - [x] `src/openclaw/agents/strategy_committee.py` compares new strategy direction proposals against the last 12 hours of committee-generated proposals
+  - [x] high-similarity proposals are suppressed instead of writing another pending proposal
+  - [x] duplicate suppression still writes a dedicated `llm_traces` record so operators can verify analysis actually ran
+  - [x] `result.raw["duplicate_alerts"]` is populated for downstream consumers
+  - [x] QA:
+    - [x] `python3 -m pytest /Users/openclaw/.openclaw/shared/projects/ai-trader/src/tests/test_agents.py -q`
+    - [x] `python3 -m pytest /Users/openclaw/.openclaw/shared/projects/ai-trader/src/tests/test_proposal_engine.py -q`
+- [x] **Surface duplicate alerts in operator UX** — `6b48c52`
+  - [x] `frontend/web/src/pages/Strategy.jsx` shows duplicate suppression feed from strategy logs
+  - [x] proposal modal renders `duplicate_alerts` when present in `proposal_json`
+  - [x] `src/openclaw/tg_approver.py` includes duplicate warning text in Telegram review messages when payload contains `duplicate_alerts`
+  - [x] added regression coverage in `src/tests/test_tg_approver.py`
+  - [x] QA:
+    - [x] `python3 -m pytest /Users/openclaw/.openclaw/shared/projects/ai-trader/src/tests/test_tg_approver.py -q`
+    - [x] `npm --prefix /Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/web run build`
+
+### QA Snapshot (2026-03-07 17:35)
 
 | Test Suite | Count | Result |
 |------------|-------|--------|
-| Core Engine | 76 | pass |
-| Operator | 54 | pass |
-| FastAPI | 67+ | pass |
-| Frontend vitest | 124 | pass |
-| Frontend build | — | pass |
-| Reports API (new) | 6 | pass |
-| Pre-trade guard (new) | 8 | pass |
-| Reconciliation + operator_jobs (new) | 12 | pass |
+| Core Engine | 153+ | ✅ pass |
+| Operator | 55+ | ✅ pass |
+| Reconciliation | 13+ | ✅ pass |
+| FastAPI (all suites) | 67+ | ✅ pass |
+| FastAPI test_coverage_gaps | 31 (was 27p/4f) | ✅ pass (4 fixed) |
+| Config suites (pm_review/risk/settings/chat) | 127+ | ✅ pass |
+| Report context client | 2 | ✅ pass |
+| Strategy committee dedup | 32+ | ✅ pass |
+| Telegram approver | 17 | ✅ pass |
+| Frontend vitest | 124 | ✅ pass |
+| Frontend build | — | ✅ pass (chunk warning present) |
 
 0 open incidents in DB. 0 owned-code deprecation warnings.
-
-### QA Refresh After Batch 17
-
-- [x] docs and runbook synced with current mainline behavior
-- [x] reports/system/main FastAPI suites rerun green
-- [x] reconciliation/operator_jobs suites rerun green
-- [x] `bin/run_ops_summary.sh` produced fresh snapshot with `open_incidents=0` and `auto_lock_active=0`
-- [x] `bin/run_reconciliation.sh` produced fresh audit snapshot with:
-  - [x] `resolved_simulation=true`
-  - [x] `mismatch_count=9`
-  - [x] no new auto-lock applied
-  - [x] no open-incident regression
-- [ ] reconcile `reconciliation_mismatches_24h=27` warning metric with simulation-aware semantics in ops summary
-
-### QA Refresh After Batch 18
-
-- [x] `src/tests/test_operator_jobs.py`
-- [x] `src/tests/test_broker_reconciliation.py`
-- [x] `frontend/backend/tests/test_system_api.py`
-- [x] fresh `bin/run_ops_summary.sh` snapshot:
-  - [x] `reconciliation_mismatches_24h=0`
-  - [x] `overall=ok`
-  - [x] `open_incidents=0`
-
-### QA Refresh After Batch 19
-
-- [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_ticker_watcher.py src/tests/test_proposal_executor.py src/tests/test_report_context_client.py`
-- [x] `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --help`
-
-### QA Refresh After Batch 20
-
-- [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py frontend/backend/tests/test_settings_api.py frontend/backend/tests/test_system_api.py frontend/backend/tests/test_chat_context.py`
-- [x] verified committed runtime baselines:
-  - [x] `config/daily_pm_state.json` is fail-closed
-  - [x] `config/capital.json` keeps conservative single-position cap
 
 ---
 
@@ -185,12 +199,12 @@ Last updated: 2026-03-07 Asia/Taipei
   - [ ] deploy baseline
   - [ ] runtime state
   - [ ] operator override
-- [ ] decide whether [config/daily_pm_state.json](/Users/openclaw/.openclaw/shared/projects/ai-trader/config/daily_pm_state.json) should remain tracked or move to generated/runtime-only handling
-- [ ] decide whether [config/capital.json](/Users/openclaw/.openclaw/shared/projects/ai-trader/config/capital.json) needs explicit approval workflow for production limit changes
-- [ ] document “tracked deploy baseline vs runtime operator override” in:
-  - [ ] [AGENTS.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/AGENTS.md)
-  - [ ] [CLAUDE.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/CLAUDE.md)
-  - [ ] [2026-03-06-operator-runbook.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/doc/2026-03-06-operator-runbook.md)
+- [ ] decide whether `config/daily_pm_state.json` should remain tracked or move to generated/runtime-only handling
+- [ ] decide whether `config/capital.json` needs explicit approval workflow for production limit changes
+- [ ] document "tracked deploy baseline vs runtime operator override" in:
+  - [ ] AGENTS.md
+  - [ ] CLAUDE.md
+  - [ ] `doc/2026-03-06-operator-runbook.md`
 - [ ] if runtime-only is chosen, add safe bootstrap/default handling in code and tests
 - [ ] QA:
   - [ ] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py frontend/backend/tests/test_settings_api.py frontend/backend/tests/test_system_api.py frontend/backend/tests/test_chat_context.py`
@@ -221,12 +235,13 @@ Last updated: 2026-03-07 Asia/Taipei
 ### Workstream C: Operator UI Chunking And UX
 
 - [ ] create isolated worktree `codex/operator-ui-chunking`
-- [ ] reproduce and measure current build warning in [frontend/web](/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/web)
+- [ ] reproduce and measure current build warning in `frontend/web`
+  - Current: `index-72ec79b3.js 790.70 kB` (> 500 kB limit)
 - [ ] reduce large bundle risk:
   - [ ] evaluate `React.lazy()` for System operator panels
   - [ ] evaluate `React.lazy()` for Analysis page heavy views
   - [ ] evaluate dynamic import for `recharts`
-- [ ] tighten operator panel empty states so “no data” is explicit and actionable
+- [ ] tighten operator panel empty states so "no data" is explicit and actionable
 - [ ] verify mobile responsiveness for System operator panels
 - [ ] update tests for new lazy-loading/empty-state behavior
 - [ ] QA:
@@ -245,34 +260,22 @@ Last updated: 2026-03-07 Asia/Taipei
   - [ ] `bin/run_ops_summary.sh`
 - [ ] acceptance: alerting metrics and historical audit metrics are clearly separated
 
-### Workstream E: CI Guardrail Hardcoded Path Audit
-
-- [ ] create isolated worktree `codex/ci-path-audit`
-- [ ] scan source for remaining `~/.openclaw` or `/Users/` references
-- [ ] classify each hit:
-  - [ ] legitimate doc/example only
-  - [ ] test fixture only
-  - [ ] production code bug
-- [ ] migrate production-code hits to env vars or safe defaults
-- [ ] add/adjust regression coverage for any migrated path behavior
-- [ ] QA:
-  - [ ] `rg -n \"~/.openclaw|/Users/\" src frontend tools config`
-  - [ ] run impacted pytest/vitest suites
-- [ ] acceptance: no unsafe hardcoded path remains in production code
+### ~~Workstream E: CI Guardrail Hardcoded Path Audit~~ ✅ DONE (Batch 21)
 
 ### Workstream F: Documentation Consistency Sweep
 
 - [ ] create isolated worktree `codex/doc-consistency-sweep`
 - [ ] sync operator/hardening docs:
-  - [ ] [CLAUDE.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/CLAUDE.md)
-  - [ ] [AGENTS.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/AGENTS.md)
-  - [ ] [2026-03-06-operator-runbook.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/doc/2026-03-06-operator-runbook.md)
-  - [ ] [README.md](/Users/openclaw/.openclaw/shared/projects/ai-trader/README.md)
+  - [ ] CLAUDE.md
+  - [ ] AGENTS.md
+  - [ ] `doc/2026-03-06-operator-runbook.md`
+  - [ ] README.md
 - [ ] verify docs reflect:
   - [ ] sole active line is `main`
   - [ ] runtime config baseline policy
   - [ ] reports context consumer path
   - [ ] current operator PM2/cron flow
+  - [ ] portable path convention (new — from Batch 21)
 - [ ] QA:
   - [ ] cross-read docs for contradictions
 - [ ] acceptance: docs agree on active workflow, endpoints, and operational rules
@@ -324,13 +327,15 @@ cd frontend/web && npm test -- --run && npm run build
 - branch: `main` — sole active line
 - 0 open incidents in DB
 - runtime config stash dropped (all obsolete)
-- next task: pick from **Pending Checklist** (P1 deferred or P2)
-- last parallel batches:
-  - `Batch 20` runtime baseline review completed on `main`
-  - `59cc09b` watcher execution journal regression coverage
-  - `1eacca0` report context consumer helper + CLI
+- next task: pick from **Pending Checklist** (A/B/C/D/F — E is done)
+- last batch:
+  - `880a9ee` — suppress duplicate strategy proposals
+  - `6b48c52` — surface duplicate proposal alerts
 - P2 items are independent — safe for parallel AI sessions
 - do not re-open retired codex worktrees
+- **Workstream E completed**: all hardcoded `/Users/` paths eliminated from production code
+- **4 pre-existing test failures fixed**: `test_coverage_gaps.py` MockOrderCandidate now functional
+- **Strategy committee duplicate control is now live**: repeated `STRATEGY_DIRECTION` directions should appear as duplicate suppression traces instead of repeated pending proposals
 
 ## Rules For Other AI Sessions
 

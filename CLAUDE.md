@@ -63,6 +63,7 @@ trading_enabled = true
 | `proposal_executor.py` | approved proposal 自動執行（建立 sell 訂單） |
 | `proposal_reviewer.py` | Gemini 自動審查 pending proposals + Telegram 通知 |
 | `tg_notify.py` | Telegram Bot API 輕量通知工具 |
+| `agents/strategy_committee.py` | Bull/Bear/Arbiter 三方辯論；保存 `committee_context`；對相似 `STRATEGY_DIRECTION` 做 12 小時內去重 |
 | `agents/eod_analysis.py` | 盤後分析 Agent（每交易日 16:35 TWN Cron） |
 | `src/openclaw/agents/` | Agent 角色模組（市場研究/Portfolio/健康監控/策略小組/優化）|
 | `agent_orchestrator.py` | Agent 統一排程 Orchestrator（PM2: ai-trader-agents） |
@@ -131,6 +132,22 @@ trading_enabled = true
 - URL 按鈕方案（非 callback_data）：點擊直接打 API，繞過 OpenClaw gateway 競爭
 - approve/reject HTML endpoint：`GET /api/strategy/proposals/{id}/approve?token=...`
 - 修改後需 `pm2 restart ai-trader-api` 才能生效（middleware 是 import-time 載入）
+- 若 proposal payload 帶 `duplicate_alerts`，Telegram 訊息會顯示「重複告警」與相似度
+
+### Strategy Committee / Strategy 頁面注意事項
+
+- `strategy_committee` 不再預設輸出保守結論，最終方向需依 Bull/Bear 證據決定
+- `proposal_json` 會保存：
+  - `committee_context.market_data`
+  - `committee_context.bull`
+  - `committee_context.bear`
+  - `committee_context.arbiter`
+- `STRATEGY_DIRECTION` 提案寫入前會比對近 12 小時內的 `strategy_committee` 同類提案：
+  - 高相似內容 → suppress proposal，不新增第二筆 pending proposal
+  - 仍會寫一筆 `llm_traces` duplicate guard 記錄，避免誤判成「沒有執行分析」
+- `frontend/web/src/pages/Strategy.jsx`
+  - Proposal modal 會顯示 committee debate context
+  - Strategy 頁面會顯示 duplicate suppression feed，直接從 strategy logs 提取 suppressed alerts
 
 ---
 
