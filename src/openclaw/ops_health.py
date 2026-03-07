@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import subprocess
+import sys
 from typing import Any
 
 from openclaw.system_state_store import system_state_path_from_env
+from openclaw.position_quarantine import get_quarantine_status
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -84,8 +87,10 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "pre_trade_rejects_24h": 0,
             "llm_calls_24h": 0,
             "llm_shadow_calls_24h": 0,
+            "llm_shadow_calls_24h": 0,
             "reconciliation_mismatches_24h": 0,
             "auto_lock_active": 0,
+            "active_quarantines": 0,
         },
         "auto_lock": {
             "active": False,
@@ -94,8 +99,27 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             "reason": None,
             "report_id": None,
         },
+        "environment": {
+            "python": sys.version.split()[0],
+            "node": "unknown",
+            "git_commit": "unknown",
+        },
         "overall": "ok",
     }
+
+    try:
+        summary["environment"]["git_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        pass
+
+    try:
+        summary["environment"]["node"] = subprocess.check_output(
+            ["node", "-v"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except Exception:
+        pass
 
     try:
         with open(system_state_path_from_env(), "r", encoding="utf-8") as f:
@@ -161,6 +185,12 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
             conn,
             last_24h_ms,
         )
+
+    try:
+        q_status = get_quarantine_status(conn)
+        summary["metrics"]["active_quarantines"] = q_status.get("active_count", 0)
+    except Exception:
+        pass
 
     if (
         summary["metrics"]["open_incidents"] > 0
