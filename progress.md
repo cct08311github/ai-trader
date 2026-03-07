@@ -42,6 +42,8 @@ Last updated: 2026-03-07 Asia/Taipei
 8. `25ae475` `feat: add incident resolution cli`
    - added `tools/run_incident_resolution.py`
    - added `bin/run_incident_resolution.sh`
+9. `29f4124` `docs: add shared progress ledger`
+   - synchronized `progress.md` into UI worktree
 
 ## Verified Test Commands
 
@@ -54,6 +56,8 @@ Additional smoke checks completed:
 - FastAPI `quarantine_apply -> remediation-history -> quarantine_clear`
 - FastAPI `incidents/open -> incidents/resolve -> remediation-history`
 - CLI `bin/run_incident_resolution.sh` list + apply
+- frontend `npm run build`
+- frontend `npm test -- --run src/pages/System.test.jsx`
 
 ## Current Production/Operational Context
 
@@ -74,12 +78,16 @@ Additional smoke checks completed:
 ### Stream B: System Operator UI
 
 - branch/worktree: `codex/system-ops-ui`
-- current state: worktree created from `25ae475`
+- current state:
+  - System page now has operator panels for quarantine, incident clusters, and remediation history
+  - frontend hooks added for `/api/system/quarantine-status`
+  - frontend hooks added for `/api/system/quarantine-plan`
+  - frontend hooks added for `/api/system/incidents/open`
+  - frontend hooks added for `/api/system/incidents/resolve`
+  - frontend hooks added for `/api/system/remediation-history`
 - target:
-  - expose quarantine status/plan
-  - expose open incident clusters
-  - expose remediation history
   - keep UI consistent with existing `System.jsx` visual language
+  - optional next step: add operator actions for quarantine apply/clear directly in UI
 
 ## Rules For Other AI Sessions
 

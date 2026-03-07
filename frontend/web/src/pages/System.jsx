@@ -1,7 +1,16 @@
 import React from 'react'
 import ControlPanel from '../components/ControlPanel'
 import LogTerminal from '../components/LogTerminal'
-import { useSystemHealth, useSystemQuota, useSystemRisk, useSystemEvents } from '../lib/systemApi'
+import {
+  useSystemHealth,
+  useSystemQuota,
+  useSystemRisk,
+  useSystemEvents,
+  useQuarantineStatus,
+  useQuarantinePlan,
+  useOpenIncidentClusters,
+  useRemediationHistory,
+} from '../lib/systemApi'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -60,6 +69,15 @@ function severityColor(severity) {
     info: 'text-slate-300',
   }
   return map[severity] || 'text-slate-400'
+}
+
+function actionLabel(actionType) {
+  const map = {
+    quarantine_apply: '隔離套用',
+    quarantine_clear: '隔離清除',
+    incident_resolve: '事件解除',
+  }
+  return map[actionType] || actionType || '未知操作'
 }
 
 // ─── panels ──────────────────────────────────────────────────────────────────
@@ -263,6 +281,171 @@ function EventsPanel({ events }) {
   )
 }
 
+function OperatorSnapshotPanel({ quarantineStatus, quarantinePlan, clusters, remediation }) {
+  const activeQuarantine = quarantineStatus?.active_count || 0
+  const eligible = quarantinePlan?.eligible_symbols?.length || 0
+  const openClusters = clusters?.count || 0
+  const recentActions = remediation?.count || 0
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+      <div className="text-sm font-semibold">Operator Snapshot</div>
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Active Quarantine</div>
+          <div className="mt-2 text-2xl font-semibold text-rose-300">{activeQuarantine}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Eligible Repair</div>
+          <div className="mt-2 text-2xl font-semibold text-amber-300">{eligible}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Open Clusters</div>
+          <div className="mt-2 text-2xl font-semibold text-blue-300">{openClusters}</div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Recent Actions</div>
+          <div className="mt-2 text-2xl font-semibold text-emerald-300">{recentActions}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function QuarantinePanel({ status, plan, planError }) {
+  const items = status?.items || []
+  const eligibleSymbols = plan?.eligible_symbols || []
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Quarantine / Reconciliation</div>
+        <div className="text-xs text-slate-400">Active {status?.active_count || 0}</div>
+      </div>
+      {planError && (
+        <div className="mt-3 rounded-lg border border-amber-800 bg-amber-900/20 p-3 text-xs text-amber-300">
+          最新 reconciliation plan 不可用：{planError}
+        </div>
+      )}
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+          <div className="text-xs font-semibold text-slate-300">可套用隔離</div>
+          <div className="mt-2 text-xs text-slate-500">
+            report: {plan?.report_id || '—'}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {eligibleSymbols.length === 0 ? (
+              <span className="text-xs text-slate-500">目前沒有可直接套用的 symbol</span>
+            ) : eligibleSymbols.map((symbol) => (
+              <span key={symbol} className="rounded-full bg-amber-900/30 px-2.5 py-1 text-xs text-amber-200">
+                {symbol}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+          <div className="text-xs font-semibold text-slate-300">已隔離持倉</div>
+          <div className="mt-3 space-y-2">
+            {items.length === 0 ? (
+              <div className="text-xs text-slate-500">沒有 active quarantine</div>
+            ) : items.slice(0, 6).map((item) => (
+              <div key={item.symbol} className="flex items-center justify-between text-xs">
+                <span className="text-slate-300">{item.symbol}</span>
+                <span className="text-slate-500">
+                  qty {item.position?.quantity ?? 0} · {item.reason_code}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IncidentClusterPanel({ clusters, resolvingFingerprint, resolveCluster, onResolved }) {
+  const items = clusters?.items || []
+
+  const handleResolve = async (item) => {
+    const reason = window.prompt('請輸入解除 incident cluster 的原因:', 'root cause remediated')
+    if (!reason) return
+    await resolveCluster({
+      source: item.source,
+      code: item.code,
+      fingerprint: item.fingerprint,
+      reason,
+    })
+    onResolved?.()
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Open Incident Clusters</div>
+        <div className="text-xs text-slate-400">{clusters?.count || 0} clusters</div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {items.length === 0 ? (
+          <div className="text-xs text-slate-500">目前沒有 open incident clusters</div>
+        ) : items.slice(0, 6).map((item) => {
+          const isResolving = resolvingFingerprint === item.fingerprint
+          return (
+            <div key={item.fingerprint} className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-slate-200">{item.source} / {item.code}</div>
+                  <div className="mt-1 text-xs text-slate-500">count {item.count} · latest {item.latest_ts}</div>
+                </div>
+                <button
+                  onClick={() => handleResolve(item)}
+                  disabled={isResolving}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                    isResolving
+                      ? 'bg-slate-800 text-slate-500'
+                      : 'bg-emerald-700 text-white hover:bg-emerald-600'
+                  }`}
+                >
+                  {isResolving ? '處理中...' : '標記已處理'}
+                </button>
+              </div>
+              <div className="mt-3 text-xs text-slate-400 break-all">{item.fingerprint}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function RemediationHistoryPanel({ remediation }) {
+  const items = remediation?.items || []
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Remediation History</div>
+        <div className="text-xs text-slate-400">{remediation?.count || 0} actions</div>
+      </div>
+      <div className="mt-4 space-y-3">
+        {items.length === 0 ? (
+          <div className="text-xs text-slate-500">尚無 remediation actions</div>
+        ) : items.slice(0, 8).map((item) => (
+          <div key={item.action_id} className="flex items-start justify-between gap-3 border-b border-slate-800/80 pb-3 text-xs last:border-b-0">
+            <div>
+              <div className="text-slate-200">{actionLabel(item.action_type)} · {item.target_ref || '—'}</div>
+              <div className="mt-1 text-slate-500">{item.actor} · {new Date(item.created_at).toLocaleString('zh-TW')}</div>
+            </div>
+            <div className={`rounded-full px-2 py-0.5 ${
+              item.status === 'resolved' || item.status === 'applied' || item.status === 'cleared'
+                ? 'bg-emerald-900/30 text-emerald-300'
+                : 'bg-slate-800 text-slate-300'
+            }`}>
+              {item.status}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── main page ────────────────────────────────────────────────────────────────
 
 export default function SystemPage() {
@@ -270,6 +453,19 @@ export default function SystemPage() {
   const { data: quota } = useSystemQuota({ pollMs: 30000 })
   const { data: risk } = useSystemRisk({ pollMs: 30000 })
   const { data: events } = useSystemEvents({ pollMs: 15000 })
+  const { data: quarantineStatus } = useQuarantineStatus({ pollMs: 15000 })
+  const { data: quarantinePlan, error: quarantinePlanErr } = useQuarantinePlan({ pollMs: 20000 })
+  const {
+    data: incidentClusters,
+    resolveCluster,
+    resolvingFingerprint,
+    refresh: refreshClusters,
+  } = useOpenIncidentClusters({ pollMs: 15000 })
+  const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10 })
+
+  const handleClusterResolved = async () => {
+    await Promise.allSettled([refreshClusters(), refreshRemediation()])
+  }
 
   return (
     <div className="space-y-6">
@@ -288,6 +484,24 @@ export default function SystemPage() {
         {/* 左欄：操作控制 + 事件時間軸 */}
         <div className="space-y-6">
           <ControlPanel />
+          <OperatorSnapshotPanel
+            quarantineStatus={quarantineStatus}
+            quarantinePlan={quarantinePlan}
+            clusters={incidentClusters}
+            remediation={remediation}
+          />
+          <QuarantinePanel
+            status={quarantineStatus}
+            plan={quarantinePlan}
+            planError={quarantinePlanErr}
+          />
+          <IncidentClusterPanel
+            clusters={incidentClusters}
+            resolvingFingerprint={resolvingFingerprint}
+            resolveCluster={resolveCluster}
+            onResolved={handleClusterResolved}
+          />
+          <RemediationHistoryPanel remediation={remediation} />
           <EventsPanel events={events} />
         </div>
 
