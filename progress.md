@@ -165,14 +165,14 @@ No failures. Only cosmetic warnings (React `act()` wrapping, deprecated `utcnow(
 
 ### P1 Operational Hardening
 
-- [ ] **PM2 and operator runbook validation**
-  - [ ] verify PM2 process list matches runbook and README
-  - [ ] smoke-test `ai-trader-ops-summary`, `ai-trader-reconciliation`, `ai-trader-incident-hygiene`
-  - [ ] confirm generated artifacts land in `data/ops/...` as documented
-- [ ] **Runtime config snapshot review**
-  - [ ] inspect `stash@{0}` configs (`daily_pm_state`, `system_state`, `watchlist`)
-  - [ ] compare with current runtime state
-  - [ ] discard stash or document intentional deltas
+- [x] **PM2 and operator runbook validation** (batch 16)
+  - [x] PM2 process list matches ecosystem.config.js (7 services + 1 external `agent-monitor-web`)
+  - [x] 3 cron jobs produce output in `data/ops/` as documented
+  - [x] no stale worktree/branch references in docs
+- [x] **Runtime config snapshot review** (batch 16)
+  - [x] inspected `stash@{0}`: all 3 configs obsolete (empty PM state, false-positive auto-lock, redundant watchlist keys)
+  - [x] compared with current runtime state — repo versions are correct
+  - [x] dropped `stash@{0}`
 
 ### P1 QA and Reliability
 
