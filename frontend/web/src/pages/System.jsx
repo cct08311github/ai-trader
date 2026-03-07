@@ -14,6 +14,8 @@ import {
   useQuarantineActions,
 } from '../lib/systemApi'
 
+const SAVED_OPERATOR_FILTERS_KEY = 'ai_trader_system_operator_filters'
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function statusDot(status) {
@@ -638,6 +640,7 @@ export default function SystemPage() {
   } = useOpenIncidentClusters({ pollMs: 15000, filters: incidentFilters })
   const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10, filters: remediationFilters })
   const quarantineActions = useQuarantineActions()
+  const [savedFiltersStatus, setSavedFiltersStatus] = React.useState('')
 
   React.useEffect(() => {
     const next = new URLSearchParams(searchParams)
@@ -656,6 +659,37 @@ export default function SystemPage() {
       setSearchParams(next, { replace: true })
     }
   }, [incidentFilters, remediationFilters, searchParams, setSearchParams])
+
+  const saveCurrentFilters = () => {
+    window.localStorage.setItem(
+      SAVED_OPERATOR_FILTERS_KEY,
+      JSON.stringify({ incidentFilters, remediationFilters })
+    )
+    setSavedFiltersStatus('已儲存目前查詢')
+  }
+
+  const loadSavedFilters = () => {
+    const raw = window.localStorage.getItem(SAVED_OPERATOR_FILTERS_KEY)
+    if (!raw) {
+      setSavedFiltersStatus('沒有已儲存查詢')
+      return
+    }
+    try {
+      const parsed = JSON.parse(raw)
+      setIncidentFilters({
+        source: parsed?.incidentFilters?.source || '',
+        code: parsed?.incidentFilters?.code || '',
+        severity: parsed?.incidentFilters?.severity || '',
+      })
+      setRemediationFilters({
+        action_type: parsed?.remediationFilters?.action_type || '',
+        target_ref: parsed?.remediationFilters?.target_ref || '',
+      })
+      setSavedFiltersStatus('已載入儲存查詢')
+    } catch {
+      setSavedFiltersStatus('儲存查詢格式錯誤')
+    }
+  }
 
   const updateIncidentFilter = (key, value) => {
     setIncidentFilters((prev) => ({ ...prev, [key]: value }))
@@ -723,6 +757,21 @@ export default function SystemPage() {
         <div className="text-sm font-semibold">系統監控與控制</div>
         <div className="mt-1 text-xs text-slate-400">
           主開關、緊急停止、模擬/實際盤切換。風險控制是第一優先。
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            onClick={saveCurrentFilters}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            儲存查詢
+          </button>
+          <button
+            onClick={loadSavedFilters}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            載入查詢
+          </button>
+          {savedFiltersStatus && <span className="text-xs text-slate-400">{savedFiltersStatus}</span>}
         </div>
         {healthErr && (
           <div className="mt-2 text-xs text-rose-400">健康狀態 API 離線：{healthErr}</div>

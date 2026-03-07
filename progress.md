@@ -93,6 +93,7 @@ Additional smoke checks completed:
   - System page now persists operator filters in URL query params
   - System page now supports incident filter presets and reset
   - System page now supports remediation filter presets and reset
+  - System page now supports saving/loading operator filter snapshots via localStorage
 - target:
   - keep UI consistent with existing `System.jsx` visual language
   - optional next step: add saved filter presets and richer payload formatting

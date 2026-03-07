@@ -9,6 +9,17 @@ import SystemPage from './System'
 
 globalThis.__APP_VERSION__ = 'test'
 
+const storage = new Map()
+Object.defineProperty(window, 'localStorage', {
+  value: {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => { storage.set(key, String(value)) },
+    removeItem: (key) => { storage.delete(key) },
+    clear: () => { storage.clear() },
+  },
+  configurable: true,
+})
+
 const resolveCluster = vi.fn(async () => ({ resolved_count: 1 }))
 const refreshClusters = vi.fn(async () => ({}))
 const refreshRemediation = vi.fn(async () => ({}))
@@ -119,6 +130,7 @@ describe('SystemPage', () => {
     vi.clearAllMocks()
     window.prompt = vi.fn(() => 'root cause remediated')
     window.confirm = vi.fn(() => true)
+    window.localStorage.clear()
   })
 
   it('renders operator panels and remediation data', () => {
@@ -220,5 +232,21 @@ describe('SystemPage', () => {
 
     expect(screen.getAllByRole('combobox')[1]).toHaveValue('')
     expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('')
+  })
+
+  it('saves and loads operator filter snapshots', () => {
+    renderPage()
+
+    fireEvent.change(screen.getByPlaceholderText('network_security'), { target: { value: 'broker_reconciliation' } })
+    fireEvent.change(screen.getByPlaceholderText('2330 / network_security'), { target: { value: '2330' } })
+    fireEvent.click(screen.getByRole('button', { name: '儲存查詢' }))
+
+    fireEvent.change(screen.getByPlaceholderText('network_security'), { target: { value: '' } })
+    fireEvent.change(screen.getByPlaceholderText('2330 / network_security'), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: '載入查詢' }))
+
+    expect(screen.getByPlaceholderText('network_security')).toHaveValue('broker_reconciliation')
+    expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('2330')
+    expect(screen.getByText('已載入儲存查詢')).toBeInTheDocument()
   })
 })
