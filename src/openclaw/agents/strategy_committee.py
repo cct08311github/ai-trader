@@ -87,6 +87,36 @@ _ARBITER_PROMPT = """\
     """
 
 
+def _build_market_context(conn: sqlite3.Connection) -> str:
+    positions = query_db(
+        conn,
+        "SELECT symbol, quantity, avg_price, unrealized_pnl FROM positions "
+        "WHERE quantity > 0 ORDER BY quantity DESC LIMIT 8"
+    )
+    recent_pnl = query_db(
+        conn,
+        "SELECT trade_date, SUM(realized_pnl) as pnl FROM daily_pnl_summary "
+        "GROUP BY trade_date ORDER BY trade_date DESC LIMIT 5"
+    )
+    latest_prices = query_db(
+        conn,
+        "SELECT trade_date, symbol, close, change, volume FROM eod_prices "
+        "ORDER BY trade_date DESC, volume DESC LIMIT 12"
+    )
+    recent_decisions = query_db(
+        conn,
+        "SELECT ts, symbol, signal_side, signal_score FROM decisions "
+        "ORDER BY ts DESC LIMIT 8"
+    )
+
+    return (
+        f"持倉摘要：{positions}\n"
+        f"近期損益：{recent_pnl}\n"
+        f"最新價量樣本：{latest_prices}\n"
+        f"近期決策樣本：{recent_decisions}"
+    )
+
+
 def run_strategy_committee(
     conn: Optional[sqlite3.Connection] = None,
     db_path: Optional[str] = None,
@@ -95,13 +125,7 @@ def run_strategy_committee(
     _conn = conn or open_conn(_db_path)
 
     try:
-        # 取得基礎市場數據
-        positions = query_db(_conn,
-            "SELECT symbol, quantity, avg_price FROM positions WHERE quantity > 0")
-        recent_pnl = query_db(_conn,
-            "SELECT trade_date, SUM(realized_pnl) as pnl FROM daily_pnl_summary "
-            "GROUP BY trade_date ORDER BY trade_date DESC LIMIT 5")
-        market_data = f"持倉：{positions}\n近期損益：{recent_pnl}"
+        market_data = _build_market_context(_conn)
 
         # ── Round 1: Bull Analyst ────────────────────────────────────────
         bull_prompt = _BULL_PROMPT.format(market_data=market_data)

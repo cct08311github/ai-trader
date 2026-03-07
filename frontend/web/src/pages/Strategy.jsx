@@ -288,6 +288,109 @@ function JsonBox({ value }) {
   )
 }
 
+function CommitteeContextCard({ title, tone, content, confidence, icon }) {
+  const toneClasses = {
+    emerald: 'border-emerald-800 bg-emerald-950/20 text-emerald-100',
+    rose: 'border-rose-800 bg-rose-950/20 text-rose-100',
+    cyan: 'border-cyan-800 bg-cyan-950/20 text-cyan-100',
+    slate: 'border-slate-800 bg-slate-950/20 text-slate-100',
+  }
+  const theme = toneClasses[tone] || toneClasses.slate
+  return (
+    <div className={`rounded-xl border p-3 ${theme}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs font-semibold">
+          <span>{icon}</span>
+          <span>{title}</span>
+        </div>
+        {confidence != null && confidence !== '' && (
+          <span className="text-[11px] opacity-80">信心 {Math.round(Number(confidence) * 100)}%</span>
+        )}
+      </div>
+      <div className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed">
+        {content || '（無內容）'}
+      </div>
+    </div>
+  )
+}
+
+function CommitteeDecisionBasis({ basis }) {
+  if (!basis) return null
+  const sections = [
+    ['多方重點', basis.bull_points],
+    ['空方重點', basis.bear_points],
+    ['主要權衡', basis.key_tradeoffs],
+    ['資料缺口', basis.data_gaps],
+  ]
+  return (
+    <div className="space-y-3">
+      {sections.map(([label, items]) => (
+        <div key={label} className="rounded-xl border border-slate-800 bg-slate-950/20 p-3">
+          <div className="text-[11px] font-semibold text-slate-300">{label}</div>
+          {Array.isArray(items) && items.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs text-slate-300">
+              {items.map((item, idx) => (
+                <li key={idx} className="break-words">- {item}</li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-2 text-xs text-slate-500">（無資料）</div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CommitteeContextSection({ payload }) {
+  const ctx = payload?.committee_context
+  if (!ctx) return null
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div>
+        <div className="text-xs font-semibold text-slate-200">委員會辯論脈絡</div>
+        <div className="mt-1 text-[11px] text-slate-500">
+          這裡顯示 Bull / Bear / Arbiter 的實際輸出，不只是一句最終建議。
+        </div>
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-3">
+        <CommitteeContextCard
+          title="Bull Analyst"
+          tone="emerald"
+          icon="▲"
+          content={ctx?.bull?.thesis}
+          confidence={ctx?.bull?.confidence}
+        />
+        <CommitteeContextCard
+          title="Bear Analyst"
+          tone="rose"
+          icon="▼"
+          content={ctx?.bear?.thesis}
+          confidence={ctx?.bear?.confidence}
+        />
+        <CommitteeContextCard
+          title={`Risk Arbiter${ctx?.arbiter?.stance ? ` · ${ctx.arbiter.stance}` : ''}`}
+          tone="cyan"
+          icon="◆"
+          content={ctx?.arbiter?.summary}
+          confidence={payload?.confidence ?? ctx?.arbiter?.raw?.confidence}
+        />
+      </div>
+
+      <CommitteeDecisionBasis basis={ctx?.arbiter?.decision_basis} />
+
+      <div className="rounded-xl border border-slate-800 bg-slate-950/20 p-3">
+        <div className="text-[11px] font-semibold text-slate-300">委員會輸入資料摘要</div>
+        <pre className="mt-2 max-h-[24vh] overflow-auto whitespace-pre-wrap break-all text-[11px] leading-relaxed text-slate-400">
+          {ctx?.market_data || '（無資料）'}
+        </pre>
+      </div>
+    </div>
+  )
+}
+
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   const payload = safeJsonParse(proposal?.proposal_json || '')
   const status = String(proposal?.status || '').toLowerCase()
@@ -360,6 +463,8 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
             <JsonBox value={payload || proposal?.proposal_json} />
           </div>
         </div>
+
+        <CommitteeContextSection payload={payload} />
       </div>
     </div>
   )
