@@ -391,6 +391,101 @@ function CommitteeContextSection({ payload }) {
   )
 }
 
+function DuplicateAlertsSection({ payload }) {
+  const alerts = Array.isArray(payload?.duplicate_alerts) ? payload.duplicate_alerts : []
+  if (alerts.length === 0) return null
+
+  return (
+    <div className="mt-4 rounded-xl border border-amber-800/70 bg-amber-950/20 p-4">
+      <div className="text-xs font-semibold text-amber-200">重複提案告警</div>
+      <div className="mt-1 text-[11px] text-amber-300/80">
+        這筆提案與近期策略方向高度相似，系統可能已做去重或需人工確認是否只是換句話說。
+      </div>
+      <div className="mt-3 space-y-3">
+        {alerts.map((alert, idx) => (
+          <div key={`${alert?.duplicate_of || 'dup'}-${idx}`} className="rounded-lg border border-amber-800/60 bg-slate-950/30 p-3 text-xs text-slate-200">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-amber-200/90">
+              <span>duplicate_of: <code>{alert?.duplicate_of || '-'}</code></span>
+              <span>similarity: {alert?.similarity ?? '-'}</span>
+              <span>lookback: {alert?.lookback_hours ?? '-'}h</span>
+            </div>
+            {alert?.proposed_value && (
+              <div className="mt-2 break-words text-slate-200">{alert.proposed_value}</div>
+            )}
+            {alert?.supporting_evidence && (
+              <div className="mt-1 break-words text-slate-400">{alert.supporting_evidence}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function DuplicateAlertFeed({ logs }) {
+  const alerts = useMemo(() => {
+    return (logs || [])
+      .map(log => {
+        const response = safeJsonParse(log?.response || '{}') || {}
+        const alert = response?.duplicate_alert
+        if (!alert || alert?.action !== 'suppressed') return null
+        return {
+          traceId: log?.trace_id,
+          createdAt: log?.created_at,
+          summary: response?.summary || '',
+          ...alert,
+        }
+      })
+      .filter(Boolean)
+      .slice(0, 8)
+  }, [logs])
+
+  return (
+    <div className="rounded-2xl border border-amber-800/60 bg-amber-950/10 p-5 shadow-panel">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-amber-200">重複提案告警</div>
+          <div className="mt-1 text-xs text-amber-300/70">
+            這裡列出 Strategy Committee 近期被 suppress 的重複方向，方便確認系統不是一直重送同一類建議。
+          </div>
+        </div>
+        <div className="rounded-full border border-amber-800/60 px-2 py-0.5 text-[11px] text-amber-200">
+          {alerts.length} 筆
+        </div>
+      </div>
+
+      {alerts.length === 0 ? (
+        <div className="mt-4 text-xs text-slate-500">目前沒有重複提案 suppression 記錄。</div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {alerts.map(alert => (
+            <div key={alert.traceId || `${alert.duplicate_of}-${alert.createdAt}`} className="rounded-xl border border-amber-800/50 bg-slate-950/30 p-4">
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                <span>{formatUnixSec(alert.createdAt) || '-'}</span>
+                <span className="text-amber-200">similarity {alert.similarity ?? '-'}</span>
+                <span>lookback {alert.lookback_hours ?? '-'}h</span>
+                {alert.traceId && <span className="font-mono text-slate-500">{alert.traceId}</span>}
+              </div>
+              <div className="mt-2 text-xs font-medium text-slate-200 break-words">
+                {alert.proposed_value || '（無提案摘要）'}
+              </div>
+              {alert.supporting_evidence && (
+                <div className="mt-1 text-xs text-slate-400 break-words">{alert.supporting_evidence}</div>
+              )}
+              <div className="mt-2 text-[11px] text-amber-300/80">
+                duplicate_of: <code>{alert.duplicate_of || '-'}</code>
+              </div>
+              {alert.summary && (
+                <div className="mt-2 text-[11px] text-slate-500">{alert.summary}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   const payload = safeJsonParse(proposal?.proposal_json || '')
   const status = String(proposal?.status || '').toLowerCase()
@@ -465,6 +560,7 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
         </div>
 
         <CommitteeContextSection payload={payload} />
+        <DuplicateAlertsSection payload={payload} />
       </div>
     </div>
   )
@@ -499,7 +595,7 @@ function SemanticMemoryTable({ data }) {
 }
 
 export default function StrategyPage() {
-  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
+  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshLogs, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
   const symbolNames = useSymbolNames()
 
@@ -522,6 +618,7 @@ export default function StrategyPage() {
       if (t) clearTimeout(t)
       t = setTimeout(() => {
         refreshProposals()
+        refreshLogs()
       }, 500)
     }
 
@@ -534,7 +631,7 @@ export default function StrategyPage() {
       if (t) clearTimeout(t)
       es.close()
     }
-  }, [STREAM_BASE, refreshProposals])
+  }, [STREAM_BASE, refreshProposals, refreshLogs])
 
   useEffect(() => {
     if (refreshSemanticMemory) {
@@ -726,6 +823,8 @@ export default function StrategyPage() {
 
       {/* ── 多空辯論記錄 ─────────────────────────────────────────────── */}
       <DebatePanel />
+
+      <DuplicateAlertFeed logs={logs} />
 
       {/* ── PM LLM Trace ─────────────────────────────────────────────── */}
       <PmTracePanel />
