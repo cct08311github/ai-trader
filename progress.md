@@ -117,6 +117,7 @@ Additional smoke checks completed:
 - verified by:
   - `PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py`
   - `python3 tools/run_incident_resolution.py --db-path <db> --source network_security --code SEC_NETWORK_IP_DENIED --severity critical --action-type incident_resolve --target-ref network_security`
+  - `python3 tools/run_incident_resolution.py --db-path <db> --jsonl`
 - target:
   - optional next step: keep backend filter/query ergonomics aligned with UI controls
 

@@ -29,6 +29,7 @@ def main() -> int:
     parser.add_argument("--target-ref", default="", help="remediation history target_ref substring filter")
     parser.add_argument("--apply", action="store_true", help="resolve the selected cluster")
     parser.add_argument("--summary-only", action="store_true", help="print only count summary instead of full payload")
+    parser.add_argument("--jsonl", action="store_true", help="emit JSON Lines for easier shell processing")
     args = parser.parse_args()
 
     conn = sqlite3.connect(str(args.db_path))
@@ -81,6 +82,13 @@ def main() -> int:
         if "resolution" in payload:
             summary["resolved_count"] = payload["resolution"]["resolved_count"]
         print(json.dumps(summary, ensure_ascii=False, indent=2))
+    elif args.jsonl:
+        for item in payload["open_incident_clusters"]["items"]:
+            print(json.dumps({"type": "incident_cluster", **item}, ensure_ascii=False))
+        for item in payload["remediation_history"]["items"]:
+            print(json.dumps({"type": "remediation_action", **item}, ensure_ascii=False))
+        if "resolution" in payload:
+            print(json.dumps({"type": "resolution", **payload["resolution"]}, ensure_ascii=False))
     else:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
