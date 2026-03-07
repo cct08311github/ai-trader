@@ -99,6 +99,20 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] fresh `bin/run_ops_summary.sh` snapshot now shows `reconciliation_mismatches_24h=0`
   - [x] fresh `bin/run_ops_summary.sh` snapshot now shows `overall=ok`
 
+### Batch 19: Parallel Recovery Follow-up (2026-03-07)
+
+- [x] **P1 Deferred: Execution journal stale recovery test**
+  - [x] created isolated worktree `codex/execution-journal-e2e`
+  - [x] added watcher-path integration regression for stale journal recovery → successful completion — `1ac4284`, cherry-picked as `59cc09b`
+  - [x] added watcher-path integration regression for broker failure → no infinite retry — `1ac4284`, cherry-picked as `59cc09b`
+  - [x] QA: `src/tests/test_ticker_watcher.py` + `src/tests/test_proposal_executor.py`
+- [x] **P2 Reports API consumer integration**
+  - [x] created isolated worktree `codex/reports-consumer-followup`
+  - [x] added `src/openclaw/report_context_client.py` as the canonical in-repo consumer helper — `fcfe5c0`, cherry-picked as `1eacca0`
+  - [x] added `tools/fetch_report_context.py` CLI for operator/agent usage — `fcfe5c0`, cherry-picked as `1eacca0`
+  - [x] added `src/tests/test_report_context_client.py`
+  - [x] QA: consumer helper tests + CLI `--help`
+
 ### QA Snapshot (2026-03-07)
 
 | Test Suite | Count | Result |
@@ -137,16 +151,21 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] `overall=ok`
   - [x] `open_incidents=0`
 
+### QA Refresh After Batch 19
+
+- [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_ticker_watcher.py src/tests/test_proposal_executor.py src/tests/test_report_context_client.py`
+- [x] `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --help`
+
 ---
 
 ## Pending Checklist
 
 ### P1 Deferred
 
-- [ ] **Execution journal stale recovery test**
-  - [ ] build end-to-end broker mock for watcher → intent → execute → journal flow
-  - [ ] test stale journal entry recovery across watcher restart
-  - [ ] test `mark_intent_failed` prevents infinite retry
+- [x] **Execution journal stale recovery test**
+  - [x] build end-to-end-ish watcher/proposal execution regression coverage
+  - [x] test stale journal entry recovery across watcher restart
+  - [x] test `mark_intent_failed` prevents infinite retry
   - acceptance: execution journal has both success and failure-path coverage in integration context
 
 ### P2 Product and API Follow-up
@@ -160,7 +179,8 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] remove hardcoded `.openclaw` fallback path (CI guardrail fix) — `039ce68`
   - [x] document missing `PORTFOLIO_JSON_PATH` fallback behavior — batch 17
   - [ ] set `PORTFOLIO_JSON_PATH` in production `.env` or explicitly decide that empty is acceptable
-  - [ ] identify actual consumers (OpenClaw finance/researcher agents) and confirm integration
+  - [x] add in-repo consumer helper + CLI (`src/openclaw/report_context_client.py`, `tools/fetch_report_context.py`) — batch 19
+  - [ ] identify external consumers (OpenClaw finance/researcher agents) and confirm integration path
   - acceptance: future AI sessions find the endpoint in docs without reading code
 
 - [ ] **Operator UI polish and chunking**
@@ -172,6 +192,12 @@ Last updated: 2026-03-07 Asia/Taipei
   - [ ] tighten operator panel empty-state behavior (no data → clear message)
   - [ ] verify mobile responsiveness of operator panels
   - acceptance: chunk warning reduced or consciously documented as accepted debt
+
+- [ ] **Parallelization candidates for future AI sessions**
+  - [ ] worktree A: operator UI chunking / lazy loading
+  - [ ] worktree B: external reports consumer integration
+  - [ ] worktree C: CI hardcoded path audit
+  - acceptance: future parallel work is split by independent files and test surfaces
 
 - [ ] **Ops summary metric semantics follow-up**
   - [ ] decide whether resolved broker reconciliation incidents should contribute to a separate historical metric
@@ -248,6 +274,9 @@ cd frontend/web && npm test -- --run && npm run build
 - 0 open incidents in DB
 - runtime config stash dropped (all obsolete)
 - next task: pick from **Pending Checklist** (P1 deferred or P2)
+- last parallel batches:
+  - `59cc09b` watcher execution journal regression coverage
+  - `1eacca0` report context consumer helper + CLI
 - P2 items are independent — safe for parallel AI sessions
 - do not re-open retired codex worktrees
 
