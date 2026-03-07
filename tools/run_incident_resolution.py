@@ -19,11 +19,14 @@ from openclaw.operator_remediation import list_operator_remediations
 def main() -> int:
     parser = argparse.ArgumentParser(description="List or resolve open incident clusters.")
     parser.add_argument("--db-path", default=os.environ.get("DB_PATH", "data/sqlite/trades.db"))
-    parser.add_argument("--source", default="", help="incident source to resolve")
-    parser.add_argument("--code", default="", help="incident code to resolve")
+    parser.add_argument("--source", default="", help="incident source filter or resolve target")
+    parser.add_argument("--code", default="", help="incident code filter or resolve target")
+    parser.add_argument("--severity", default="", help="incident severity filter for listing")
     parser.add_argument("--fingerprint", default="", help="specific cluster fingerprint to resolve")
     parser.add_argument("--reason", default="", help="operator reason recorded in remediation log")
     parser.add_argument("--limit", type=int, default=20, help="max remediation history items to include")
+    parser.add_argument("--action-type", default="", help="remediation history action_type filter")
+    parser.add_argument("--target-ref", default="", help="remediation history target_ref substring filter")
     parser.add_argument("--apply", action="store_true", help="resolve the selected cluster")
     args = parser.parse_args()
 
@@ -31,8 +34,18 @@ def main() -> int:
     conn.row_factory = sqlite3.Row
     try:
         payload: dict[str, object] = {
-            "open_incident_clusters": list_open_incident_clusters(conn),
-            "remediation_history": list_operator_remediations(conn, limit=max(int(args.limit), 1)),
+            "open_incident_clusters": list_open_incident_clusters(
+                conn,
+                source=args.source or None,
+                code=args.code or None,
+                severity=args.severity or None,
+            ),
+            "remediation_history": list_operator_remediations(
+                conn,
+                limit=max(int(args.limit), 1),
+                action_type=args.action_type or None,
+                target_ref=args.target_ref or None,
+            ),
         }
         if args.apply:
             if not args.source or not args.code:
@@ -44,8 +57,18 @@ def main() -> int:
                 fingerprint=args.fingerprint or None,
                 reason=args.reason,
             )
-            payload["open_incident_clusters"] = list_open_incident_clusters(conn)
-            payload["remediation_history"] = list_operator_remediations(conn, limit=max(int(args.limit), 1))
+            payload["open_incident_clusters"] = list_open_incident_clusters(
+                conn,
+                source=args.source or None,
+                code=args.code or None,
+                severity=args.severity or None,
+            )
+            payload["remediation_history"] = list_operator_remediations(
+                conn,
+                limit=max(int(args.limit), 1),
+                action_type=args.action_type or None,
+                target_ref=args.target_ref or None,
+            )
     finally:
         conn.close()
 
