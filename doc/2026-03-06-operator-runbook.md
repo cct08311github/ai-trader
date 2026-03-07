@@ -240,6 +240,18 @@ curl -sk -X POST https://127.0.0.1:8080/api/system/incidents/resolve \
   -d '{"source":"network_security","code":"SEC_NETWORK_IP_DENIED","fingerprint":"<cluster fingerprint>","reason":"allowlist updated"}'
 ```
 
+CLI alternative:
+
+```bash
+bin/run_incident_resolution.sh
+bin/run_incident_resolution.sh \
+  --apply \
+  --source network_security \
+  --code SEC_NETWORK_IP_DENIED \
+  --fingerprint "<cluster fingerprint>" \
+  --reason "allowlist updated"
+```
+
 ## Manual Commands
 
 ### Force a fresh ops snapshot

@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import sqlite3
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "frontend" / "backend"))
+
+from openclaw.incident_resolution import list_open_incident_clusters, resolve_open_incidents
+from openclaw.operator_remediation import list_operator_remediations
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="List or resolve open incident clusters.")
+    parser.add_argument("--db-path", default=os.environ.get("DB_PATH", "data/sqlite/trades.db"))
+    parser.add_argument("--source", default="", help="incident source to resolve")
+    parser.add_argument("--code", default="", help="incident code to resolve")
+    parser.add_argument("--fingerprint", default="", help="specific cluster fingerprint to resolve")
+    parser.add_argument("--reason", default="", help="operator reason recorded in remediation log")
+    parser.add_argument("--limit", type=int, default=20, help="max remediation history items to include")
+    parser.add_argument("--apply", action="store_true", help="resolve the selected cluster")
+    args = parser.parse_args()
+
+    conn = sqlite3.connect(str(args.db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        payload: dict[str, object] = {
+            "open_incident_clusters": list_open_incident_clusters(conn),
+            "remediation_history": list_operator_remediations(conn, limit=max(int(args.limit), 1)),
+        }
+        if args.apply:
+            if not args.source or not args.code:
+                raise SystemExit("--apply requires --source and --code")
+            payload["resolution"] = resolve_open_incidents(
+                conn,
+                source=args.source,
+                code=args.code,
+                fingerprint=args.fingerprint or None,
+                reason=args.reason,
+            )
+            payload["open_incident_clusters"] = list_open_incident_clusters(conn)
+            payload["remediation_history"] = list_operator_remediations(conn, limit=max(int(args.limit), 1))
+    finally:
+        conn.close()
+
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
