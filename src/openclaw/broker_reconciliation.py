@@ -107,7 +107,11 @@ def reconcile_broker_state(
         "INSERT INTO reconciliation_reports(report_id, created_at, mismatch_count, summary_json) VALUES (?, ?, ?, ?)",
         (report["report_id"], report["created_at"], mismatch_count, json.dumps(report, ensure_ascii=True)),
     )
-    if mismatch_count:
+    simulation_expected = (
+        diagnostics.get("resolved_simulation") is True
+        and "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED" in diagnostics.get("diagnosis_codes", [])
+    )
+    if mismatch_count and not simulation_expected:
         try:
             _insert_reconciliation_incident_best_effort(
                 conn=conn,

@@ -174,7 +174,8 @@ def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
     assert latest["auto_lock_applied"] is False
 
 
-def test_run_reconciliation_job_includes_diagnostics_when_broker_empty(tmp_path):
+def test_run_reconciliation_job_simulation_skips_auto_lock(tmp_path):
+    """Simulation mode: diagnostics still flag mismatch, but auto-lock is NOT applied."""
     db_path = tmp_path / "trades.db"
     out_dir = tmp_path / "recon"
     system_state_path = tmp_path / "system_state.json"
@@ -196,6 +197,33 @@ def test_run_reconciliation_job_includes_diagnostics_when_broker_empty(tmp_path)
     assert diagnostics["suspected_mode_or_account_mismatch"] is True
     latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest["report"]["diagnostics"]["resolved_simulation"] is True
+    assert latest["auto_lock_applied"] is False
+    state = json.loads(system_state_path.read_text(encoding="utf-8"))
+    assert state["trading_enabled"] is True
+
+
+def test_run_reconciliation_job_live_mode_applies_auto_lock(tmp_path):
+    """Live mode: broker empty + local positions → auto-lock trading."""
+    db_path = tmp_path / "trades.db"
+    out_dir = tmp_path / "recon"
+    system_state_path = tmp_path / "system_state.json"
+    make_db(db_path)
+    make_system_state(system_state_path)
+
+    result = run_reconciliation_job(
+        db_path=db_path,
+        output_dir=out_dir,
+        broker_positions=[],
+        broker_source="shioaji",
+        simulation=False,
+        resolved_simulation=False,
+        broker_accounts=["REAL-ACC"],
+        system_state_path=system_state_path,
+    )
+
+    diagnostics = result["report"]["diagnostics"]
+    assert diagnostics["suspected_mode_or_account_mismatch"] is True
+    latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest["auto_lock_applied"] is True
     state = json.loads(system_state_path.read_text(encoding="utf-8"))
     assert state["trading_enabled"] is False

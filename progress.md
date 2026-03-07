@@ -112,6 +112,17 @@ Additional smoke checks completed:
   - `config/system_state.json`
   - `config/watchlist.json`
 
+16. `2026-03-07 P0 reconciliation mismatch root cause`
+   - root cause: simulation mode reconciliation compares local positions against empty Shioaji simulation account → structural false positive
+   - fix: simulation-aware reconciliation (Plan C)
+     - `operator_jobs.py`: skip `apply_reconciliation_auto_lock` when `resolved_simulation=True`
+     - `broker_reconciliation.py`: skip incident creation when simulation + `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+     - reconciliation report still written for audit visibility
+   - resolved 1 false positive `RECONCILIATION_MISMATCH` incident in DB
+   - added `test_run_reconciliation_job_live_mode_applies_auto_lock` (live mode still locks)
+   - updated existing tests to match new simulation-aware behavior
+   - tests: 12/12 reconciliation + operator_jobs, 37/37 related operator/system tests
+
 ## QA Results
 
 ### 2026-03-07 Full QA Pass
@@ -141,139 +152,64 @@ No failures. Only cosmetic warnings (React `act()` wrapping, deprecated `utcnow(
 - target:
   - use `main` as the sole active line going forward
 
-## Backlog
+## Backlog Checklist
 
 ### P0 Production Incidents
 
-1. Reconciliation mismatch root cause and remediation
-   - goal: explain and clear the remaining broker/local position drift instead of only auto-locking trading
-   - tasks:
-     - inspect latest reconciliation snapshot under `data/ops/reconciliation/latest.json`
-     - confirm whether mismatches are caused by wrong account, wrong simulation/live mode, or local phantom positions
-     - use quarantine/remediation flow only after source-of-truth is confirmed
-     - verify `config/system_state.json` auto-lock fields match the active incident reason
-   - acceptance:
-     - mismatch cluster is either resolved or reduced to a clearly documented residual set
-     - operator runbook contains the exact resolution steps used
-   - suggested verification:
-     - `bin/run_reconciliation.sh`
-     - `curl -sk https://127.0.0.1:8080/api/system/reconciliation/latest ...`
-     - `curl -sk https://127.0.0.1:8080/api/system/quarantine-status ...`
-
-2. Network allowlist incident root cause
-   - goal: stop repeated `SEC_NETWORK_IP_DENIED` incidents at the infrastructure/config level
-   - tasks:
-     - compare runtime egress IPs against configured allowlist
-     - confirm whether the blocked IPs are expected operator/broker/network paths
-     - update allowlist source of truth or deployment path as needed
-     - resolve remaining clustered incidents after the root cause is fixed
-   - acceptance:
-     - new allowlist incidents stop appearing during normal operation
-     - historical clusters are resolved with remediation history
+- [x] **Reconciliation mismatch root cause** (batch 16)
+  - root cause: simulation mode structural false positive (broker always empty)
+  - fix: simulation-aware reconciliation — report still generated, auto-lock + incident suppressed
+- [x] **Network allowlist incident root cause** (batch 16)
+  - root cause: 430 incidents are test artifacts (fake IPs: `8.8.8.8`, `203.0.113.10`)
+  - `OPENCLAW_IP_ALLOWLIST` not set → no-op in production; resolved 2 open incidents → 0 remain
 
 ### P1 Operational Hardening
 
-3. PM2 and operator runbook validation in live environment
-   - goal: ensure docs and jobs still match reality after mainline consolidation
-   - tasks:
-     - verify PM2 process list matches runbook and README
-     - smoke-test `ai-trader-ops-summary`, `ai-trader-reconciliation`, `ai-trader-incident-hygiene`
-     - confirm generated artifacts land in `data/ops/...` as documented
-   - acceptance:
-     - runbook commands work as written on current machine
-     - no stale service names or retired worktree references remain
-
-4. Runtime config snapshot review
-   - goal: decide whether `stash@{0}` config snapshots are obsolete, operationally needed, or should be documented elsewhere
-   - tasks:
-     - inspect `stash@{0}` for:
-       - `config/daily_pm_state.json`
-       - `config/system_state.json`
-       - `config/watchlist.json`
-     - compare with current runtime state
-     - either discard the stash or capture any intentional operational deltas in docs/runbook
-   - acceptance:
-     - no ambiguous “important but hidden” runtime config remains stranded in stash
+- [ ] **PM2 and operator runbook validation**
+  - [ ] verify PM2 process list matches runbook and README
+  - [ ] smoke-test `ai-trader-ops-summary`, `ai-trader-reconciliation`, `ai-trader-incident-hygiene`
+  - [ ] confirm generated artifacts land in `data/ops/...` as documented
+- [ ] **Runtime config snapshot review**
+  - [ ] inspect `stash@{0}` configs (`daily_pm_state`, `system_state`, `watchlist`)
+  - [ ] compare with current runtime state
+  - [ ] discard stash or document intentional deltas
 
 ### P1 QA and Reliability
 
-5. Eliminate high-noise deprecation warnings in owned code
-   - goal: remove project-originated `datetime.utcnow()` deprecation warnings so test output surfaces real regressions
-   - tasks:
-     - replace owned `utcnow()` / `utcfromtimestamp()` usage with timezone-aware UTC equivalents
-     - prioritize:
-       - `frontend/backend/app/api/portfolio.py`
-       - `src/openclaw/pnl_engine.py`
-       - any other owned modules reported by pytest
-     - leave third-party warnings documented but untouched unless vendor upgrade is planned
-   - acceptance:
-     - owned-code deprecation warnings are substantially reduced or eliminated in targeted test suites
-
-6. Expand regression coverage for recovered features
-   - goal: make recovered stash work harder to regress accidentally
-   - tasks:
-     - add negative-path tests for `/api/reports/context`
-     - add tests for report context when chips/analysis tables are absent
-     - add integration coverage for execution journal stale recovery across watcher flow
-     - add tests for pre-trade guard env override behavior
-   - acceptance:
-     - newly recovered modules have both success and failure-path coverage
+- [ ] **Eliminate owned-code deprecation warnings**
+  - [ ] replace `utcnow()` / `utcfromtimestamp()` → timezone-aware UTC
+  - [ ] prioritize: `portfolio.py`, `pnl_engine.py`
+  - [ ] leave third-party warnings untouched
+- [ ] **Expand regression coverage for recovered features**
+  - [ ] negative-path tests for `/api/reports/context`
+  - [ ] report context with missing chips/analysis tables
+  - [ ] execution journal stale recovery across watcher flow
+  - [ ] pre-trade guard env override behavior
 
 ### P2 Product and API Follow-up
 
-7. Reports API documentation and consumer integration
-   - goal: make `/api/reports/context` discoverable and safe for downstream agents/tools
-   - tasks:
-     - document the endpoint in README/AGENTS or dedicated API docs
-     - confirm auth expectations and expected response shape
-     - identify actual consumers and add a thin smoke test if any job/script depends on it
-   - acceptance:
-     - future AI sessions do not need to rediscover the endpoint by reading code
-
-8. Operator UI polish and chunking follow-up
-   - goal: reduce UI technical debt now that operator panels are merged
-   - tasks:
-     - review `frontend/web` build warning about large chunks
-     - consider splitting operator-heavy `System.jsx` areas if bundle growth continues
-     - tighten payload formatting and empty-state behavior where useful
-   - acceptance:
-     - either chunk warning is reduced or consciously documented as accepted debt
+- [ ] **Reports API documentation and consumer integration**
+  - [ ] document endpoint in README/AGENTS
+  - [ ] confirm auth expectations and response shape
+  - [ ] identify consumers and add smoke test
+- [ ] **Operator UI polish and chunking**
+  - [ ] review large chunk build warning
+  - [ ] consider splitting `System.jsx` if bundle grows
+  - [ ] tighten payload formatting and empty-state behavior
 
 ### P2 Documentation Maintenance
 
-9. Sync all operator/hardening docs
-   - goal: keep docs aligned after multiple recovery batches
-   - tasks:
-     - ensure `README.md`, `AGENTS.md`, `doc/2026-03-06-operator-runbook.md`, and `progress.md` agree on:
-       - sole active branch/workflow
-       - operator endpoints and scripts
-       - reconciliation/quarantine/remediation flow
-     - remove any stale references to retired codex branches/worktrees
-   - acceptance:
-     - no cross-doc contradictions about the active workflow
-
-## Suggested Execution Order
-
-1. P0 reconciliation mismatch root cause
-2. P0 network allowlist root cause
-3. runtime config snapshot review
-4. PM2/runbook validation
-5. owned-code deprecation cleanup
-6. regression coverage expansion
-7. reports API documentation
-8. operator UI polish
-9. cross-doc sync pass
+- [ ] **Sync all operator/hardening docs**
+  - [ ] align `README.md`, `AGENTS.md`, operator runbook, `progress.md`
+  - [ ] remove stale references to retired codex branches/worktrees
 
 ## Handoff Notes
 
 - next AI session should start from `main`
-- next AI session should start with `Backlog -> P0 Production Incidents -> Reconciliation mismatch root cause and remediation`
+- next task: **P1 Operational Hardening → PM2 and operator runbook validation**
 - do not re-open or recreate retired codex worktrees unless a new isolated stream is actually needed
 - if runtime config snapshots are needed, inspect `stash@{0}` first instead of assuming repo drift
-- most recent recovery commits on `main`:
-  - `82d04ed` `docs: restore project operating docs`
-  - `39e6cc8` `feat: restore report context api`
-  - `0af4a2f` `feat: recover pre-trade guard and llm governance`
+- 0 open incidents remain in DB
 
 ## Rules For Other AI Sessions
 

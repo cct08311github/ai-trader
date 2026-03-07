@@ -99,10 +99,14 @@ def run_reconciliation_job(
         "broker_accounts": sorted({str(a) for a in (broker_accounts or []) if str(a)}),
         "report": report,
     }
-    auto_lock_state = apply_reconciliation_auto_lock(
-        report=report,
-        path=str(system_state_path or system_state_path_from_env()),
-    )
+    effective_simulation = resolved_simulation if resolved_simulation is not None else simulation
+    if effective_simulation:
+        auto_lock_state = None
+    else:
+        auto_lock_state = apply_reconciliation_auto_lock(
+            report=report,
+            path=str(system_state_path or system_state_path_from_env()),
+        )
     payload["auto_lock_applied"] = auto_lock_state is not None
     if auto_lock_state is not None:
         payload["system_state"] = {
