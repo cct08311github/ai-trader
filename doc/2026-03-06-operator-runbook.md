@@ -119,6 +119,8 @@ curl -sk https://127.0.0.1:8080/api/system/quarantine-status \
   -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 curl -sk "https://127.0.0.1:8080/api/system/remediation-history?limit=10" \
   -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
+curl -sk https://127.0.0.1:8080/api/system/incidents/open \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 ```
 
 Interpretation:
@@ -218,6 +220,8 @@ sqlite3 data/sqlite/trades.db \
 ```bash
 sqlite3 data/sqlite/trades.db \
   "SELECT ts,severity,source,code,detail_json FROM incidents WHERE resolved=0 ORDER BY ts DESC;"
+curl -sk https://127.0.0.1:8080/api/system/incidents/open \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')"
 ```
 
 5. If incidents are dominated by repeated identical payloads, run hygiene:
@@ -225,6 +229,15 @@ sqlite3 data/sqlite/trades.db \
 ```bash
 bin/run_incident_hygiene.sh
 cat data/ops/incident_hygiene/latest.json
+```
+
+6. After the root cause is fixed, resolve the specific cluster instead of bulk-closing unrelated incidents:
+
+```bash
+curl -sk -X POST https://127.0.0.1:8080/api/system/incidents/resolve \
+  -H "Authorization: Bearer $(grep AUTH_TOKEN frontend/backend/.env | cut -d= -f2 | tr -d ' ')" \
+  -H "Content-Type: application/json" \
+  -d '{"source":"network_security","code":"SEC_NETWORK_IP_DENIED","fingerprint":"<cluster fingerprint>","reason":"allowlist updated"}'
 ```
 
 ## Manual Commands

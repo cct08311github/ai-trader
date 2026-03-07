@@ -20,6 +20,13 @@ class QuarantineClearRequest(BaseModel):
     symbols: list[str] = []
 
 
+class IncidentResolveRequest(BaseModel):
+    source: str
+    code: str
+    fingerprint: str | None = None
+    reason: str = ""
+
+
 @router.get("/health")
 def system_health():
     """System health check with detailed status."""
@@ -148,6 +155,15 @@ def remediation_history(limit: int = 20):
     return data
 
 
+@router.get("/incidents/open")
+def open_incident_clusters():
+    from openclaw.incident_resolution import list_open_incident_clusters
+
+    with READONLY_POOL.conn() as conn:
+        data = list_open_incident_clusters(conn)
+    return data
+
+
 def _load_latest_reconciliation_report(conn: sqlite3.Connection) -> dict:
     try:
         row = conn.execute(
@@ -201,6 +217,23 @@ def clear_quarantine(req: QuarantineClearRequest):
     with db.get_conn_rw() as conn:
         result = clear_quarantine_symbols(conn, symbols=req.symbols, auto_commit=False)
         result["quarantine_status"] = get_quarantine_status(conn)
+        return result
+
+
+@router.post("/incidents/resolve")
+def resolve_incident_cluster(req: IncidentResolveRequest):
+    from openclaw.incident_resolution import list_open_incident_clusters, resolve_open_incidents
+
+    with db.get_conn_rw() as conn:
+        result = resolve_open_incidents(
+            conn,
+            source=req.source,
+            code=req.code,
+            fingerprint=req.fingerprint,
+            reason=req.reason,
+            auto_commit=False,
+        )
+        result["open_incident_clusters"] = list_open_incident_clusters(conn)
         return result
 
 

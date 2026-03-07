@@ -325,6 +325,71 @@ class TestSystemHealth:
         assert data["items"][0]["action_type"] == "quarantine_apply"
         assert data["items"][0]["target_ref"] == "2330"
 
+    def test_open_incident_clusters_groups_duplicates(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-net-1', '2026-03-06T10:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+            ('{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}',),
+        )
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-net-2', '2026-03-06T09:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+            ("{'current_ip': '8.8.8.8', 'allowlist': ['192.168.1.0/24']}",),
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/incidents/open", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] == 1
+        assert data["items"][0]["count"] == 2
+        assert data["items"][0]["source"] == "network_security"
+
+    def test_resolve_incident_cluster_marks_incidents_resolved(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-net-1', '2026-03-06T10:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+            ('{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}',),
+        )
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-net-2', '2026-03-06T09:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+            ('{"allowlist":["203.0.113.0/28"],"current_ip":"203.0.113.10"}',),
+        )
+        conn.commit()
+        conn.close()
+
+        clusters = c.get("/api/system/incidents/open", headers=_AUTH).json()
+        fingerprint = clusters["items"][0]["fingerprint"]
+
+        r = c.post(
+            "/api/system/incidents/resolve",
+            json={
+                "source": "network_security",
+                "code": "SEC_NETWORK_IP_DENIED",
+                "fingerprint": fingerprint,
+                "reason": "allowlist updated",
+            },
+            headers=_AUTH,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["resolved_count"] == 1
+        assert data["open_incident_clusters"]["count"] == 1
+
+        conn = sqlite3.connect(str(db_path))
+        resolved = conn.execute("SELECT resolved FROM incidents WHERE incident_id='i-net-1'").fetchone()[0]
+        remaining = conn.execute("SELECT resolved FROM incidents WHERE incident_id='i-net-2'").fetchone()[0]
+        log_row = conn.execute(
+            "SELECT action_type, status FROM operator_remediation_log ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        conn.close()
+        assert resolved == 1
+        assert remaining == 0
+        assert log_row[0] == "incident_resolve"
+        assert log_row[1] == "resolved"
+
 
 class TestSystemQuota:
     def test_quota_returns_200(self, sys_client):
