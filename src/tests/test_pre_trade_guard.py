@@ -113,3 +113,31 @@ def test_pre_trade_guard_rejects_symbol_notional_limit():
 
     assert result.approved is False
     assert result.reject_code == "RISK_HARD_GUARD_SYMBOL_NOTIONAL_LIMIT"
+
+
+def test_pre_trade_guard_env_overrides_max_order_qty(monkeypatch):
+    """PRE_TRADE_MAX_ORDER_QTY env var overrides default limit."""
+    monkeypatch.setenv("PRE_TRADE_MAX_ORDER_QTY", "50")
+    conn = make_db()
+    result = evaluate_pre_trade_guard(conn, _candidate(qty=60, price=100.0))
+    assert result.approved is False
+    assert result.reject_code == "RISK_HARD_GUARD_MAX_ORDER_QTY"
+    assert result.metrics["max_order_qty"] == 50
+
+
+def test_pre_trade_guard_env_overrides_max_order_notional(monkeypatch):
+    """PRE_TRADE_MAX_ORDER_NOTIONAL env var overrides default limit."""
+    monkeypatch.setenv("PRE_TRADE_MAX_ORDER_NOTIONAL", "10000")
+    conn = make_db()
+    result = evaluate_pre_trade_guard(conn, _candidate(qty=100, price=200.0))
+    assert result.approved is False
+    assert result.reject_code == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
+    assert result.metrics["max_order_notional"] == 10000.0
+
+
+def test_pre_trade_guard_env_overrides_allow_larger_qty(monkeypatch):
+    """Raising PRE_TRADE_MAX_ORDER_QTY allows previously-blocked orders."""
+    monkeypatch.setenv("PRE_TRADE_MAX_ORDER_QTY", "5000")
+    conn = make_db()
+    result = evaluate_pre_trade_guard(conn, _candidate(qty=3000, price=10.0))
+    assert result.approved is True

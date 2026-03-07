@@ -202,3 +202,103 @@ def test_reports_context_tolerates_missing_optional_sources(tmp_path, monkeypatc
     assert payload["report_type"] == "weekly"
     assert payload["real_holdings"]["holdings"] == []
     assert payload["simulated_positions"]["positions"][0]["symbol"] == "2330"
+
+
+def test_reports_context_invalid_type_rejected(tmp_path, monkeypatch):
+    """Query param type must be morning/evening/weekly — invalid value is rejected."""
+    with _make_client(tmp_path, monkeypatch) as client:
+        r = client.get("/api/reports/context?type=invalid", headers=_AUTH)
+    assert r.status_code >= 400
+
+
+def test_reports_context_requires_auth(tmp_path, monkeypatch):
+    """Missing Authorization header → 401."""
+    with _make_client(tmp_path, monkeypatch) as client:
+        r = client.get("/api/reports/context")
+    assert r.status_code == 401
+
+
+def test_reports_context_no_chips_tables(tmp_path, monkeypatch):
+    """Works when eod_institution_flows / eod_margin_data tables are absent."""
+    db_path = tmp_path / "reports_nochips.db"
+    conn = sqlite3.connect(db_path.as_posix())
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER NOT NULL,
+                avg_price REAL, current_price REAL, unrealized_pnl REAL,
+                state TEXT, high_water_mark REAL, entry_trading_day TEXT);
+            CREATE TABLE eod_prices (trade_date TEXT NOT NULL, symbol TEXT NOT NULL,
+                name TEXT, close REAL);
+            CREATE TABLE orders (order_id TEXT PRIMARY KEY, decision_id TEXT,
+                broker_order_id TEXT, ts_submit TEXT NOT NULL, symbol TEXT NOT NULL,
+                side TEXT NOT NULL, qty INTEGER NOT NULL, price REAL,
+                order_type TEXT, tif TEXT, status TEXT NOT NULL, strategy_version TEXT);
+            CREATE TABLE fills (fill_id TEXT PRIMARY KEY, order_id TEXT NOT NULL,
+                ts_fill TEXT, qty INTEGER NOT NULL, price REAL NOT NULL, fee REAL, tax REAL);
+            """
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2330', 50, 600.0, 650.0, 2500.0, 'holding', 660.0, '2026-03-01')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setenv("DB_PATH", db_path.as_posix())
+    monkeypatch.setenv("RATE_LIMIT_RPM", "1000")
+    monkeypatch.setenv("AUTH_TOKEN", "test-bearer-token")
+    monkeypatch.setenv("PORTFOLIO_JSON_PATH", (tmp_path / "missing.json").as_posix())
+
+    import app.core.config as config
+    importlib.reload(config)
+    import app.db as db_mod
+    importlib.reload(db_mod)
+    import app.api.reports as reports
+    importlib.reload(reports)
+    import app.main as main
+    importlib.reload(main)
+
+    with TestClient(main.app) as client:
+        r = client.get("/api/reports/context?type=morning", headers=_AUTH)
+
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["institution_chips"] == {}
+    assert payload["eod_analysis"] is None
+    assert payload["simulated_positions"]["positions"][0]["symbol"] == "2330"
+
+
+def test_reports_context_db_error_returns_500(tmp_path, monkeypatch):
+    """DB connection failure → 500."""
+    # Create a valid DB first so app starts, then break get_conn
+    db_path = tmp_path / "reports_err.db"
+    _init_reports_db(db_path)
+
+    monkeypatch.setenv("DB_PATH", db_path.as_posix())
+    monkeypatch.setenv("RATE_LIMIT_RPM", "1000")
+    monkeypatch.setenv("AUTH_TOKEN", "test-bearer-token")
+    monkeypatch.setenv("PORTFOLIO_JSON_PATH", (tmp_path / "missing.json").as_posix())
+
+    import app.core.config as config
+    importlib.reload(config)
+    import app.db as db_mod
+    importlib.reload(db_mod)
+    import app.api.reports as reports_mod
+    importlib.reload(reports_mod)
+    import app.main as main
+    importlib.reload(main)
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def broken_conn():
+        raise RuntimeError("simulated DB failure")
+        yield  # noqa: unreachable
+
+    monkeypatch.setattr(db_mod, "get_conn", broken_conn)
+
+    with TestClient(main.app) as client:
+        r = client.get("/api/reports/context?type=morning", headers=_AUTH)
+
+    assert r.status_code == 500

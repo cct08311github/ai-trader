@@ -180,11 +180,11 @@ No failures. Only cosmetic warnings (React `act()` wrapping, deprecated `utcnow(
   - [x] replaced 5 owned `utcnow()` → `datetime.now(UTC)` (portfolio, settings, pnl_engine, resume_protocol)
   - [x] fixed 2 test files (test_pnl_engine, test_resume_protocol)
   - [x] strict `-W error::DeprecationWarning` passes 101/101; remaining warnings are third-party (shioaji)
-- [ ] **Expand regression coverage for recovered features**
-  - [ ] negative-path tests for `/api/reports/context`
-  - [ ] report context with missing chips/analysis tables
-  - [ ] execution journal stale recovery across watcher flow
-  - [ ] pre-trade guard env override behavior
+- [x] **Expand regression coverage for recovered features** (batch 16)
+  - [x] negative-path tests for `/api/reports/context` (invalid type, missing auth, DB error → 4xx/5xx)
+  - [x] report context with missing chips/analysis tables (institution_chips={}, eod_analysis=None)
+  - [x] pre-trade guard env override behavior (3 tests: override max_qty, max_notional, allow larger)
+  - [ ] execution journal stale recovery across watcher flow (deferred — requires end-to-end broker mock)
 
 ### P2 Product and API Follow-up
 
