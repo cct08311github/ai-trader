@@ -170,6 +170,32 @@ class TestWriteProposal:
         ).fetchone()
         assert row[0] == 1
 
+    def test_merges_custom_proposal_payload(self, mem_db):
+        from openclaw.agents.base import write_proposal
+        pid = write_proposal(
+            mem_db,
+            generated_by="strategy_committee",
+            target_rule="STRATEGY_DIRECTION",
+            rule_category="strategy",
+            proposed_value="提高現金水位",
+            supporting_evidence="市場波動升高",
+            confidence=0.7,
+            requires_human_approval=1,
+            proposal_payload={
+                "committee_context": {
+                    "bull": {"thesis": "動能延續"},
+                    "bear": {"thesis": "估值過熱"},
+                }
+            },
+        )
+        row = mem_db.execute(
+            "SELECT proposal_json FROM strategy_proposals WHERE proposal_id=?",
+            (pid,)
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["generated_by"] == "strategy_committee"
+        assert payload["committee_context"]["bull"]["thesis"] == "動能延續"
+
 
 # ── call_agent_llm（fallback 測試）──────────────────────────────────────────
 
@@ -264,8 +290,15 @@ class TestStrategyCommitteeAgent:
                 "supporting_evidence": "Bull/Bear 訊號拉鋸",
                 "confidence": 0.65,
                 "requires_human_approval": 1,
-            }]
+            }],
         )
+        arbiter_resp["stance"] = "neutral"
+        arbiter_resp["decision_basis"] = {
+            "bull_points": ["半導體短期趨勢向上"],
+            "bear_points": ["外資連續賣超"],
+            "key_tradeoffs": ["動能與估值拉鋸"],
+            "data_gaps": [],
+        }
         call_side_effects = [bull_resp, bear_resp, arbiter_resp]
         with patch("openclaw.agents.strategy_committee.call_agent_llm",
                    side_effect=call_side_effects):
@@ -275,9 +308,13 @@ class TestStrategyCommitteeAgent:
         count = mem_db.execute("SELECT COUNT(*) FROM llm_traces").fetchone()[0]
         assert count == 3
         proposal = mem_db.execute(
-            "SELECT requires_human_approval FROM strategy_proposals"
+            "SELECT requires_human_approval, proposal_json FROM strategy_proposals"
         ).fetchone()
         assert proposal[0] == 1
+        payload = json.loads(proposal[1])
+        assert payload["committee_context"]["arbiter"]["stance"] == "neutral"
+        assert payload["committee_context"]["bull"]["thesis"] == "看多：半導體短期趨勢向上"
+        assert payload["committee_context"]["bear"]["thesis"] == "看空：外資連續賣超，注意回檔"
 
 
 # ── SystemOptimizationAgent ───────────────────────────────────────────────────

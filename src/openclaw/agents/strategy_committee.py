@@ -53,13 +53,24 @@ _ARBITER_PROMPT = """\
 
 ## 任務
 整合雙方意見，給出 confidence-weighted 最終策略建議。
-建議必須謹慎，優先保本。
+不能預設採用保守結論，也不能流於空泛口號。
+你必須根據雙方證據判斷：
+- 若風險明顯高於報酬，才給出防守/降風險建議
+- 若報酬風險比仍有利，可給出中性或偏積極建議
+- 若資訊不足，需明確指出缺口，而不是套用固定模板
 
 輸出 JSON：
 ```json
 {{
   "summary": "...",
-  "confidence": 0.65,
+  "confidence": 0.0,
+  "stance": "defensive|neutral|constructive",
+  "decision_basis": {{
+    "bull_points": ["..."],
+    "bear_points": ["..."],
+    "key_tradeoffs": ["..."],
+    "data_gaps": ["..."]
+  }},
   "action_type": "suggest",
   "proposals": [
     {{
@@ -73,7 +84,7 @@ _ARBITER_PROMPT = """\
   ]
 }}
 ```
-"""
+    """
 
 
 def run_strategy_committee(
@@ -123,6 +134,31 @@ def run_strategy_committee(
         # ── 寫入提案（必須人工確認）───────────────────────────────────────
         result = to_agent_result(arbiter_resp)
         for p in result.proposals:
+            proposal_payload = {
+                "generated_by": "strategy_committee",
+                "target_rule": p.get("target_rule", "STRATEGY"),
+                "rule_category": p.get("rule_category", "strategy"),
+                "type": "suggest",
+                "committee_context": {
+                    "market_data": market_data,
+                    "bull": {
+                        "thesis": bull_thesis,
+                        "confidence": bull_confidence,
+                        "raw": bull_resp,
+                    },
+                    "bear": {
+                        "thesis": bear_thesis,
+                        "confidence": bear_confidence,
+                        "raw": bear_resp,
+                    },
+                    "arbiter": {
+                        "summary": arbiter_resp.get("summary", ""),
+                        "stance": arbiter_resp.get("stance", "neutral"),
+                        "decision_basis": arbiter_resp.get("decision_basis", {}),
+                        "raw": arbiter_resp,
+                    },
+                },
+            }
             write_proposal(
                 _conn,
                 generated_by="strategy_committee",
@@ -133,6 +169,7 @@ def run_strategy_committee(
                 confidence=float(p.get("confidence", 0.5)),
                 requires_human_approval=1,   # 策略小組建議必須人工確認
                 proposal_type="suggest",
+                proposal_payload=proposal_payload,
             )
         return result
     finally:
