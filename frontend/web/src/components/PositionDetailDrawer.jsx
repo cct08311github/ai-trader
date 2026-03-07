@@ -19,25 +19,46 @@ function QuotePanel({ symbol }) {
         authFetch(`${base}/api/portfolio/quote/${encodeURIComponent(symbol)}`)
             .then(r => r.json())
             .then(d => { if (d?.data) { setSnap(d.data); setSource(d.source) } })
-            .catch(() => {})
+            .catch(() => { })
     }, [symbol])
 
     // BidAsk SSE 即時訂閱
+    // Throttled via rAF: we store the latest value in a ref and commit to state
+    // once per animation frame to prevent rapid quote pushes from causing jank.
     useEffect(() => {
         if (!symbol) return
         const base = getApiBase()
         const token = getToken()
         const url = `${base}/api/portfolio/quote-stream/${encodeURIComponent(symbol)}${token ? `?token=${token}` : ''}`
         const es = new EventSource(url)
+
+        const latestRef = { current: null }
+        let rafId = null
+
+        function flushBidask() {
+            rafId = null
+            if (latestRef.current) {
+                setBidask(latestRef.current)
+                latestRef.current = null
+            }
+        }
+
         es.onopen = () => setLive(true)
         es.onmessage = e => {
             try {
                 const d = JSON.parse(e.data)
-                if (d.type === 'bidask') setBidask(d)
-            } catch {}
+                if (d.type === 'bidask') {
+                    latestRef.current = d
+                    if (rafId == null) rafId = requestAnimationFrame(flushBidask)
+                }
+            } catch { }
         }
         es.onerror = () => setLive(false)
-        return () => { es.close(); setLive(false) }
+        return () => {
+            if (rafId != null) cancelAnimationFrame(rafId)
+            es.close()
+            setLive(false)
+        }
     }, [symbol])
 
     const bids = (bidask?.bid_price || []).map((p, i) => ({ price: p, vol: bidask.bid_volume?.[i] ?? 0 }))
@@ -71,10 +92,9 @@ function QuotePanel({ symbol }) {
                 </div>
                 <div>
                     <div className="text-slate-500 mb-0.5">漲跌幅</div>
-                    <div className={`text-base font-semibold ${
-                        snap?.change_rate == null ? 'text-slate-400'
-                        : snap.change_rate >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}>
+                    <div className={`text-base font-semibold ${snap?.change_rate == null ? 'text-slate-400'
+                            : snap.change_rate >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
                         {snap?.change_rate != null
                             ? `${snap.change_rate >= 0 ? '+' : ''}${snap.change_rate.toFixed(2)}%`
                             : '—'}
@@ -204,11 +224,10 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                             onClick={handleToggleLock}
                             disabled={lockLoading}
                             title={isLocked ? '解除鎖定（允許賣出）' : '鎖定（禁止 AI 賣出）'}
-                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
-                                isLocked
+                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${isLocked
                                     ? 'bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 ring-1 ring-amber-500/30'
                                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                            }`}
+                                }`}
                         >
                             {isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
                             {lockLoading ? '處理中…' : isLocked ? '解除鎖定' : '鎖定持股'}

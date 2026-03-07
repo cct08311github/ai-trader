@@ -130,11 +130,27 @@ function ClosePositionModal({ position, onConfirm, onCancel, busy }) {
 }
 
 export default function PortfolioPage() {
-  const [positions, setPositions] = useState([])
-  const [source, setSource] = useState('api')
+  // Single reducer for atomic fetch transitions (no partial state renders)
+  const [fetchState, dispatch] = React.useReducer(
+    (state, action) => {
+      switch (action.type) {
+        case 'FETCH_START':
+          return { ...state, loading: true, error: null }
+        case 'FETCH_SUCCESS':
+          return { ...state, loading: false, error: null, positions: action.positions, backendKpis: action.backendKpis, source: 'api' }
+        case 'FETCH_ERROR':
+          return { ...state, loading: false, positions: [], source: 'error', error: action.error }
+        case 'SET_MOCK':
+          return { ...state, loading: false, error: null, positions: action.positions, source: 'mock' }
+        default:
+          return state
+      }
+    },
+    { positions: [], source: 'api', error: null, loading: false, backendKpis: { available_cash: 0, today_trades_count: 0, overall_win_rate: 0 } }
+  )
+  const { positions, source, error, loading, backendKpis } = fetchState
+
   const [preferApi, setPreferApi] = useState(true)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
   // Drawer state — design doc §4.1
   const [drawerSymbol, setDrawerSymbol] = useState(null)
   const [drawerPosition, setDrawerPosition] = useState(null)
@@ -145,7 +161,6 @@ export default function PortfolioPage() {
 
   const [equitySeries, setEquitySeries] = useState([])
   const [equitySource, setEquitySource] = useState('讀取中...')
-  const [backendKpis, setBackendKpis] = useState({ available_cash: 0, today_trades_count: 0, overall_win_rate: 0 })
   const [lockedSymbols, setLockedSymbols] = useState(new Set())
 
   // P1-6: Fetch real equity curve on mount; fallback to mock if no DB data
@@ -162,16 +177,12 @@ export default function PortfolioPage() {
   }, [])
 
   async function load(nextPreferApi = preferApi) {
-    setLoading(true)
-    setError(null)
-
     if (!nextPreferApi) {
-      setPositions(mockPositions)
-      setSource('mock')
-      setLoading(false)
+      dispatch({ type: 'SET_MOCK', positions: mockPositions })
       return
     }
 
+    dispatch({ type: 'FETCH_START' })
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 10000)
 
@@ -180,16 +191,11 @@ export default function PortfolioPage() {
         fetchPortfolioPositions({ signal: controller.signal }),
         fetchPortfolioKpis({ signal: controller.signal })
       ])
-      setPositions(data)
-      setBackendKpis(kpisData)
-      setSource('api')
+      dispatch({ type: 'FETCH_SUCCESS', positions: data, backendKpis: kpisData })
     } catch (e) {
-      setPositions([])
-      setSource('error')
-      setError(String(e?.message || e))
+      dispatch({ type: 'FETCH_ERROR', error: String(e?.message || e) })
     } finally {
       clearTimeout(timeout)
-      setLoading(false)
     }
   }
 

@@ -60,6 +60,33 @@ export default function LogTerminal() {
     const url = `${apiBase}/api/stream/logs${token ? `?token=${token}` : ''}`
     const es = new EventSource(url)
 
+    // Buffer incoming SSE messages and flush once per animation frame (~60fps).
+    // This prevents log bursts from triggering hundreds of synchronous React
+    // state updates, which would cause noticeable UI jank.
+    const pending = []
+    let rafId = null
+
+    function flushPending() {
+      rafId = null
+      if (pending.length === 0) return
+      const batch = pending.splice(0)
+      setLogs(prev => {
+        let next = [...prev]
+        for (const payload of batch) {
+          if (payload?._isHeartbeat) {
+            // Keep only the latest heartbeat entry.
+            next = next.filter(x => x?.type !== 'heartbeat')
+          }
+          next.push(payload)
+        }
+        return next.slice(-500)
+      })
+    }
+
+    function scheduleFlush() {
+      if (rafId == null) rafId = requestAnimationFrame(flushPending)
+    }
+
     const onOpen = () => {
       setConnected(true)
       setErr(null)
@@ -72,22 +99,17 @@ export default function LogTerminal() {
 
     const onHeartbeat = e => {
       const payload = safeJsonParse(e.data) || { level: 'INFO', message: 'heartbeat', ts: Date.now(), type: 'heartbeat' }
-      // Don’t spam UI with heartbeats; keep only the latest heartbeat.
-      setLogs(prev => {
-        const next = prev.filter(x => x?.type !== 'heartbeat')
-        next.push(payload)
-        return next.slice(-500)
-      })
+      payload._isHeartbeat = true
+      pending.push(payload)
+      scheduleFlush()
     }
 
     const onLog = e => {
       const payload = safeJsonParse(e.data)
       if (!payload) return
       if (e?.lastEventId) lastEventIdRef.current = e.lastEventId
-      setLogs(prev => {
-        const next = [...prev, payload]
-        return next.slice(-500)
-      })
+      pending.push(payload)
+      scheduleFlush()
     }
 
     es.addEventListener('open', onOpen)
@@ -96,6 +118,7 @@ export default function LogTerminal() {
     es.addEventListener('log', onLog)
 
     return () => {
+      if (rafId != null) cancelAnimationFrame(rafId)
       es.close()
       setConnected(false)
     }
