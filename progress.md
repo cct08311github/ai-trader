@@ -113,6 +113,17 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] added `src/tests/test_report_context_client.py`
   - [x] QA: consumer helper tests + CLI `--help`
 
+### Batch 20: Runtime Config Baseline Review (2026-03-07)
+
+- [x] **Production-bound runtime config review**
+  - [x] analyzed `config/daily_pm_state.json` as deploy-time trading gate state
+  - [x] rejected committing date-bound `manual_override approved=true` state into `main`
+  - [x] replaced `daily_pm_state.json` with fail-closed deploy baseline (`approved=false`, `source=pending`, `date=null`)
+  - [x] analyzed `config/capital.json` change from `0.333...` to `0.5`
+  - [x] rejected unreviewed single-position limit loosening for production deployment
+  - [x] restored conservative `max_single_position_pct=0.33299999999999996`
+  - [x] QA: `daily_pm_review`, `risk_engine`, `settings_api`, `system_api`, `chat_context`
+
 ### QA Snapshot (2026-03-07)
 
 | Test Suite | Count | Result |
@@ -156,6 +167,13 @@ Last updated: 2026-03-07 Asia/Taipei
 - [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_ticker_watcher.py src/tests/test_proposal_executor.py src/tests/test_report_context_client.py`
 - [x] `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --help`
 
+### QA Refresh After Batch 20
+
+- [x] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py frontend/backend/tests/test_settings_api.py frontend/backend/tests/test_system_api.py frontend/backend/tests/test_chat_context.py`
+- [x] verified committed runtime baselines:
+  - [x] `config/daily_pm_state.json` is fail-closed
+  - [x] `config/capital.json` keeps conservative single-position cap
+
 ---
 
 ## Pending Checklist
@@ -182,6 +200,12 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] add in-repo consumer helper + CLI (`src/openclaw/report_context_client.py`, `tools/fetch_report_context.py`) — batch 19
   - [ ] identify external consumers (OpenClaw finance/researcher agents) and confirm integration path
   - acceptance: future AI sessions find the endpoint in docs without reading code
+
+- [ ] **Runtime config governance follow-up**
+  - [ ] decide whether `config/daily_pm_state.json` should remain tracked or move to generated/runtime-only handling
+  - [ ] decide whether `config/capital.json` needs explicit approval workflow for production limit changes
+  - [ ] add docs/runbook note for “tracked deploy baseline vs runtime operator override”
+  - acceptance: future runtime config changes are intentional and reviewable
 
 - [ ] **Operator UI polish and chunking**
   - [ ] review `frontend/web` build warning: `index.js` 790KB > 500KB threshold
@@ -275,6 +299,7 @@ cd frontend/web && npm test -- --run && npm run build
 - runtime config stash dropped (all obsolete)
 - next task: pick from **Pending Checklist** (P1 deferred or P2)
 - last parallel batches:
+  - `Batch 20` runtime baseline review completed on `main`
   - `59cc09b` watcher execution journal regression coverage
   - `1eacca0` report context consumer helper + CLI
 - P2 items are independent — safe for parallel AI sessions
