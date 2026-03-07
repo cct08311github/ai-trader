@@ -252,6 +252,20 @@ bin/run_incident_resolution.sh \
   --reason "allowlist updated"
 ```
 
+Script-friendly variants:
+
+```bash
+bin/run_incident_resolution.sh --summary-only
+bin/run_incident_resolution.sh --jsonl
+bin/run_incident_resolution.sh \
+  --source network_security \
+  --code SEC_NETWORK_IP_DENIED \
+  --severity critical \
+  --action-type incident_resolve \
+  --target-ref network_security \
+  --summary-only
+```
+
 ## Manual Commands
 
 ### Force a fresh ops snapshot
