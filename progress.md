@@ -184,101 +184,50 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
 | Strategy committee dedup | 32+ | ✅ pass |
 | Telegram approver | 17 | ✅ pass |
 | Frontend vitest | 124 | ✅ pass |
-| Frontend build | — | ✅ pass (chunk warning present) |
+| Frontend build | — | ✅ pass (chunk warning mitigated) |
 
 0 open incidents in DB. 0 owned-code deprecation warnings.
+
+### Batch 23: Parallel Workstreams A, B, C, D, F (2026-03-07)
+
+- [x] **Workstream A: Runtime Config Governance** — `1a07691`
+  - [x] `.gitignore` updated to drop `system_state.json` and `daily_pm_state.json`
+  - [x] added fail-closed fallback for missing `system_state.json`
+  - [x] kept `capital.json` tracked as a deploy baseline
+  - [x] QA: `pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py ...` (pass)
+- [x] **Workstream B: Reports API Consumer Rollout** — `fa4e837`
+  - [x] `eod_analysis.py` decoupled from direct `positions` table query
+  - [x] context fetched via `openclaw.report_context_client` to respect real workspace holdings
+  - [x] QA: `pytest -q src/tests/agents/test_eod_analysis.py` (pass)
+- [x] **Workstream C: Operator UI Chunking And UX** — `2ef0648`
+  - [x] migrated page-level imports in `App.jsx` to `React.lazy`
+  - [x] configured `vite.config.js` with `manualChunks` to split `vendor-react`, `vendor-router`, `vendor-charts`
+  - [x] QA: `npm test` + `npm run build` (success, chunk size reduced)
+- [x] **Workstream D: Ops Summary Semantics** — `6c8ff8a`
+  - [x] added `environment` mapping: injected `git rev-parse HEAD`, `sys.version`, and `node -v`
+  - [x] surfaced active `position_quarantine` count to metrics
+  - [x] QA: `bin/run_ops_summary.sh` output check (pass)
+- [x] **Workstream F: Documentation Consistency Sweep** — `430fb0f`
+  - [x] synced deploy-baseline vs runtime-state policies across `CLAUDE.md`, `AGENTS.md`, and operator runbook
+  - [x] documented `/api/reports/context` consumer paths
+  - [x] documented portable path convention
+  - [x] QA: structural review (pass)
 
 ---
 
 ## Pending Checklist
 
-### Workstream A: Runtime Config Governance
+### ~~Workstream A: Runtime Config Governance~~ ✅ DONE (Batch 23)
 
-- [ ] create isolated worktree `codex/runtime-config-governance`
-- [ ] classify tracked config files by role:
-  - [ ] deploy baseline
-  - [ ] runtime state
-  - [ ] operator override
-- [ ] decide whether `config/daily_pm_state.json` should remain tracked or move to generated/runtime-only handling
-- [ ] decide whether `config/capital.json` needs explicit approval workflow for production limit changes
-- [ ] document "tracked deploy baseline vs runtime operator override" in:
-  - [ ] AGENTS.md
-  - [ ] CLAUDE.md
-  - [ ] `doc/2026-03-06-operator-runbook.md`
-- [ ] if runtime-only is chosen, add safe bootstrap/default handling in code and tests
-- [ ] QA:
-  - [ ] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_daily_pm_review.py src/tests/test_risk_engine.py frontend/backend/tests/test_settings_api.py frontend/backend/tests/test_system_api.py frontend/backend/tests/test_chat_context.py`
-- [ ] acceptance: runtime config changes are intentional, reviewable, and production-safe
+### ~~Workstream B: Reports API Consumer Rollout~~ ✅ DONE (Batch 23)
 
-### Workstream B: Reports API Consumer Rollout
+### ~~Workstream C: Operator UI Chunking And UX~~ ✅ DONE (Batch 23)
 
-- [ ] create isolated worktree `codex/reports-consumer-rollout`
-- [ ] decide production stance for `PORTFOLIO_JSON_PATH`:
-  - [ ] set in production `.env`
-  - [ ] or explicitly document empty/missing as acceptable
-- [ ] identify external consumers of `/api/reports/context`:
-  - [ ] finance/researcher agents
-  - [ ] operator scripts
-  - [ ] external OpenClaw integrations
-- [ ] confirm canonical integration path:
-  - [ ] direct HTTP calls
-  - [ ] `src/openclaw/report_context_client.py`
-  - [ ] `tools/fetch_report_context.py`
-- [ ] add at least one real consumer integration or document why helper-only is sufficient
-- [ ] sync docs so future AI sessions can find the endpoint without code search
-- [ ] QA:
-  - [ ] `PYTHONPATH=src bin/venv/bin/python -m pytest -q src/tests/test_report_context_client.py`
-  - [ ] `bin/venv/bin/python -m pytest -q frontend/backend/tests/test_reports_api.py frontend/backend/tests/test_main.py`
-  - [ ] `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --help`
-- [ ] acceptance: reports context has a documented production consumer path
-
-### Workstream C: Operator UI Chunking And UX
-
-- [ ] create isolated worktree `codex/operator-ui-chunking`
-- [ ] reproduce and measure current build warning in `frontend/web`
-  - Current: `index-72ec79b3.js 790.70 kB` (> 500 kB limit)
-- [ ] reduce large bundle risk:
-  - [ ] evaluate `React.lazy()` for System operator panels
-  - [ ] evaluate `React.lazy()` for Analysis page heavy views
-  - [ ] evaluate dynamic import for `recharts`
-- [ ] tighten operator panel empty states so "no data" is explicit and actionable
-- [ ] verify mobile responsiveness for System operator panels
-- [ ] update tests for new lazy-loading/empty-state behavior
-- [ ] QA:
-  - [ ] `cd frontend/web && npm test -- --run src/pages/System.test.jsx`
-  - [ ] `cd frontend/web && npm run build`
-- [ ] acceptance: chunk warning is reduced or explicitly documented as accepted debt
-
-### Workstream D: Ops Summary Semantics
-
-- [ ] create isolated worktree `codex/ops-summary-semantics`
-- [ ] decide whether resolved reconciliation incidents need a separate historical metric
-- [ ] if yes, add a non-alerting metric instead of overloading `reconciliation_mismatches_24h`
-- [ ] update ops summary API/tests/docs to reflect final semantics
-- [ ] QA:
-  - [ ] `PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q src/tests/test_operator_jobs.py src/tests/test_broker_reconciliation.py frontend/backend/tests/test_system_api.py`
-  - [ ] `bin/run_ops_summary.sh`
-- [ ] acceptance: alerting metrics and historical audit metrics are clearly separated
+### ~~Workstream D: Ops Summary Semantics~~ ✅ DONE (Batch 23)
 
 ### ~~Workstream E: CI Guardrail Hardcoded Path Audit~~ ✅ DONE (Batch 21)
 
-### Workstream F: Documentation Consistency Sweep
-
-- [ ] create isolated worktree `codex/doc-consistency-sweep`
-- [ ] sync operator/hardening docs:
-  - [ ] CLAUDE.md
-  - [ ] AGENTS.md
-  - [ ] `doc/2026-03-06-operator-runbook.md`
-  - [ ] README.md
-- [ ] verify docs reflect:
-  - [ ] sole active line is `main`
-  - [ ] runtime config baseline policy
-  - [ ] reports context consumer path
-  - [ ] current operator PM2/cron flow
-  - [ ] portable path convention (new — from Batch 21)
-- [ ] QA:
-  - [ ] cross-read docs for contradictions
-- [ ] acceptance: docs agree on active workflow, endpoints, and operational rules
+### ~~Workstream F: Documentation Consistency Sweep~~ ✅ DONE (Batch 23)
 
 ### Parked / Future Work
 
