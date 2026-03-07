@@ -185,4 +185,22 @@ describe('SystemPage', () => {
     expect(screen.getByPlaceholderText('SEC_NETWORK_IP_DENIED')).toHaveValue('SEC_NETWORK_IP_DENIED')
     expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('2330')
   })
+
+  it('applies incident preset shortcuts', () => {
+    renderPage()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Network preset' }))
+
+    expect(screen.getByPlaceholderText('network_security')).toHaveValue('network_security')
+    expect(screen.getByPlaceholderText('SEC_NETWORK_IP_DENIED')).toHaveValue('SEC_NETWORK_IP_DENIED')
+  })
+
+  it('resets incident filters', () => {
+    renderPageAt('/system?incident_source=network_security&incident_code=SEC_NETWORK_IP_DENIED&incident_severity=critical')
+
+    fireEvent.click(screen.getByRole('button', { name: '清空' }))
+
+    expect(screen.getByPlaceholderText('network_security')).toHaveValue('')
+    expect(screen.getByPlaceholderText('SEC_NETWORK_IP_DENIED')).toHaveValue('')
+  })
 })

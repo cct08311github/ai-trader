@@ -473,9 +473,33 @@ function IncidentClusterPanel({ clusters, resolvingFingerprint, resolveCluster, 
   )
 }
 
-function IncidentFilterPanel({ filters, onChange }) {
+function IncidentFilterPanel({ filters, onChange, onPreset, onReset }) {
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Incident Filters</div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onPreset?.({ source: 'network_security', code: 'SEC_NETWORK_IP_DENIED', severity: 'critical' })}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            Network preset
+          </button>
+          <button
+            onClick={() => onPreset?.({ source: 'broker_reconciliation', code: 'RECONCILIATION_MISMATCH', severity: '' })}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            Recon preset
+          </button>
+          <button
+            onClick={onReset}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
+          >
+            清空
+          </button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
       <label className="text-xs text-slate-400">
         Source
         <input
@@ -507,6 +531,7 @@ function IncidentFilterPanel({ filters, onChange }) {
           <option value="info">info</option>
         </select>
       </label>
+      </div>
     </div>
   )
 }
@@ -616,6 +641,18 @@ export default function SystemPage() {
     setIncidentFilters((prev) => ({ ...prev, [key]: value }))
   }
 
+  const applyIncidentPreset = (preset) => {
+    setIncidentFilters({
+      source: preset.source || '',
+      code: preset.code || '',
+      severity: preset.severity || '',
+    })
+  }
+
+  const resetIncidentFilters = () => {
+    setIncidentFilters({ source: '', code: '', severity: '' })
+  }
+
   const updateRemediationFilter = (key, value) => {
     setRemediationFilters((prev) => ({ ...prev, [key]: value }))
   }
@@ -687,7 +724,12 @@ export default function SystemPage() {
             resolveCluster={resolveCluster}
             onResolved={handleClusterResolved}
           />
-          <IncidentFilterPanel filters={incidentFilters} onChange={updateIncidentFilter} />
+          <IncidentFilterPanel
+            filters={incidentFilters}
+            onChange={updateIncidentFilter}
+            onPreset={applyIncidentPreset}
+            onReset={resetIncidentFilters}
+          />
           <RemediationHistoryPanel remediation={remediation} filters={remediationFilters} onFilterChange={updateRemediationFilter} />
           <EventsPanel events={events} />
         </div>
