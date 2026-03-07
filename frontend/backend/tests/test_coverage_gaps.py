@@ -874,7 +874,12 @@ class TestPortfolioClosePositionBrokerFlow:
 
         class MockOrderCandidate:
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
+                self.opens_new_position = False
 
         class MockBrokerWithNone:
             def submit_order(self, order_id, candidate):
@@ -951,7 +956,12 @@ class TestPortfolioClosePositionBrokerFlow:
 
         class MockOrderCandidate:
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
+                self.opens_new_position = False
 
         class MockBroker:
             def submit_order(self, order_id, candidate):
@@ -1061,7 +1071,12 @@ class TestPortfolioClosePositionBrokerFlow:
 
         class MockOrderCandidate:
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
+                self.opens_new_position = False
 
         fake_broker_mod = types.ModuleType("openclaw.broker")
         fake_broker_mod.SimBrokerAdapter = MockBrokerPending
@@ -1331,7 +1346,12 @@ class TestPortfolioClosePositionWithCurrentPrice:
 
         class MockOrderCandidate:
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
+                self.opens_new_position = False
 
         class MockBroker:
             def submit_order(self, order_id, candidate):

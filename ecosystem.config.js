@@ -1,9 +1,13 @@
+const path = require('path');
+const REPO = __dirname;
+const HOME = process.env.HOME || process.env.USERPROFILE || '/tmp';
+
 module.exports = {
   apps: [
     {
       name: "ai-trader-api",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend/run.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/backend",
+      script: path.join(REPO, "frontend/backend/run.sh"),
+      cwd: path.join(REPO, "frontend/backend"),
       interpreter: "bash",
       instances: 1,
       autorestart: true,
@@ -11,14 +15,14 @@ module.exports = {
       max_memory_restart: "1G",
       env: {
         NODE_ENV: "development",
-        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db"
+        DB_PATH: path.join(REPO, "data/sqlite/trades.db")
       }
     },
     {
       name: "ai-trader-web",
       script: "npm",
       args: "run dev -- --host 127.0.0.1 --port 3000",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader/frontend/web",
+      cwd: path.join(REPO, "frontend/web"),
       instances: 1,
       autorestart: true,
       watch: false,
@@ -29,8 +33,8 @@ module.exports = {
     ,
     {
       name: "ai-trader-watcher",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_watcher.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      script: path.join(REPO, "bin/run_watcher.sh"),
+      cwd: REPO,
       interpreter: "bash",
       instances: 1,
       autorestart: true,
@@ -41,8 +45,8 @@ module.exports = {
     },
     {
       name: "ai-trader-agents",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_agents.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      script: path.join(REPO, "bin/run_agents.sh"),
+      cwd: REPO,
       interpreter: "bash",
       instances: 1,
       autorestart: true,
@@ -52,45 +56,45 @@ module.exports = {
     },
     {
       name: "ai-trader-ops-summary",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_ops_summary.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      script: path.join(REPO, "bin/run_ops_summary.sh"),
+      cwd: REPO,
       interpreter: "bash",
       instances: 1,
       autorestart: false,
       watch: false,
       cron_restart: "*/15 * * * *",
       env: {
-        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
-        OPS_SUMMARY_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/ops_summary"
+        DB_PATH: path.join(REPO, "data/sqlite/trades.db"),
+        OPS_SUMMARY_OUTPUT_DIR: path.join(REPO, "data/ops/ops_summary")
       }
     },
     {
       name: "ai-trader-reconciliation",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_reconciliation.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      script: path.join(REPO, "bin/run_reconciliation.sh"),
+      cwd: REPO,
       interpreter: "bash",
       instances: 1,
       autorestart: false,
       watch: false,
       cron_restart: "45 16 * * 1-5",
       env: {
-        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
-        RECON_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/reconciliation",
+        DB_PATH: path.join(REPO, "data/sqlite/trades.db"),
+        RECON_OUTPUT_DIR: path.join(REPO, "data/ops/reconciliation"),
         RECON_BROKER_SOURCE: "shioaji"
       }
     },
     {
       name: "ai-trader-incident-hygiene",
-      script: "/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/run_incident_hygiene.sh",
-      cwd: "/Users/openclaw/.openclaw/shared/projects/ai-trader",
+      script: path.join(REPO, "bin/run_incident_hygiene.sh"),
+      cwd: REPO,
       interpreter: "bash",
       instances: 1,
       autorestart: false,
       watch: false,
       cron_restart: "55 16 * * 1-5",
       env: {
-        DB_PATH: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/sqlite/trades.db",
-        INCIDENT_HYGIENE_OUTPUT_DIR: "/Users/openclaw/.openclaw/shared/projects/ai-trader/data/ops/incident_hygiene"
+        DB_PATH: path.join(REPO, "data/sqlite/trades.db"),
+        INCIDENT_HYGIENE_OUTPUT_DIR: path.join(REPO, "data/ops/incident_hygiene")
       }
     }
   ]
