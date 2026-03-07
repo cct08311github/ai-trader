@@ -27,10 +27,7 @@ import app.db as db
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 _TZ_TWN = timezone(timedelta(hours=8))
-_PORTFOLIO_JSON = os.environ.get(
-    "PORTFOLIO_JSON_PATH",
-    os.path.expanduser("~/.openclaw/workspace-finance/portfolio.json"),
-)
+_PORTFOLIO_JSON = os.environ.get("PORTFOLIO_JSON_PATH", "")
 
 
 def conn_dep():
