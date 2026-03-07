@@ -10,7 +10,7 @@ import PositionDetailDrawer from './PositionDetailDrawer'
 // Mock EventSource (used by QuotePanel SSE)
 class MockEventSource {
   constructor(url) { this.url = url; this.onopen = null; this.onmessage = null; this.onerror = null }
-  close() {}
+  close() { }
 }
 global.EventSource = MockEventSource
 
@@ -58,60 +58,57 @@ describe('PositionDetailDrawer', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('shows symbol in header', () => {
+  it('shows symbol in header', async () => {
     renderDrawer()
     // Symbol appears in the drawer header or title
-    expect(screen.getAllByText(/2330/).length).toBeGreaterThan(0)
+    expect(await screen.findAllByText(/2330/)).toBeTruthy()
   })
 
   it('shows position qty and avg price', async () => {
     renderDrawer()
-    // avg_price 600 appears once async detail loads (formatCurrency → "TWD 600")
+    // Waiting for content ensures act() compliance
     await waitFor(() => expect(screen.getByText(/600/)).toBeInTheDocument())
   })
 
-  it('shows 即時報價 section (QuotePanel)', () => {
+  it('shows 即時報價 section (QuotePanel)', async () => {
     renderDrawer()
-    expect(screen.getByText('即時報價')).toBeInTheDocument()
+    expect(await screen.findByText('即時報價')).toBeInTheDocument()
   })
 
-  it('shows 等待開盤 when SSE not live', () => {
+  it('shows 等待開盤 when SSE not live', async () => {
     renderDrawer()
-    expect(screen.getByText('等待開盤')).toBeInTheDocument()
+    expect(await screen.findByText('等待開盤')).toBeInTheDocument()
   })
 
-  it('shows lock button', () => {
+  it('shows lock button', async () => {
     renderDrawer({ isLocked: false })
-    // Should have a lock/unlock action button
+    await screen.findByText(/2330/)
     const btns = screen.queryAllByRole('button')
     expect(btns.length).toBeGreaterThan(0)
   })
 
-  it('shows locked indicator when isLocked=true', () => {
+  it('shows locked indicator when isLocked=true', async () => {
     renderDrawer({ isLocked: true })
-    // Some visual indicator of locked state
-    expect(screen.queryAllByText(/鎖定|解鎖|locked/i).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/鎖定|解鎖|locked/i)).length).toBeGreaterThan(0)
   })
 
   it('calls onClose when backdrop is clicked', async () => {
     const onClose = vi.fn()
     renderDrawer({ onClose })
-    // backdrop has onClick={onClose}
+    await screen.findByText(/2330/)
     const backdrop = document.querySelector('[aria-hidden="true"]')
     if (backdrop) await userEvent.click(backdrop)
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows 讀取中 while detail is loading', () => {
+  it('shows 讀取中 while detail is loading', async () => {
     renderDrawer()
-    // authFetch is mocked to return immediately but in initial render it's loading
-    const loadingEls = screen.queryAllByText(/讀取中|載入|loading/i)
-    // Either shows loading or has already resolved (mocked)
-    expect(document.body).toBeTruthy()  // component renders without crash
+    // It will either show loading or resolve fast
+    expect(await screen.findByText(/2330/)).toBeInTheDocument()
   })
 
-  it('shows 開盤後顯示五檔行情 when no bidask data', () => {
+  it('shows 開盤後顯示五檔行情 when no bidask data', async () => {
     renderDrawer()
-    expect(screen.getByText('開盤後顯示五檔行情')).toBeInTheDocument()
+    expect(await screen.findByText('開盤後顯示五檔行情')).toBeInTheDocument()
   })
 })

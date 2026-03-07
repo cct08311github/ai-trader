@@ -30,10 +30,14 @@ vi.mock('../lib/symbolNames', () => ({
 const mockChipsData = {
   trade_date: '2026-03-03',
   data: [
-    { symbol: '2330', name: '台積電', foreign_net: 550000, trust_net: 100000,
-      dealer_net: 60000, total_net: 710000, margin_balance: 12000, short_balance: 500 },
-    { symbol: '2412', name: '中華電', foreign_net: -200000, trust_net: -100000,
-      dealer_net: 5000, total_net: -295000, margin_balance: 3000, short_balance: 200 },
+    {
+      symbol: '2330', name: '台積電', foreign_net: 550000, trust_net: 100000,
+      dealer_net: 60000, total_net: 710000, margin_balance: 12000, short_balance: 500
+    },
+    {
+      symbol: '2412', name: '中華電', foreign_net: -200000, trust_net: -100000,
+      dealer_net: 5000, total_net: -295000, margin_balance: 3000, short_balance: 200
+    },
   ],
 }
 
@@ -49,10 +53,14 @@ const mockReport = {
     ],
   },
   technical: {
-    '2330': { close: 1000, ma5: 990, ma20: 975, ma60: 950, rsi14: 55,
-              macd: { macd: 5, signal: 4, histogram: 1 }, support: 960, resistance: 1020 },
-    '2412': { close: 120, ma5: 118, ma20: 115, ma60: 110, rsi14: 62,
-              macd: { macd: 1.5, signal: 1.2, histogram: 0.3 }, support: 112, resistance: 125 },
+    '2330': {
+      close: 1000, ma5: 990, ma20: 975, ma60: 950, rsi14: 55,
+      macd: { macd: 5, signal: 4, histogram: 1 }, support: 960, resistance: 1020
+    },
+    '2412': {
+      close: 120, ma5: 118, ma20: 115, ma60: 110, rsi14: 62,
+      macd: { macd: 1.5, signal: 1.2, histogram: 0.3 }, support: 112, resistance: 125
+    },
   },
   strategy: {
     summary: '整體中性',
@@ -90,7 +98,7 @@ function makeFetchMock(report = mockReport) {
 }
 
 function renderPage() {
-  return render(<MemoryRouter><AnalysisPage /></MemoryRouter>)
+  return render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><AnalysisPage /></MemoryRouter>)
 }
 
 async function renderAndLoad() {
@@ -116,13 +124,13 @@ afterEach(() => vi.clearAllMocks())
 // PAGE-LEVEL TESTS
 // ══════════════════════════════════════════════════════════════════════════════
 describe('AnalysisPage — page shell', () => {
-  it('renders page title', () => {
+  it('renders page title', async () => {
     renderPage()
-    expect(screen.getByText('盤後分析')).toBeTruthy()
+    expect(await screen.findByText('盤後分析')).toBeTruthy()
   })
 
   it('shows loading indicator while fetching', () => {
-    global.fetch = vi.fn(() => new Promise(() => {}))  // never resolves
+    global.fetch = vi.fn(() => new Promise(() => { }))  // never resolves
     renderPage()
     expect(screen.getByText('讀取中…')).toBeTruthy()
   })
@@ -130,19 +138,19 @@ describe('AnalysisPage — page shell', () => {
   it('shows 404 / no-data message when API returns 404', async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
     renderPage()
-    await waitFor(() => screen.getByText(/盤後分析尚未產生/))
+    expect(await screen.findByText(/盤後分析尚未產生/)).toBeInTheDocument()
   })
 
   it('shows error message on non-404 HTTP error', async () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
     renderPage()
-    await waitFor(() => screen.getByText(/無法載入盤後分析/))
+    expect(await screen.findByText(/無法載入盤後分析/)).toBeInTheDocument()
   })
 
   it('shows error message on network failure', async () => {
     global.fetch = vi.fn().mockRejectedValue(new Error('Network error'))
     renderPage()
-    await waitFor(() => screen.getByText(/無法載入盤後分析/))
+    expect(await screen.findByText(/無法載入盤後分析/)).toBeInTheDocument()
   })
 
   it('displays trade date after load', async () => {
@@ -476,7 +484,7 @@ describe('ChipsTab — 法人籌碼', () => {
   // ── Loading state ────────────────────────────────────────────────────────
   it('shows loading state while chips data is fetching', async () => {
     global.fetch = vi.fn().mockImplementation((url) => {
-      if (String(url).includes('/api/chips/')) return new Promise(() => {})  // never resolves
+      if (String(url).includes('/api/chips/')) return new Promise(() => { })  // never resolves
       return Promise.resolve({ ok: true, status: 200, json: async () => mockReport })
     })
     renderPage()

@@ -117,7 +117,7 @@ function renderPageAt(entry) {
   return render(
     <ThemeProvider defaultTheme="dark">
       <ToastProvider>
-        <MemoryRouter initialEntries={[entry]}>
+        <MemoryRouter initialEntries={[entry]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <SystemPage />
         </MemoryRouter>
       </ToastProvider>

@@ -10,7 +10,7 @@ import StrategyPage from './Strategy'
 class MockEventSource {
   constructor(url) { this.url = url; this.listeners = {} }
   addEventListener(event, cb) { this.listeners[event] = cb }
-  close() {}
+  close() { }
 }
 global.EventSource = MockEventSource
 
@@ -37,7 +37,7 @@ function renderPage() {
   return render(
     <ThemeProvider defaultTheme="dark">
       <ToastProvider>
-        <MemoryRouter initialEntries={['/strategy']}>
+        <MemoryRouter initialEntries={['/strategy']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <StrategyPage />
         </MemoryRouter>
       </ToastProvider>
@@ -47,27 +47,29 @@ function renderPage() {
 
 describe('StrategyPage', () => {
 
-  it('renders without crashing', () => {
+  it('renders without crashing', async () => {
     renderPage()
-    expect(document.body).toBeTruthy()
+    expect(await screen.findByText(/策略提案/)).toBeInTheDocument()
   })
 
-  it('shows 策略提案 section heading', () => {
+  it('shows 策略提案 section heading', async () => {
     renderPage()
-    expect(screen.queryAllByText(/策略提案/).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/策略提案/)).length).toBeGreaterThan(0)
   })
 
-  it('shows proposals table headers', () => {
+  it('shows proposals table headers', async () => {
     renderPage()
+    await screen.findByText(/策略提案/)
     // Table should have these headers (column header is '標的', not '股票')
     expect(screen.getByText('標的')).toBeInTheDocument()
     expect(screen.getByText('方向')).toBeInTheDocument()
     expect(screen.getByText('狀態')).toBeInTheDocument()
   })
 
-  it('shows LLM traces section', () => {
+  it('shows LLM traces section', async () => {
     renderPage()
-    expect(screen.queryAllByText(/決策日誌|LLM Traces|llm/i).length).toBeGreaterThan(0)
+    await screen.findByText(/策略提案/)
+    expect((await screen.findAllByText(/決策日誌|LLM Traces|llm/i)).length).toBeGreaterThan(0)
   })
 
   it('table has overflow-auto wrapper for mobile scroll', () => {
