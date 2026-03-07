@@ -225,6 +225,31 @@ class TestSystemHealth:
         assert data["metrics"]["failed_executions"] == 1
         assert data["metrics"]["open_incidents"] == 1
 
+    def test_ops_summary_ignores_simulation_only_reconciliation_reports(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO reconciliation_reports VALUES ('r-sim', ?, 9, ?)",
+            (
+                int(__import__('time').time() * 1000),
+                json.dumps(
+                    {
+                        "diagnostics": {
+                            "resolved_simulation": True,
+                            "diagnosis_codes": ["MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"],
+                        }
+                    }
+                ),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/ops-summary", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["metrics"]["reconciliation_mismatches_24h"] == 0
+
     def test_latest_reconciliation_returns_latest_report(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))

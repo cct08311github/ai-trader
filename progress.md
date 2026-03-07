@@ -89,6 +89,16 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] `bin/run_ops_summary.sh`
   - [x] `bin/run_reconciliation.sh` (expected exit `1` with audit mismatch report under simulation)
 
+### Batch 18: Ops Summary Metric Alignment (2026-03-07)
+
+- [x] **P1: reconcile `reconciliation_mismatches_24h` warning metric with simulation-aware semantics**
+  - [x] `ops_health.py` now prioritizes unresolved `broker_reconciliation` incidents over raw historical reports
+  - [x] simulation-only or already-resolved historical reports no longer push `ops-summary` into warning
+  - [x] added operator job test for simulation-only reconciliation metric suppression
+  - [x] added system API test for `/api/system/ops-summary` metric suppression
+  - [x] fresh `bin/run_ops_summary.sh` snapshot now shows `reconciliation_mismatches_24h=0`
+  - [x] fresh `bin/run_ops_summary.sh` snapshot now shows `overall=ok`
+
 ### QA Snapshot (2026-03-07)
 
 | Test Suite | Count | Result |
@@ -116,6 +126,16 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] no new auto-lock applied
   - [x] no open-incident regression
 - [ ] reconcile `reconciliation_mismatches_24h=27` warning metric with simulation-aware semantics in ops summary
+
+### QA Refresh After Batch 18
+
+- [x] `src/tests/test_operator_jobs.py`
+- [x] `src/tests/test_broker_reconciliation.py`
+- [x] `frontend/backend/tests/test_system_api.py`
+- [x] fresh `bin/run_ops_summary.sh` snapshot:
+  - [x] `reconciliation_mismatches_24h=0`
+  - [x] `overall=ok`
+  - [x] `open_incidents=0`
 
 ---
 
@@ -152,6 +172,11 @@ Last updated: 2026-03-07 Asia/Taipei
   - [ ] tighten operator panel empty-state behavior (no data → clear message)
   - [ ] verify mobile responsiveness of operator panels
   - acceptance: chunk warning reduced or consciously documented as accepted debt
+
+- [ ] **Ops summary metric semantics follow-up**
+  - [ ] decide whether resolved broker reconciliation incidents should contribute to a separate historical metric
+  - [ ] if yes, add a new non-alerting metric instead of overloading `reconciliation_mismatches_24h`
+  - acceptance: warning metrics and historical audit metrics are clearly separated
 
 ### P2 Documentation Maintenance
 

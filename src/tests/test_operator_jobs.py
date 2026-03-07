@@ -147,6 +147,42 @@ def test_run_ops_summary_job_writes_snapshot(tmp_path, monkeypatch):
     assert latest["auto_lock"]["source"] == "broker_reconciliation"
 
 
+def test_run_ops_summary_job_ignores_simulation_only_reconciliation_warning(tmp_path, monkeypatch):
+    db_path = tmp_path / "trades.db"
+    out_dir = tmp_path / "ops"
+    system_state_path = tmp_path / "system_state.json"
+    make_db(db_path)
+    make_system_state(system_state_path, trading_enabled=True)
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS reconciliation_reports (report_id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, mismatch_count INTEGER NOT NULL, summary_json TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO reconciliation_reports VALUES ('r-sim', ?, 9, ?)",
+        (
+            9_999_999_999_999,
+            json.dumps(
+                {
+                    "diagnostics": {
+                        "resolved_simulation": True,
+                        "diagnosis_codes": ["MODE_OR_ACCOUNT_MISMATCH_SUSPECTED"],
+                    }
+                }
+            ),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("SYSTEM_STATE_PATH", str(system_state_path))
+    result = run_ops_summary_job(db_path=db_path, output_dir=out_dir)
+
+    latest = result["summary"]
+    assert latest["metrics"]["reconciliation_mismatches_24h"] == 0
+    assert latest["overall"] == "critical"  # failed execution + open incident from fixture still dominate
+
+
 def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
     db_path = tmp_path / "trades.db"
     out_dir = tmp_path / "recon"
