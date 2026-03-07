@@ -231,15 +231,23 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
 
 ### Parked / Future Work
 
-- [ ] **Reconciliation improvement: simulation-mode position tracking**
-  - [ ] consider separate reconciliation mode for simulation that compares local DB against expected paper positions
-  - [ ] alternative: skip reconciliation entirely in simulation and only enable when `simulation_mode=false`
-  - [ ] acceptance: reconciliation provides value in both simulation and live modes
+### ~~Workstream G: Simulation-mode reconciliation tracking~~ ✅ DONE (Batch 24)
+- [x] Chose Option: Bypassed by default in simulation mode, with `RECON_FORCE_SIMULATION=1` toggle.
+- [x] Implemented in `operator_jobs.py`.
+- [x] Verified with unit tests.
 
-- [ ] **Frontend React warnings cleanup**
-  - [ ] wrap state updates in `act()` for: AnalysisPage, InventoryPage, PortfolioPage, PositionDetailDrawer
-  - [ ] upgrade React Router to v7 or add `v7_startTransition` future flag
-  - [ ] acceptance: zero React warnings in test output
+### ~~Workstream H: Frontend React warnings cleanup~~ ✅ DONE (Batch 24)
+- [x] Wrapped async updates in `act()` (or used `await findByText`) for all main pages and components.
+- [x] Configured React Router future flags (`v7_startTransition`, `v7_relativeSplatPath`) globally and in tests.
+- [x] Verified zero console warnings in `npm test`.
+
+### Parked / Future Work
+
+- [ ] **Workstream I: Dashboard Throughput Optimization**
+  - [ ] Evaluate `OpsSummary` polling frequency vs event-based updates
+  - [ ] Implement throttle for SSE streams to prevent UI lag
+  - [ ] QA: Stress test UI with mock high-frequency updates
+  - [ ] Acceptance: UI remains responsive even with 10+ symbols streaming data
 
 ---
 
@@ -271,12 +279,14 @@ bin/venv/bin/python -m pytest -q \
 cd frontend/web && npm test -- --run && npm run build
 ```
 
-## Handoff Notes
+## Handoff Notes (Batch 24)
 
 - branch: `main` — sole active line
 - 0 open incidents in DB
-- runtime config stash dropped (all obsolete)
-- next task: pick from **Pending Checklist** (A/B/C/D/F — E is done)
+- **Workstream G completed**: Simulation-mode reconciliation bypassed by default (`da72c03`).
+- **Workstream H completed**: Frontend React warnings eliminated (`54dfdf5`).
+- next task: **Workstream I: Dashboard Throughput Optimization**
+- last batch (Batch 24) completed successfully.
 - last batch:
   - `880a9ee` — suppress duplicate strategy proposals
   - `6b48c52` — surface duplicate proposal alerts
