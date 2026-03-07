@@ -312,7 +312,7 @@ function OperatorSnapshotPanel({ quarantineStatus, quarantinePlan, clusters, rem
   )
 }
 
-function QuarantinePanel({ status, plan, planError, actionState, onApply, onClear }) {
+function QuarantinePanel({ status, plan, planError, actionState, onApply, onClear, onClearSymbol }) {
   const items = status?.items || []
   const eligibleSymbols = plan?.eligible_symbols || []
   const canApply = Boolean(plan?.safe_to_apply) && eligibleSymbols.length > 0
@@ -386,11 +386,24 @@ function QuarantinePanel({ status, plan, planError, actionState, onApply, onClea
             {items.length === 0 ? (
               <div className="text-xs text-slate-500">沒有 active quarantine</div>
             ) : items.slice(0, 6).map((item) => (
-              <div key={item.symbol} className="flex items-center justify-between text-xs">
-                <span className="text-slate-300">{item.symbol}</span>
-                <span className="text-slate-500">
-                  qty {item.position?.quantity ?? 0} · {item.reason_code}
-                </span>
+              <div key={item.symbol} className="flex items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="text-slate-300">{item.symbol}</span>
+                  <span className="ml-2 text-slate-500">
+                    qty {item.position?.quantity ?? 0} · {item.reason_code}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onClearSymbol?.(item.symbol)}
+                  disabled={actionState?.loading?.clear}
+                  className={`rounded-md px-2 py-1 text-[11px] font-medium ${
+                    actionState?.loading?.clear
+                      ? 'bg-slate-800 text-slate-500'
+                      : 'bg-slate-700 text-slate-100 hover:bg-slate-600'
+                  }`}
+                >
+                  清除此檔
+                </button>
               </div>
             ))}
           </div>
@@ -446,6 +459,11 @@ function IncidentClusterPanel({ clusters, resolvingFingerprint, resolveCluster, 
                 </button>
               </div>
               <div className="mt-3 text-xs text-slate-400 break-all">{item.fingerprint}</div>
+              {item.sample_detail && (
+                <pre className="mt-3 overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[11px] leading-5 text-slate-400">
+                  {JSON.stringify(item.sample_detail, null, 2)}
+                </pre>
+              )}
             </div>
           )
         })}
@@ -523,6 +541,15 @@ export default function SystemPage() {
     }
   }
 
+  const handleClearQuarantineSymbol = async (symbol) => {
+    const confirmed = window.confirm(`確定要清除 ${symbol} 的 quarantine 並重建持倉嗎？`)
+    if (!confirmed) return
+    const result = await quarantineActions.clearQuarantineSymbols([symbol])
+    if (result) {
+      await Promise.allSettled([refreshQuarantinePlan(), refreshQuarantineStatus(), refreshRemediation()])
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -553,6 +580,7 @@ export default function SystemPage() {
             actionState={quarantineActions}
             onApply={handleApplyQuarantine}
             onClear={handleClearQuarantine}
+            onClearSymbol={handleClearQuarantineSymbol}
           />
           <IncidentClusterPanel
             clusters={incidentClusters}

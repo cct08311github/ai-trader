@@ -16,6 +16,7 @@ const refreshQuarantineStatus = vi.fn(async () => ({}))
 const refreshQuarantinePlan = vi.fn(async () => ({}))
 const applySuggestedQuarantine = vi.fn(async () => ({ applied_count: 2 }))
 const clearAllQuarantine = vi.fn(async () => ({ cleared_count: 1 }))
+const clearQuarantineSymbols = vi.fn(async () => ({ cleared_count: 1 }))
 
 vi.mock('../components/ControlPanel', () => ({
   default: () => <div>ControlPanel Mock</div>,
@@ -66,6 +67,7 @@ vi.mock('../lib/systemApi', () => ({
         count: 2,
         latest_ts: '2026-03-07T00:00:00Z',
         fingerprint: 'network_security|SEC_NETWORK_IP_DENIED|x',
+        sample_detail: { current_ip: '8.8.8.8', allowlist: ['192.168.1.0/24'] },
       }],
     },
     resolveCluster,
@@ -92,6 +94,7 @@ vi.mock('../lib/systemApi', () => ({
     error: null,
     applySuggestedQuarantine,
     clearAllQuarantine,
+    clearQuarantineSymbols,
   }),
 }))
 
@@ -111,6 +114,7 @@ describe('SystemPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.prompt = vi.fn(() => 'root cause remediated')
+    window.confirm = vi.fn(() => true)
   })
 
   it('renders operator panels and remediation data', () => {
@@ -122,6 +126,7 @@ describe('SystemPage', () => {
     expect(screen.getByText('Remediation History')).toBeInTheDocument()
     expect(screen.getAllByText('2330').length).toBeGreaterThan(0)
     expect(screen.getByText(/network_security \/ SEC_NETWORK_IP_DENIED/)).toBeInTheDocument()
+    expect(screen.getByText(/8.8.8.8/)).toBeInTheDocument()
   })
 
   it('triggers cluster resolution from the operator panel', async () => {
@@ -145,5 +150,14 @@ describe('SystemPage', () => {
     await user.click(screen.getByRole('button', { name: '套用建議隔離' }))
 
     expect(applySuggestedQuarantine).toHaveBeenCalled()
+  })
+
+  it('triggers single-symbol quarantine clear from the operator panel', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: '清除此檔' }))
+
+    expect(clearQuarantineSymbols).toHaveBeenCalledWith(['2330'])
   })
 })

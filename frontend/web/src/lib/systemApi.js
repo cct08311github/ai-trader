@@ -234,9 +234,13 @@ export function useQuarantineActions() {
   }, [])
 
   const clearAllQuarantine = useCallback(async () => {
+    return await clearQuarantineSymbols([])
+  }, [])
+
+  const clearQuarantineSymbols = useCallback(async (symbols) => {
     setLoading(prev => ({ ...prev, clear: true }))
     try {
-      const result = await postJson(`${getBase()}/api/system/quarantine/clear`, { symbols: [] })
+      const result = await postJson(`${getBase()}/api/system/quarantine/clear`, { symbols })
       setLastAction({ type: 'clear', result })
       setError(null)
       return result
@@ -248,7 +252,7 @@ export function useQuarantineActions() {
     }
   }, [])
 
-  return { loading, lastAction, error, applySuggestedQuarantine, clearAllQuarantine }
+  return { loading, lastAction, error, applySuggestedQuarantine, clearAllQuarantine, clearQuarantineSymbols }
 }
 
 export function useCapital() {
