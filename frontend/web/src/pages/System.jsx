@@ -10,6 +10,7 @@ import {
   useQuarantinePlan,
   useOpenIncidentClusters,
   useRemediationHistory,
+  useQuarantineActions,
 } from '../lib/systemApi'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -311,18 +312,56 @@ function OperatorSnapshotPanel({ quarantineStatus, quarantinePlan, clusters, rem
   )
 }
 
-function QuarantinePanel({ status, plan, planError }) {
+function QuarantinePanel({ status, plan, planError, actionState, onApply, onClear }) {
   const items = status?.items || []
   const eligibleSymbols = plan?.eligible_symbols || []
+  const canApply = Boolean(plan?.safe_to_apply) && eligibleSymbols.length > 0
+  const canClear = (status?.active_count || 0) > 0
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">Quarantine / Reconciliation</div>
-        <div className="text-xs text-slate-400">Active {status?.active_count || 0}</div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onApply}
+            disabled={!canApply || actionState?.loading?.apply}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+              !canApply || actionState?.loading?.apply
+                ? 'bg-slate-800 text-slate-500'
+                : 'bg-amber-600 text-white hover:bg-amber-500'
+            }`}
+          >
+            {actionState?.loading?.apply ? '套用中...' : '套用建議隔離'}
+          </button>
+          <button
+            onClick={onClear}
+            disabled={!canClear || actionState?.loading?.clear}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+              !canClear || actionState?.loading?.clear
+                ? 'bg-slate-800 text-slate-500'
+                : 'bg-blue-700 text-white hover:bg-blue-600'
+            }`}
+          >
+            {actionState?.loading?.clear ? '清除中...' : '清除全部隔離'}
+          </button>
+          <div className="text-xs text-slate-400">Active {status?.active_count || 0}</div>
+        </div>
       </div>
       {planError && (
         <div className="mt-3 rounded-lg border border-amber-800 bg-amber-900/20 p-3 text-xs text-amber-300">
           最新 reconciliation plan 不可用：{planError}
+        </div>
+      )}
+      {actionState?.error && (
+        <div className="mt-3 rounded-lg border border-rose-800 bg-rose-900/20 p-3 text-xs text-rose-300">
+          隔離操作失敗：{actionState.error}
+        </div>
+      )}
+      {actionState?.lastAction?.result && (
+        <div className="mt-3 rounded-lg border border-emerald-800 bg-emerald-900/20 p-3 text-xs text-emerald-300">
+          {actionState.lastAction.type === 'apply'
+            ? `已套用 ${actionState.lastAction.result.applied_count || 0} 檔隔離`
+            : `已清除 ${actionState.lastAction.result.cleared_count || 0} 檔隔離`}
         </div>
       )}
       <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -453,8 +492,8 @@ export default function SystemPage() {
   const { data: quota } = useSystemQuota({ pollMs: 30000 })
   const { data: risk } = useSystemRisk({ pollMs: 30000 })
   const { data: events } = useSystemEvents({ pollMs: 15000 })
-  const { data: quarantineStatus } = useQuarantineStatus({ pollMs: 15000 })
-  const { data: quarantinePlan, error: quarantinePlanErr } = useQuarantinePlan({ pollMs: 20000 })
+  const { data: quarantineStatus, refresh: refreshQuarantineStatus } = useQuarantineStatus({ pollMs: 15000 })
+  const { data: quarantinePlan, error: quarantinePlanErr, refresh: refreshQuarantinePlan } = useQuarantinePlan({ pollMs: 20000 })
   const {
     data: incidentClusters,
     resolveCluster,
@@ -462,9 +501,26 @@ export default function SystemPage() {
     refresh: refreshClusters,
   } = useOpenIncidentClusters({ pollMs: 15000 })
   const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10 })
+  const quarantineActions = useQuarantineActions()
 
   const handleClusterResolved = async () => {
     await Promise.allSettled([refreshClusters(), refreshRemediation()])
+  }
+
+  const handleApplyQuarantine = async () => {
+    const result = await quarantineActions.applySuggestedQuarantine()
+    if (result) {
+      await Promise.allSettled([refreshQuarantinePlan(), refreshQuarantineStatus(), refreshRemediation()])
+    }
+  }
+
+  const handleClearQuarantine = async () => {
+    const confirmed = window.confirm('確定要清除全部 active quarantine 並從 fills 重建持倉嗎？')
+    if (!confirmed) return
+    const result = await quarantineActions.clearAllQuarantine()
+    if (result) {
+      await Promise.allSettled([refreshQuarantinePlan(), refreshQuarantineStatus(), refreshRemediation()])
+    }
   }
 
   return (
@@ -494,6 +550,9 @@ export default function SystemPage() {
             status={quarantineStatus}
             plan={quarantinePlan}
             planError={quarantinePlanErr}
+            actionState={quarantineActions}
+            onApply={handleApplyQuarantine}
+            onClear={handleClearQuarantine}
           />
           <IncidentClusterPanel
             clusters={incidentClusters}

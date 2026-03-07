@@ -85,9 +85,10 @@ Additional smoke checks completed:
   - frontend hooks added for `/api/system/incidents/open`
   - frontend hooks added for `/api/system/incidents/resolve`
   - frontend hooks added for `/api/system/remediation-history`
+  - System page now supports quarantine apply/clear actions directly from UI
 - target:
   - keep UI consistent with existing `System.jsx` visual language
-  - optional next step: add operator actions for quarantine apply/clear directly in UI
+  - optional next step: add per-symbol quarantine clear and richer incident payload inspection
 
 ## Rules For Other AI Sessions
 

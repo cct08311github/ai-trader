@@ -12,6 +12,10 @@ globalThis.__APP_VERSION__ = 'test'
 const resolveCluster = vi.fn(async () => ({ resolved_count: 1 }))
 const refreshClusters = vi.fn(async () => ({}))
 const refreshRemediation = vi.fn(async () => ({}))
+const refreshQuarantineStatus = vi.fn(async () => ({}))
+const refreshQuarantinePlan = vi.fn(async () => ({}))
+const applySuggestedQuarantine = vi.fn(async () => ({ applied_count: 2 }))
+const clearAllQuarantine = vi.fn(async () => ({ cleared_count: 1 }))
 
 vi.mock('../components/ControlPanel', () => ({
   default: () => <div>ControlPanel Mock</div>,
@@ -46,10 +50,12 @@ vi.mock('../lib/systemApi', () => ({
   }),
   useQuarantineStatus: () => ({
     data: { active_count: 1, items: [{ symbol: '2330', reason_code: 'BROKER_POSITION_MISSING', position: { quantity: 0 } }] },
+    refresh: refreshQuarantineStatus,
   }),
   useQuarantinePlan: () => ({
-    data: { report_id: 'r-1', eligible_symbols: ['2330', '2317'] },
+    data: { report_id: 'r-1', eligible_symbols: ['2330', '2317'], safe_to_apply: true },
     error: null,
+    refresh: refreshQuarantinePlan,
   }),
   useOpenIncidentClusters: () => ({
     data: {
@@ -79,6 +85,13 @@ vi.mock('../lib/systemApi', () => ({
       }],
     },
     refresh: refreshRemediation,
+  }),
+  useQuarantineActions: () => ({
+    loading: { apply: false, clear: false },
+    lastAction: null,
+    error: null,
+    applySuggestedQuarantine,
+    clearAllQuarantine,
   }),
 }))
 
@@ -123,5 +136,14 @@ describe('SystemPage', () => {
       fingerprint: 'network_security|SEC_NETWORK_IP_DENIED|x',
       reason: 'root cause remediated',
     })
+  })
+
+  it('triggers quarantine apply action from the operator panel', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(screen.getByRole('button', { name: '套用建議隔離' }))
+
+    expect(applySuggestedQuarantine).toHaveBeenCalled()
   })
 })

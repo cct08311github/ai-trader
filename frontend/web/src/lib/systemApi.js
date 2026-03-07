@@ -213,6 +213,44 @@ export function useRemediationHistory({ pollMs = 15000, limit = 10 } = {}) {
   return usePollingJson(`/api/system/remediation-history?limit=${limit}`, { pollMs })
 }
 
+export function useQuarantineActions() {
+  const [loading, setLoading] = useState({ apply: false, clear: false })
+  const [lastAction, setLastAction] = useState(null)
+  const [error, setError] = useState(null)
+
+  const applySuggestedQuarantine = useCallback(async () => {
+    setLoading(prev => ({ ...prev, apply: true }))
+    try {
+      const result = await postJson(`${getBase()}/api/system/quarantine/apply`, {})
+      setLastAction({ type: 'apply', result })
+      setError(null)
+      return result
+    } catch (e) {
+      setError(e.message)
+      return null
+    } finally {
+      setLoading(prev => ({ ...prev, apply: false }))
+    }
+  }, [])
+
+  const clearAllQuarantine = useCallback(async () => {
+    setLoading(prev => ({ ...prev, clear: true }))
+    try {
+      const result = await postJson(`${getBase()}/api/system/quarantine/clear`, { symbols: [] })
+      setLastAction({ type: 'clear', result })
+      setError(null)
+      return result
+    } catch (e) {
+      setError(e.message)
+      return null
+    } finally {
+      setLoading(prev => ({ ...prev, clear: false }))
+    }
+  }, [])
+
+  return { loading, lastAction, error, applySuggestedQuarantine, clearAllQuarantine }
+}
+
 export function useCapital() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
