@@ -1,6 +1,7 @@
 import React from 'react'
 import ControlPanel from '../components/ControlPanel'
 import LogTerminal from '../components/LogTerminal'
+import { useSearchParams } from 'react-router-dom'
 import {
   useSystemHealth,
   useSystemQuota,
@@ -568,8 +569,16 @@ function RemediationHistoryPanel({ remediation, filters, onFilterChange }) {
 // ─── main page ────────────────────────────────────────────────────────────────
 
 export default function SystemPage() {
-  const [incidentFilters, setIncidentFilters] = React.useState({ source: '', code: '', severity: '' })
-  const [remediationFilters, setRemediationFilters] = React.useState({ action_type: '', target_ref: '' })
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [incidentFilters, setIncidentFilters] = React.useState(() => ({
+    source: searchParams.get('incident_source') || '',
+    code: searchParams.get('incident_code') || '',
+    severity: searchParams.get('incident_severity') || '',
+  }))
+  const [remediationFilters, setRemediationFilters] = React.useState(() => ({
+    action_type: searchParams.get('remediation_action_type') || '',
+    target_ref: searchParams.get('remediation_target_ref') || '',
+  }))
   const { data: health, error: healthErr } = useSystemHealth({ pollMs: 5000 })
   const { data: quota } = useSystemQuota({ pollMs: 30000 })
   const { data: risk } = useSystemRisk({ pollMs: 30000 })
@@ -584,6 +593,24 @@ export default function SystemPage() {
   } = useOpenIncidentClusters({ pollMs: 15000, filters: incidentFilters })
   const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10, filters: remediationFilters })
   const quarantineActions = useQuarantineActions()
+
+  React.useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    const filterEntries = {
+      incident_source: incidentFilters.source,
+      incident_code: incidentFilters.code,
+      incident_severity: incidentFilters.severity,
+      remediation_action_type: remediationFilters.action_type,
+      remediation_target_ref: remediationFilters.target_ref,
+    }
+    Object.entries(filterEntries).forEach(([key, value]) => {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    })
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [incidentFilters, remediationFilters, searchParams, setSearchParams])
 
   const updateIncidentFilter = (key, value) => {
     setIncidentFilters((prev) => ({ ...prev, [key]: value }))

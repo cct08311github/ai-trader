@@ -90,6 +90,7 @@ Additional smoke checks completed:
   - System page now shows incident sample payload detail inline
   - System page now supports incident cluster filters: `source/code/severity`
   - System page now supports remediation history filters: `action_type/target_ref`
+  - System page now persists operator filters in URL query params
 - target:
   - keep UI consistent with existing `System.jsx` visual language
   - optional next step: add saved filter presets and richer payload formatting

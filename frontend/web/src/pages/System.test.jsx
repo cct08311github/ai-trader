@@ -99,10 +99,14 @@ vi.mock('../lib/systemApi', () => ({
 }))
 
 function renderPage() {
+  return renderPageAt('/system')
+}
+
+function renderPageAt(entry) {
   return render(
     <ThemeProvider defaultTheme="dark">
       <ToastProvider>
-        <MemoryRouter initialEntries={['/system']}>
+        <MemoryRouter initialEntries={[entry]}>
           <SystemPage />
         </MemoryRouter>
       </ToastProvider>
@@ -172,5 +176,13 @@ describe('SystemPage', () => {
 
     expect(sourceInput).toHaveValue('broker_reconciliation')
     expect(targetRefInput).toHaveValue('2330')
+  })
+
+  it('hydrates operator filters from query params', () => {
+    renderPageAt('/system?incident_source=network_security&incident_code=SEC_NETWORK_IP_DENIED&remediation_target_ref=2330')
+
+    expect(screen.getByPlaceholderText('network_security')).toHaveValue('network_security')
+    expect(screen.getByPlaceholderText('SEC_NETWORK_IP_DENIED')).toHaveValue('SEC_NETWORK_IP_DENIED')
+    expect(screen.getByPlaceholderText('2330 / network_security')).toHaveValue('2330')
   })
 })
