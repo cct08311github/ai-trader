@@ -472,9 +472,24 @@ def _evaluate_cash_mode(
 # ── 模擬下單執行 ──────────────────────────────────────────────────────────────
 def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
                         symbol: str, side: str, qty: int, price: float,
-                        candidate) -> tuple[bool, str]:
+                        candidate, guard_limits: dict | None = None) -> tuple[bool, str]:
     """提交模擬單，poll 成交，寫入 orders/fills/order_events。"""
+    from openclaw.pre_trade_guard import evaluate_pre_trade_guard
+
     order_id = str(uuid.uuid4())
+    guard_result = evaluate_pre_trade_guard(conn, candidate, limits=guard_limits)
+    if not guard_result.approved:
+        _persist_order(conn, order_id=order_id, decision_id=decision_id,
+                       broker_order_id="", symbol=symbol, side=side, qty=qty,
+                       price=price, status="rejected")
+        _insert_order_event(conn, order_id=order_id, event_type="rejected",
+                            from_status=None, to_status="rejected",
+                            source="pre_trade_guard",
+                            reason_code=guard_result.reject_code,
+                            payload=guard_result.metrics)
+        log.warning("[%s] pre-trade guard rejected order: %s", symbol, guard_result.reject_code)
+        return False, order_id
+
     submission = broker.submit_order(order_id, candidate)
 
     # T+2 交割日：買單才需計算；賣單交割款項 T+2 入帳，無需追蹤
@@ -844,6 +859,7 @@ def run_watcher() -> None:
                         qty=result.order.qty,
                         price=result.order.price,
                         candidate=result.order,
+                        guard_limits=limits,
                     )
                     conn.commit()
 
@@ -896,7 +912,13 @@ def run_watcher() -> None:
 
             # ── 每輪掃盤後：執行 approved proposals + 集中度守衛 ─────────────
             try:
-                from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed, mark_intent_failed, SellIntent
+                from openclaw.proposal_executor import (
+                    SellIntent,
+                    execute_pending_proposals,
+                    mark_intent_executed,
+                    mark_intent_executing,
+                    mark_intent_failed,
+                )
                 from openclaw.risk_engine import OrderCandidate
                 sell_intents, n_noted = execute_pending_proposals(conn)
                 for intent in sell_intents:
@@ -907,6 +929,7 @@ def run_watcher() -> None:
                             order_type="limit", tif="ROD",
                             opens_new_position=False,
                         )
+                        mark_intent_executing(conn, intent.proposal_id, intent.execution_key)
                         conn.execute("BEGIN IMMEDIATE")
                         ok, _oid = _execute_sim_order(
                             conn, broker=broker,
@@ -914,11 +937,17 @@ def run_watcher() -> None:
                             symbol=intent.symbol,
                             side="sell", qty=intent.qty,
                             price=intent.price, candidate=candidate,
+                            guard_limits=limits,
                         )
                         conn.commit()
                         if ok:
                             try:
-                                mark_intent_executed(conn, intent.proposal_id)
+                                mark_intent_executed(
+                                    conn,
+                                    intent.proposal_id,
+                                    execution_key=intent.execution_key,
+                                    order_id=_oid,
+                                )
                             except Exception as mark_err:
                                 log.critical("[proposals] BROKER EXECUTED sell %s %d shares but "
                                              "failed to mark proposal %s as executed — "
@@ -928,10 +957,21 @@ def run_watcher() -> None:
                             log.info("[proposals] Executed rebalance sell %s %d @ %.2f via broker",
                                      intent.symbol, intent.qty, intent.price)
                         else:
-                            mark_intent_failed(conn, intent.proposal_id, "broker_rejected")
+                            mark_intent_failed(
+                                conn,
+                                intent.proposal_id,
+                                "broker_rejected",
+                                execution_key=intent.execution_key,
+                                order_id=_oid,
+                            )
                             log.warning("[proposals] Broker rejected rebalance sell %s → marked failed", intent.symbol)
                     except Exception as intent_err:
-                        mark_intent_failed(conn, intent.proposal_id, str(intent_err))
+                        mark_intent_failed(
+                            conn,
+                            intent.proposal_id,
+                            str(intent_err),
+                            execution_key=intent.execution_key,
+                        )
                         log.error("[proposals] intent execution error for %s: %s → marked failed",
                                   intent.symbol, intent_err, exc_info=True)
                         try:

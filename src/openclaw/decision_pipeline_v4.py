@@ -295,7 +295,15 @@ def run_news_sentiment_with_guard(
                 latency_ms=0,
                 confidence=None,
                 decision_id=decision_id,
-                metadata={"stage": "news_sentiment", "blocked": True, "blocked_reason": guard.reason, "pinned_model": pinned_model},
+                metadata={
+                    "stage": "news_sentiment",
+                    "blocked": True,
+                    "blocked_reason": guard.reason,
+                    "pinned_model": pinned_model,
+                    "prompt_version": "decision_pipeline_v4/news_sentiment/v1",
+                    "model_version": pinned_model,
+                    "input_snapshot": {"news_len": len(raw_news_text)},
+                },
             ),
         )
         return {"blocked": True, "reason": guard.reason}
@@ -314,7 +322,13 @@ def run_news_sentiment_with_guard(
             latency_ms=_safe_int(result.get("latency_ms"), 0),
             confidence=_safe_float(result.get("confidence"), 0.0),
             decision_id=decision_id,
-            metadata={"stage": "news_sentiment", "pinned_model": pinned_model},
+            metadata={
+                "stage": "news_sentiment",
+                "pinned_model": pinned_model,
+                "prompt_version": "decision_pipeline_v4/news_sentiment/v1",
+                "model_version": pinned_model,
+                "input_snapshot": {"news_len": len(raw_news_text)},
+            },
         ),
     )
     return result
@@ -343,7 +357,13 @@ def run_pm_debate(
             latency_ms=_safe_int(result.get("latency_ms"), 0),
             confidence=_safe_float(result.get("confidence"), 0.0),
             decision_id=decision_id,
-            metadata={"stage": "bull_bear_debate", "pinned_model": pinned_model},
+            metadata={
+                "stage": "bull_bear_debate",
+                "pinned_model": pinned_model,
+                "prompt_version": "decision_pipeline_v4/pm_debate/v1",
+                "model_version": pinned_model,
+                "input_snapshot": context,
+            },
         ),
     )
     # Validate response shape (v4 #9)

@@ -972,6 +972,31 @@ class TestExecuteSimOrder:
 
         assert ok is False  # 未 filled
 
+    def test_pre_trade_guard_rejects_before_broker_submit(self):
+        """硬風控拒絕時，不應呼叫 broker.submit_order。"""
+        conn = _make_mem_db()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+        mock_broker = MagicMock()
+
+        ok, order_id = _execute_sim_order(
+            conn, broker=mock_broker, decision_id=did,
+            symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate,
+            guard_limits={"max_order_notional": 1000},
+        )
+
+        assert ok is False
+        assert order_id is not None
+        mock_broker.submit_order.assert_not_called()
+        row = conn.execute("SELECT status FROM orders WHERE order_id=?", (order_id,)).fetchone()
+        assert row["status"] == "rejected"
+        event = conn.execute(
+            "SELECT source, reason_code FROM order_events WHERE order_id=?",
+            (order_id,),
+        ).fetchone()
+        assert event["source"] == "pre_trade_guard"
+        assert event["reason_code"] == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
+
 
 # ── Integration: _persist_* functions work together ──────────────────────────
 

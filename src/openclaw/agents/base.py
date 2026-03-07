@@ -76,6 +76,10 @@ def write_trace(
         metadata={
             "action_type": result.get("action_type", "observe"),
             "summary": result.get("summary", ""),
+            "prompt_version": "agents/base/v1",
+            "model_version": result.get("_resolved_model", result.get("_model", DEFAULT_MODEL)),
+            "input_snapshot": {"agent": agent, "prompt": prompt[:200]},
+            "shadow_mode": bool(result.get("_shadow_mode", False)),
             "created_at_ms": int(time.time() * 1000),
         },
     )

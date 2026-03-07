@@ -18,6 +18,7 @@ from openclaw.risk_store import LimitQuery, load_limits
 from openclaw.cash_mode_manager import CashModeManager
 from openclaw.market_regime import MarketRegime, MarketRegimeResult
 from openclaw.db_router import get_connection, init_execution_tables
+from openclaw.pre_trade_guard import evaluate_pre_trade_guard
 from openclaw.resume_protocol import system_self_check, run_resume_flow, ResumeProtocolTracker
 from openclaw.sentinel import filter_locked_positions
 
@@ -132,8 +133,39 @@ def execute_approved_order(
     candidate,
     poll_interval_sec: float = 0.5,
     poll_timeout_sec: float = 5.0,
+    guard_limits: dict[str, float] | None = None,
 ) -> ExecutionResult:
     order_id = str(uuid.uuid4())
+    guard_result = evaluate_pre_trade_guard(conn, candidate, limits=guard_limits)
+    if not guard_result.approved:
+        persist_order(
+            conn,
+            order_id=order_id,
+            decision_id=decision.decision_id,
+            broker_order_id="",
+            symbol=symbol,
+            side=side,
+            qty=qty,
+            price=price,
+            strategy_version=strategy_version,
+            status="rejected",
+        )
+        insert_order_event(
+            conn,
+            order_id=order_id,
+            event_type="rejected",
+            from_status=None,
+            to_status="rejected",
+            source="pre_trade_guard",
+            reason_code=guard_result.reject_code,
+            payload=guard_result.metrics,
+        )
+        return ExecutionResult(
+            ok=False,
+            order_id=order_id,
+            error_code=guard_result.reject_code,
+            error_message="pre-trade guard rejected order",
+        )
 
     # v4 #12: IP allowlist gate for sensitive broker APIs (configurable via env)
     from openclaw.network_allowlist import enforce_network_security

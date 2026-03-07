@@ -737,6 +737,42 @@ def test_execute_approved_order_poll_none_then_filled():
     assert result.ok is True
 
 
+def test_execute_approved_order_pre_trade_guard_rejects_before_broker():
+    """Hard guard rejection must happen before network allowlist and broker submission."""
+    conn = make_db()
+    decision = _make_decision()
+    conn.execute(
+        "INSERT INTO decisions VALUES (?, datetime('now'), '2330', 'breakout', 'v1', 'buy', 0.8, 30000, NULL, '{}')",
+        (decision.decision_id,),
+    )
+
+    broker = MagicMock()
+
+    with patch("openclaw.network_allowlist.enforce_network_security") as allowlist:
+        result = execute_approved_order(
+            conn,
+            broker=broker,
+            decision=decision,
+            strategy_version="v1",
+            symbol="2330",
+            side="buy",
+            qty=100,
+            price=500.0,
+            candidate=_make_candidate(),
+            guard_limits={"max_order_notional": 1000},
+        )
+
+    assert result.ok is False
+    assert result.error_code == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
+    allowlist.assert_not_called()
+    broker.submit_order.assert_not_called()
+    event = conn.execute(
+        "SELECT source, reason_code FROM order_events ORDER BY ts DESC LIMIT 1"
+    ).fetchone()
+    assert event["source"] == "pre_trade_guard"
+    assert event["reason_code"] == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
+
+
 # ---------------------------------------------------------------------------
 # main() function tests
 # ---------------------------------------------------------------------------

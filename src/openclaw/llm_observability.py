@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
+from openclaw.llm_governance import build_governance_metadata, ensure_llm_trace_governance_columns
+
 
 @dataclass
 class LLMTrace:
@@ -64,8 +66,13 @@ def insert_llm_trace(conn: sqlite3.Connection, trace: LLMTrace, *, auto_commit: 
     """
 
     trace_id = trace.trace_id or str(uuid.uuid4())
+    ensure_llm_trace_governance_columns(conn)
     cols = set(_table_columns(conn, "llm_traces"))
-    meta: Dict[str, Any] = dict(trace.metadata or {})
+    meta: Dict[str, Any] = build_governance_metadata(
+        prompt_text=trace.prompt_text,
+        model=trace.model,
+        metadata=trace.metadata,
+    )
 
     # Best-effort token budget accounting (no-op if tables absent).
     try:
@@ -114,27 +121,37 @@ def insert_llm_trace(conn: sqlite3.Connection, trace: LLMTrace, *, auto_commit: 
     # v4 schema
     if {"agent", "prompt", "response", "created_at"}.issubset(cols):
         created_at_ms = meta.get("created_at_ms")
+        insert_cols = [
+            "trace_id", "agent", "model", "prompt", "response", "latency_ms",
+            "prompt_tokens", "completion_tokens", "tool_calls_json", "confidence", "created_at",
+        ]
+        values: List[Any] = [
+            trace_id,
+            trace.effective_agent(),
+            trace.model,
+            trace.prompt_text,
+            trace.response_text,
+            int(trace.latency_ms) if trace.latency_ms is not None else None,
+            int(trace.input_tokens) if trace.input_tokens is not None else None,
+            int(trace.output_tokens) if trace.output_tokens is not None else None,
+            json.dumps(trace.tools, ensure_ascii=True),
+            trace.confidence,
+            int(created_at_ms) if created_at_ms is not None else None,
+        ]
+        for optional_col, value in (
+            ("metadata_json", json.dumps(meta, ensure_ascii=True)),
+            ("prompt_version", meta.get("prompt_version")),
+            ("model_version", meta.get("model_version")),
+            ("input_hash", meta.get("input_hash")),
+            ("shadow_mode", int(bool(meta.get("shadow_mode", False)))),
+        ):
+            if optional_col in cols:
+                insert_cols.append(optional_col)
+                values.append(value)
+        placeholders = ", ".join(["?"] * len(insert_cols))
         conn.execute(
-            """
-            INSERT INTO llm_traces (
-              trace_id, agent, model, prompt, response, latency_ms,
-              prompt_tokens, completion_tokens, tool_calls_json, confidence, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                trace_id,
-                trace.effective_agent(),
-                trace.model,
-                trace.prompt_text,
-                trace.response_text,
-                int(trace.latency_ms) if trace.latency_ms is not None else None,
-                int(trace.input_tokens) if trace.input_tokens is not None else None,
-                int(trace.output_tokens) if trace.output_tokens is not None else None,
-                json.dumps(trace.tools, ensure_ascii=True),
-                trace.confidence,
-                int(created_at_ms) if created_at_ms is not None else None,
-            ),
+            f"INSERT INTO llm_traces ({', '.join(insert_cols)}) VALUES ({placeholders})",
+            values,
         )
         if auto_commit:
             conn.commit()

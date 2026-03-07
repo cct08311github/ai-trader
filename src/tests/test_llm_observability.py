@@ -168,7 +168,12 @@ def test_insert_llm_trace_v4_schema():
     )
     tid = insert_llm_trace(conn, trace)
     row = conn.execute(
-        "SELECT agent, model, prompt_tokens, completion_tokens, created_at FROM llm_traces WHERE trace_id = ?",
+        """
+        SELECT agent, model, prompt_tokens, completion_tokens, created_at,
+               prompt_version, model_version, input_hash, shadow_mode
+          FROM llm_traces
+         WHERE trace_id = ?
+        """,
         (tid,),
     ).fetchone()
     assert row is not None
@@ -177,6 +182,42 @@ def test_insert_llm_trace_v4_schema():
     assert row[2] == 50
     assert row[3] == 30
     assert row[4] == 1700000001000
+    assert row[5] == "unversioned"
+    assert row[6] == "gemini-3.1-pro"
+    assert row[7]
+    assert row[8] == 0
+
+
+def test_insert_llm_trace_v4_governance_metadata_persisted():
+    conn = _conn_v4()
+    tid = insert_llm_trace(
+        conn,
+        LLMTrace(
+            component="pm",
+            model="gemini-3.1-pro",
+            prompt_text="hello governance",
+            response_text="ok",
+            input_tokens=1,
+            output_tokens=1,
+            latency_ms=1,
+            metadata={
+                "created_at_ms": 1700000002000,
+                "prompt_version": "pm/v2",
+                "model_version": "gemini-3.1-pro-001",
+                "input_snapshot": {"symbol": "2330"},
+                "shadow_mode": True,
+            },
+        ),
+    )
+    row = conn.execute(
+        "SELECT prompt_version, model_version, input_hash, shadow_mode, metadata_json FROM llm_traces WHERE trace_id = ?",
+        (tid,),
+    ).fetchone()
+    assert row[0] == "pm/v2"
+    assert row[1] == "gemini-3.1-pro-001"
+    assert row[2]
+    assert row[3] == 1
+    assert '"shadow_mode": true' in row[4].lower()
 
 
 def test_insert_llm_trace_hybrid_schema():

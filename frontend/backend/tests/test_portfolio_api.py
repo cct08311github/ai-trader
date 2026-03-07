@@ -132,6 +132,8 @@ def full_client(tmp_path, monkeypatch):
     importlib.reload(config)
     import app.db as db
     importlib.reload(db)
+    import app.api.portfolio as portfolio
+    importlib.reload(portfolio)
     import app.main as main
     importlib.reload(main)
 
@@ -1029,10 +1031,12 @@ class TestClosePositionExceptionPaths:
         })()
 
         class MockOrderCandidateRej:
-            def __init__(self, **kwargs):
-                pass
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
 
         class MockSimBrokerRej:
             def submit_order(self, order_id, candidate):
@@ -1107,7 +1111,11 @@ class TestClosePositionExceptionPaths:
 
         class MockOC2:
             def __init__(self, symbol, side, qty, price, order_type):
-                pass
+                self.symbol = symbol
+                self.side = side
+                self.qty = qty
+                self.price = price
+                self.order_type = order_type
 
         class MockBroker2:
             def submit_order(self, order_id, candidate):
@@ -1137,3 +1145,42 @@ class TestClosePositionExceptionPaths:
                 sys.modules["openclaw.risk_engine"] = saved_risk
             else:
                 sys.modules.pop("openclaw.risk_engine", None)
+
+    def test_close_position_pre_trade_guard_blocked(self, full_client, tmp_path, monkeypatch):
+        """Manual close should return 409 when the shared pre-trade guard blocks the order."""
+        from types import SimpleNamespace
+
+        c, db_path = full_client
+        import app.api.portfolio as port
+        monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)
+        locked_file = tmp_path / "nolock6.json"
+        locked_file.write_text(json.dumps({"locked": []}))
+        monkeypatch.setattr(port, "_LOCKED_PATH", str(locked_file))
+
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO orders VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            ("o_guard_block", None, None, "2026-01-01T09:00:00", "9998", "buy",
+             100, 210.0, "limit", "ROD", "filled", "v1")
+        )
+        conn.execute(
+            "INSERT INTO fills(fill_id, order_id, ts_fill, qty, price, fee, tax) VALUES (?,?,?,?,?,?,?)",
+            ("f_guard_block", "o_guard_block", "2026-01-01T09:00:00", 100, 210.0, 20.0, 100.0)
+        )
+        conn.commit()
+        conn.close()
+
+        import openclaw.pre_trade_guard as ptg
+        monkeypatch.setattr(
+            ptg,
+            "evaluate_pre_trade_guard",
+            lambda conn, candidate, limits=None, now=None: SimpleNamespace(
+                approved=False,
+                reject_code="RISK_HARD_GUARD_TEST",
+                metrics={},
+            ),
+        )
+
+        r = c.post("/api/portfolio/close-position/9998", headers=_AUTH)
+        assert r.status_code == 409
+        assert "RISK_HARD_GUARD_TEST" in r.json()["detail"]

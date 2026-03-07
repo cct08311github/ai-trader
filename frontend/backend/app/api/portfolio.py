@@ -780,6 +780,16 @@ def close_position(symbol: str):
         price=sell_price,
         order_type="limit",
     )
+    from openclaw.pre_trade_guard import evaluate_pre_trade_guard
+
+    with get_conn() as conn:
+        guard_result = evaluate_pre_trade_guard(conn, candidate)
+    if not guard_result.approved:
+        raise HTTPException(
+            status_code=409,
+            detail=f"pre-trade guard blocked order: {guard_result.reject_code}",
+        )
+
     broker = SimBrokerAdapter()
     order_id = str(uuid.uuid4())
     submission = broker.submit_order(order_id, candidate)
@@ -814,6 +824,30 @@ def close_position(symbol: str):
 
     # ── 7. 寫入 DB ────────────────────────────────────────────────────────
     with get_conn_rw() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS decisions (
+                decision_id TEXT PRIMARY KEY,
+                ts TEXT,
+                symbol TEXT,
+                strategy_id TEXT,
+                strategy_version TEXT,
+                signal_side TEXT,
+                signal_score REAL,
+                signal_ttl_ms INTEGER,
+                llm_ref TEXT,
+                reason_json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS risk_checks (
+                check_id TEXT PRIMARY KEY,
+                decision_id TEXT,
+                ts TEXT,
+                passed INTEGER,
+                reject_code TEXT,
+                metrics_json TEXT
+            );
+            """
+        )
         # decisions
         conn.execute(
             """INSERT OR IGNORE INTO decisions

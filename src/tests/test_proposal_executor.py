@@ -49,22 +49,38 @@ def test_executor_returns_sell_intent_for_approved_proposal(db_with_proposal):
     assert intents[0].qty == 300  # 1000 * 30%
     assert intents[0].price == 2450.0
     assert intents[0].proposal_id == "p1"
-    # proposal 仍為 approved（等 broker 成交後才標記 executed）
+    assert intents[0].execution_key
+    # proposal 進入 queued，等待 broker 執行
     status = db_with_proposal.execute(
         "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
     ).fetchone()[0]
-    assert status == "approved"
+    assert status == "queued"
+    journal = db_with_proposal.execute(
+        "SELECT state, attempt_count FROM proposal_execution_journal WHERE proposal_id='p1'"
+    ).fetchone()
+    assert journal[0] == "prepared"
+    assert journal[1] == 0
 
 
 def test_mark_intent_executed(db_with_proposal):
     """broker 成交後 mark_intent_executed 應更新為 executed"""
     from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executed
     intents, _ = execute_pending_proposals(db_with_proposal)
-    mark_intent_executed(db_with_proposal, intents[0].proposal_id)
+    mark_intent_executed(
+        db_with_proposal,
+        intents[0].proposal_id,
+        execution_key=intents[0].execution_key,
+        order_id="o1",
+    )
     status = db_with_proposal.execute(
         "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
     ).fetchone()[0]
     assert status == "executed"
+    journal = db_with_proposal.execute(
+        "SELECT state, last_order_id FROM proposal_execution_journal WHERE proposal_id='p1'"
+    ).fetchone()
+    assert journal[0] == "completed"
+    assert journal[1] == "o1"
 
 
 def test_executor_does_not_create_orders(db_with_proposal):
@@ -137,14 +153,74 @@ def test_price_null_skips_intent(db_with_proposal):
 
 def test_mark_intent_failed(db_with_proposal):
     """broker 拒絕後 mark_intent_failed 應標記為 failed 並記錄原因"""
-    from openclaw.proposal_executor import mark_intent_failed
-    mark_intent_failed(db_with_proposal, "p1", "broker_rejected")
+    from openclaw.proposal_executor import execute_pending_proposals, mark_intent_failed
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    mark_intent_failed(
+        db_with_proposal,
+        "p1",
+        "broker_rejected",
+        execution_key=intents[0].execution_key,
+        order_id="o2",
+    )
     row = db_with_proposal.execute(
         "SELECT status, decided_at, supporting_evidence FROM strategy_proposals WHERE proposal_id='p1'"
     ).fetchone()
     assert row[0] == "failed"
     assert row[1] is not None  # decided_at should be set
     assert "broker_reject" in row[2]
+    journal = db_with_proposal.execute(
+        "SELECT state, last_error, last_order_id FROM proposal_execution_journal WHERE proposal_id='p1'"
+    ).fetchone()
+    assert journal[0] == "failed"
+    assert journal[1] == "broker_rejected"
+    assert journal[2] == "o2"
+
+
+def test_mark_intent_executing_increments_attempt_count(db_with_proposal):
+    from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executing
+
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    mark_intent_executing(db_with_proposal, intents[0].proposal_id, intents[0].execution_key)
+
+    row = db_with_proposal.execute(
+        "SELECT status FROM strategy_proposals WHERE proposal_id='p1'"
+    ).fetchone()
+    assert row[0] == "executing"
+    journal = db_with_proposal.execute(
+        "SELECT state, attempt_count FROM proposal_execution_journal WHERE proposal_id='p1'"
+    ).fetchone()
+    assert journal[0] == "executing"
+    assert journal[1] == 1
+
+
+def test_executor_skips_duplicate_prepared_journal(db_with_proposal):
+    from openclaw.proposal_executor import execute_pending_proposals
+
+    intents1, _ = execute_pending_proposals(db_with_proposal)
+    intents2, _ = execute_pending_proposals(db_with_proposal)
+
+    assert len(intents1) == 1
+    assert len(intents2) == 1
+    rows = db_with_proposal.execute(
+        "SELECT COUNT(*) FROM proposal_execution_journal WHERE proposal_id='p1'"
+    ).fetchone()[0]
+    assert rows == 1
+
+
+def test_executor_recovers_stale_executing_intent(db_with_proposal):
+    from openclaw.proposal_executor import execute_pending_proposals, mark_intent_executing
+
+    intents, _ = execute_pending_proposals(db_with_proposal)
+    mark_intent_executing(db_with_proposal, intents[0].proposal_id, intents[0].execution_key)
+    db_with_proposal.execute(
+        "UPDATE proposal_execution_journal SET updated_at=? WHERE execution_key=?",
+        (0, intents[0].execution_key),
+    )
+    db_with_proposal.commit()
+
+    recovered, _ = execute_pending_proposals(db_with_proposal)
+    assert len(recovered) == 1
+    assert recovered[0].execution_key == intents[0].execution_key
 
 
 def test_strategy_direction_marked_as_noted(tmp_path):

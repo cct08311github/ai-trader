@@ -68,6 +68,11 @@ Last updated: 2026-03-07 Asia/Taipei
    - `main` fast-forwarded from `cba9fc5` to `f4ef55b`
    - previous dirty `main` changes were preserved in `stash@{0}` with message `main-wip-before-integration-2026-03-07`
    - integrated backend tests, `System.test.jsx`, and production build all passed on `main`
+13. `2026-03-07 stash recovery batch 1`
+   - restored `pre_trade_guard` and `llm_governance` from the saved `main` stash
+   - wired pre-trade hard guard into `main.py`, `ticker_watcher.py`, and manual close in `portfolio.py`
+   - restored proposal execution journal hardening and related tests
+   - restored LLM governance metadata persistence and related tests
 
 ## Verified Test Commands
 
@@ -75,6 +80,8 @@ Last updated: 2026-03-07 Asia/Taipei
 PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_position_quarantine.py src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py
 npm test -- --run src/pages/System.test.jsx
 npm run build
+PYTHONPATH=src /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_pre_trade_guard.py src/tests/test_proposal_executor.py src/tests/test_ticker_watcher.py src/tests/test_main.py src/tests/test_llm_observability.py
+/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q frontend/backend/tests/test_portfolio_api.py
 ```
 
 Additional smoke checks completed:
@@ -102,6 +109,7 @@ Additional smoke checks completed:
   - System operator UI commits are integrated
   - integrated verification is green for backend tests, `System.test.jsx`, and production build on `main`
   - previous uncommitted `main` work is preserved in `stash@{0}` as `main-wip-before-integration-2026-03-07`
+  - stash recovery batch 1 is integrated for pre-trade guard, proposal execution journal, and llm governance
   - split implementation worktrees are retired
 - target:
   - use `main` as the sole active line going forward
