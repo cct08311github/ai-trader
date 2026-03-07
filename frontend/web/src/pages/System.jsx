@@ -472,13 +472,75 @@ function IncidentClusterPanel({ clusters, resolvingFingerprint, resolveCluster, 
   )
 }
 
-function RemediationHistoryPanel({ remediation }) {
+function IncidentFilterPanel({ filters, onChange }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-3">
+      <label className="text-xs text-slate-400">
+        Source
+        <input
+          value={filters.source}
+          onChange={(e) => onChange('source', e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200"
+          placeholder="network_security"
+        />
+      </label>
+      <label className="text-xs text-slate-400">
+        Code
+        <input
+          value={filters.code}
+          onChange={(e) => onChange('code', e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200"
+          placeholder="SEC_NETWORK_IP_DENIED"
+        />
+      </label>
+      <label className="text-xs text-slate-400">
+        Severity
+        <select
+          value={filters.severity}
+          onChange={(e) => onChange('severity', e.target.value)}
+          className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200"
+        >
+          <option value="">全部</option>
+          <option value="critical">critical</option>
+          <option value="warning">warning</option>
+          <option value="info">info</option>
+        </select>
+      </label>
+    </div>
+  )
+}
+
+function RemediationHistoryPanel({ remediation, filters, onFilterChange }) {
   const items = remediation?.items || []
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/20 p-6 shadow-panel">
       <div className="flex items-center justify-between">
         <div className="text-sm font-semibold">Remediation History</div>
         <div className="text-xs text-slate-400">{remediation?.count || 0} actions</div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <label className="text-xs text-slate-400">
+          Action Type
+          <select
+            value={filters.action_type}
+            onChange={(e) => onFilterChange('action_type', e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200"
+          >
+            <option value="">全部</option>
+            <option value="quarantine_apply">quarantine_apply</option>
+            <option value="quarantine_clear">quarantine_clear</option>
+            <option value="incident_resolve">incident_resolve</option>
+          </select>
+        </label>
+        <label className="text-xs text-slate-400">
+          Target Ref
+          <input
+            value={filters.target_ref}
+            onChange={(e) => onFilterChange('target_ref', e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-slate-200"
+            placeholder="2330 / network_security"
+          />
+        </label>
       </div>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
@@ -506,6 +568,8 @@ function RemediationHistoryPanel({ remediation }) {
 // ─── main page ────────────────────────────────────────────────────────────────
 
 export default function SystemPage() {
+  const [incidentFilters, setIncidentFilters] = React.useState({ source: '', code: '', severity: '' })
+  const [remediationFilters, setRemediationFilters] = React.useState({ action_type: '', target_ref: '' })
   const { data: health, error: healthErr } = useSystemHealth({ pollMs: 5000 })
   const { data: quota } = useSystemQuota({ pollMs: 30000 })
   const { data: risk } = useSystemRisk({ pollMs: 30000 })
@@ -517,9 +581,17 @@ export default function SystemPage() {
     resolveCluster,
     resolvingFingerprint,
     refresh: refreshClusters,
-  } = useOpenIncidentClusters({ pollMs: 15000 })
-  const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10 })
+  } = useOpenIncidentClusters({ pollMs: 15000, filters: incidentFilters })
+  const { data: remediation, refresh: refreshRemediation } = useRemediationHistory({ pollMs: 15000, limit: 10, filters: remediationFilters })
   const quarantineActions = useQuarantineActions()
+
+  const updateIncidentFilter = (key, value) => {
+    setIncidentFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const updateRemediationFilter = (key, value) => {
+    setRemediationFilters((prev) => ({ ...prev, [key]: value }))
+  }
 
   const handleClusterResolved = async () => {
     await Promise.allSettled([refreshClusters(), refreshRemediation()])
@@ -588,7 +660,8 @@ export default function SystemPage() {
             resolveCluster={resolveCluster}
             onResolved={handleClusterResolved}
           />
-          <RemediationHistoryPanel remediation={remediation} />
+          <IncidentFilterPanel filters={incidentFilters} onChange={updateIncidentFilter} />
+          <RemediationHistoryPanel remediation={remediation} filters={remediationFilters} onFilterChange={updateRemediationFilter} />
           <EventsPanel events={events} />
         </div>
 

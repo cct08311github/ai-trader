@@ -88,9 +88,11 @@ Additional smoke checks completed:
   - System page now supports quarantine apply/clear actions directly from UI
   - System page now supports per-symbol quarantine clear
   - System page now shows incident sample payload detail inline
+  - System page now supports incident cluster filters: `source/code/severity`
+  - System page now supports remediation history filters: `action_type/target_ref`
 - target:
   - keep UI consistent with existing `System.jsx` visual language
-  - optional next step: add remediation history filtering and symbol search
+  - optional next step: add saved filter presets and richer payload formatting
 
 ## Rules For Other AI Sessions
 

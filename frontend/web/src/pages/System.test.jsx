@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { ThemeProvider } from '../lib/theme'
@@ -159,5 +159,18 @@ describe('SystemPage', () => {
     await user.click(screen.getByRole('button', { name: '清除此檔' }))
 
     expect(clearQuarantineSymbols).toHaveBeenCalledWith(['2330'])
+  })
+
+  it('updates operator filter inputs on the page', async () => {
+    renderPage()
+
+    const sourceInput = screen.getByPlaceholderText('network_security')
+    const targetRefInput = screen.getByPlaceholderText('2330 / network_security')
+
+    fireEvent.change(sourceInput, { target: { value: 'broker_reconciliation' } })
+    fireEvent.change(targetRefInput, { target: { value: '2330' } })
+
+    expect(sourceInput).toHaveValue('broker_reconciliation')
+    expect(targetRefInput).toHaveValue('2330')
   })
 })

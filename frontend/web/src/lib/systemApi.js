@@ -50,13 +50,24 @@ function getBase() {
   return getApiBase()
 }
 
-function usePollingJson(path, { pollMs = 15000, timeoutMs = 5000 } = {}) {
+function buildQuery(params) {
+  const search = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value == null || value === '') return
+    search.set(key, String(value))
+  })
+  const query = search.toString()
+  return query ? `?${query}` : ''
+}
+
+function usePollingJson(path, { pollMs = 15000, timeoutMs = 5000, query = {} } = {}) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
+  const url = `${getBase()}${path}${buildQuery(query)}`
 
   const load = useCallback(async () => {
     try {
-      const d = await fetchJson(`${getBase()}${path}`, { timeoutMs })
+      const d = await fetchJson(url, { timeoutMs })
       setData(d)
       setError(null)
       return d
@@ -64,13 +75,13 @@ function usePollingJson(path, { pollMs = 15000, timeoutMs = 5000 } = {}) {
       setError(e.message)
       throw e
     }
-  }, [path, timeoutMs])
+  }, [timeoutMs, url])
 
   useEffect(() => {
     let active = true
     async function run() {
       try {
-        const d = await fetchJson(`${getBase()}${path}`, { timeoutMs })
+        const d = await fetchJson(url, { timeoutMs })
         if (active) {
           setData(d)
           setError(null)
@@ -82,7 +93,7 @@ function usePollingJson(path, { pollMs = 15000, timeoutMs = 5000 } = {}) {
     run()
     const t = setInterval(run, pollMs)
     return () => { active = false; clearInterval(t) }
-  }, [path, pollMs, timeoutMs])
+  }, [pollMs, timeoutMs, url])
 
   return { data, error, refresh: load }
 }
@@ -185,8 +196,8 @@ export function useQuarantinePlan({ pollMs = 15000 } = {}) {
   return usePollingJson('/api/system/quarantine-plan', { pollMs })
 }
 
-export function useOpenIncidentClusters({ pollMs = 15000 } = {}) {
-  const { data, error, refresh } = usePollingJson('/api/system/incidents/open', { pollMs })
+export function useOpenIncidentClusters({ pollMs = 15000, filters = {} } = {}) {
+  const { data, error, refresh } = usePollingJson('/api/system/incidents/open', { pollMs, query: filters })
   const [resolvingFingerprint, setResolvingFingerprint] = useState('')
   const [lastResolution, setLastResolution] = useState(null)
 
@@ -209,8 +220,8 @@ export function useOpenIncidentClusters({ pollMs = 15000 } = {}) {
   return { data, error, refresh, resolveCluster, resolvingFingerprint, lastResolution }
 }
 
-export function useRemediationHistory({ pollMs = 15000, limit = 10 } = {}) {
-  return usePollingJson(`/api/system/remediation-history?limit=${limit}`, { pollMs })
+export function useRemediationHistory({ pollMs = 15000, limit = 10, filters = {} } = {}) {
+  return usePollingJson('/api/system/remediation-history', { pollMs, query: { limit, ...filters } })
 }
 
 export function useQuarantineActions() {
