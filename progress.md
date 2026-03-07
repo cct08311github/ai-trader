@@ -106,6 +106,11 @@ Additional smoke checks completed:
 - real reconciliation mismatch cluster remains the highest priority operational issue
 - auto-lock behavior is already implemented for `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
 - incident storm has already been reduced from hundreds of raw rows to a small actionable set
+- repository mainline is now `main`; split codex integration branches/worktrees have been retired
+- only remaining saved-but-not-committed material from the old `main` WIP is `stash@{0}` with runtime config snapshots:
+  - `config/daily_pm_state.json`
+  - `config/system_state.json`
+  - `config/watchlist.json`
 
 ## In Progress
 
@@ -124,6 +129,16 @@ Additional smoke checks completed:
   - split implementation worktrees are retired
 - target:
   - use `main` as the sole active line going forward
+
+## Handoff Notes
+
+- next AI session should start from `main`
+- do not re-open or recreate retired codex worktrees unless a new isolated stream is actually needed
+- if runtime config snapshots are needed, inspect `stash@{0}` first instead of assuming repo drift
+- most recent recovery commits on `main`:
+  - `82d04ed` `docs: restore project operating docs`
+  - `39e6cc8` `feat: restore report context api`
+  - `0af4a2f` `feat: recover pre-trade guard and llm governance`
 
 ## Rules For Other AI Sessions
 
