@@ -83,11 +83,18 @@ trading_enabled = true
 | settings | `/api/settings` | 系統設定讀寫 |
 | analysis | `/api/analysis` | 盤後分析快照（latest/dates/{date}） |
 | chips | `/api/chips` | 法人籌碼：institution-flows / margin / summary / dates |
+| reports | `/api/reports` | 投資報告結構化資料（`/context?type=morning\|evening\|weekly`） |
 
 **portfolio 路由重要 endpoint**：
 - `GET /api/portfolio/quote/{symbol}` — 即時快照；Shioaji 失敗時 fallback 到 `eod_prices` 最後收盤（`source: "eod"`）
 - `GET /api/portfolio/kline/{symbol}?days=60` — K 線歷史 OHLCV（查 `eod_prices`）
 - `GET /api/portfolio/quote-stream/{symbol}` — BidAsk SSE（五檔即時推送）
+
+**reports 路由重要 endpoint**：
+- `GET /api/reports/context?type=morning|evening|weekly` — 投資報告結構化資料
+- 驗證：需 `Authorization: Bearer <token>`
+- 回傳主要欄位：`status`, `report_type`, `real_holdings`, `simulated_positions`, `technical_indicators`, `institution_chips`, `recent_trades`, `eod_analysis`, `system_state`
+- `PORTFOLIO_JSON_PATH` 未設定或檔案不存在時，`real_holdings.holdings` 會回空陣列，不視為 API 錯誤
 
 ### Auth Middleware
 
@@ -250,6 +257,7 @@ pytest -q   # 根目錄 pytest.ini
 - **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
 - **`full_client` fixture 陷阱**：`importlib.reload()` 會覆蓋 autouse fixture 的 monkeypatch → 必須在 test method 內、`full_client` 解構後才 monkeypatch
 - **`close_position` 時段檢查**：`_is_tw_trading_hours()` 在非交易時段回 403，測試必須 `monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)`
+- **Simulation-aware reconciliation 測試**：模擬盤下 broker 持倉為空屬預期，不應直接斷言 auto-lock 或 unresolved incident；需同時檢查 `resolved_simulation` 與 incident suppression 行為
 
 ### 前端 JavaScript（vitest）
 
@@ -310,6 +318,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
 | v4.13.1 | proposal_executor intent-based 重構（修 phantom orders）；concentration_guard dedup；price=0 guard；mark_intent_failed 防無限重試；silent failure hardening；timestamp 統一毫秒；CI 全綠（close_position 403 修復） |
 | v4.13.2 | eod_ingest 統一法人籌碼管線（T86+MI_MARGN 寫入 eod_institution_flows）；market_data_fetcher 獨立錯誤隔離；移除冗餘 institution_ingest cron 步驟 |
+| v4.14.0 | Operator hardening：quarantine/remediation/incident API+CLI+UI；simulation-aware reconciliation（skip false-positive auto-lock）；`/api/reports/context`；`utcnow()` deprecation cleanup；pre-trade guard env overrides |
 
 ---
 

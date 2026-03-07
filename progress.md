@@ -66,6 +66,29 @@ Last updated: 2026-03-07 Asia/Taipei
   - [x] pre-trade guard: 3 env override tests
   - [ ] execution journal stale recovery (deferred — requires end-to-end broker mock)
 
+### Batch 17: Documentation Sync + QA Refresh (2026-03-07)
+
+- [x] **P2: Reports API documentation and consumer-facing docs**
+  - [x] document `/api/reports/context` in AGENTS.md § FastAPI 後端 → API 路由
+  - [x] document auth: requires `Authorization: Bearer <token>` header
+  - [x] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}`
+  - [x] document query params: `type=morning|evening|weekly` (default: morning)
+  - [x] document `PORTFOLIO_JSON_PATH` missing-file fallback behavior
+- [x] **P2: Operator/hardening doc sync**
+  - [x] CLAUDE.md § 測試規範 updated with simulation-aware reconciliation rule
+  - [x] AGENTS.md § 測試規範 updated with simulation-aware reconciliation rule
+  - [x] AGENTS.md § 變更歷史 added `v4.14.0`
+  - [x] operator runbook added simulation-aware reconciliation behavior note
+  - [x] operator runbook added incident cleanup procedures used in batch 16
+- [x] **QA refresh for completed work**
+  - [x] `frontend/backend/tests/test_reports_api.py`
+  - [x] `frontend/backend/tests/test_system_api.py`
+  - [x] `frontend/backend/tests/test_main.py`
+  - [x] `src/tests/test_broker_reconciliation.py`
+  - [x] `src/tests/test_operator_jobs.py`
+  - [x] `bin/run_ops_summary.sh`
+  - [x] `bin/run_reconciliation.sh` (expected exit `1` with audit mismatch report under simulation)
+
 ### QA Snapshot (2026-03-07)
 
 | Test Suite | Count | Result |
@@ -80,6 +103,19 @@ Last updated: 2026-03-07 Asia/Taipei
 | Reconciliation + operator_jobs (new) | 12 | pass |
 
 0 open incidents in DB. 0 owned-code deprecation warnings.
+
+### QA Refresh After Batch 17
+
+- [x] docs and runbook synced with current mainline behavior
+- [x] reports/system/main FastAPI suites rerun green
+- [x] reconciliation/operator_jobs suites rerun green
+- [x] `bin/run_ops_summary.sh` produced fresh snapshot with `open_incidents=0` and `auto_lock_active=0`
+- [x] `bin/run_reconciliation.sh` produced fresh audit snapshot with:
+  - [x] `resolved_simulation=true`
+  - [x] `mismatch_count=9`
+  - [x] no new auto-lock applied
+  - [x] no open-incident regression
+- [ ] reconcile `reconciliation_mismatches_24h=27` warning metric with simulation-aware semantics in ops summary
 
 ---
 
@@ -97,12 +133,13 @@ Last updated: 2026-03-07 Asia/Taipei
 
 - [ ] **Reports API documentation and consumer integration**
   - [x] document `/api/reports/context` in CLAUDE.md § API 路由 table — `35ecee5`
-  - [ ] document in AGENTS.md § FastAPI 後端 → API 路由
-  - [ ] document auth: requires `Authorization: Bearer <token>` header
-  - [ ] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}`
-  - [ ] document query params: `type=morning|evening|weekly` (default: morning)
+  - [x] document in AGENTS.md § FastAPI 後端 → API 路由 — batch 17
+  - [x] document auth: requires `Authorization: Bearer <token>` header — batch 17
+  - [x] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}` — batch 17
+  - [x] document query params: `type=morning|evening|weekly` (default: morning) — batch 17
   - [x] remove hardcoded `.openclaw` fallback path (CI guardrail fix) — `039ce68`
-  - [ ] set `PORTFOLIO_JSON_PATH` in production `.env` or document that it's intentionally empty
+  - [x] document missing `PORTFOLIO_JSON_PATH` fallback behavior — batch 17
+  - [ ] set `PORTFOLIO_JSON_PATH` in production `.env` or explicitly decide that empty is acceptable
   - [ ] identify actual consumers (OpenClaw finance/researcher agents) and confirm integration
   - acceptance: future AI sessions find the endpoint in docs without reading code
 
@@ -123,14 +160,14 @@ Last updated: 2026-03-07 Asia/Taipei
     - [x] add `/api/reports/context` to API 路由 table — `35ecee5`
     - [x] add `reports` router to router list — `35ecee5`
     - [x] update § 變更歷史 with v4.14.0 summary — `35ecee5`
-    - [ ] update § 測試規範 with new test patterns (simulation-aware reconciliation)
+    - [x] update § 測試規範 with new test patterns (simulation-aware reconciliation) — batch 17
   - [ ] AGENTS.md updates:
-    - [ ] add `reports` router to § FastAPI 後端 → API 路由
-    - [ ] add v4.14.0 to § 變更歷史
+    - [x] add `reports` router to § FastAPI 後端 → API 路由 — batch 17
+    - [x] add v4.14.0 to § 變更歷史 — batch 17
   - [ ] operator runbook (`doc/2026-03-06-operator-runbook.md`):
-    - [ ] add simulation-aware reconciliation behavior note
-    - [ ] add incident cleanup procedures used in batch 16
-  - [ ] verify no cross-doc contradictions about active workflow
+    - [x] add simulation-aware reconciliation behavior note — batch 17
+    - [x] add incident cleanup procedures used in batch 16 — batch 17
+  - [x] verify no cross-doc contradictions about active workflow — batch 17
   - acceptance: all docs agree on endpoints, services, and workflow
 
 ### P3 Future Enhancements (not urgent)

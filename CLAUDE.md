@@ -90,6 +90,12 @@ trading_enabled = true
 - `GET /api/portfolio/kline/{symbol}?days=60` — K 線歷史 OHLCV（查 `eod_prices`）
 - `GET /api/portfolio/quote-stream/{symbol}` — BidAsk SSE（五檔即時推送）
 
+**reports 路由重要 endpoint**：
+- `GET /api/reports/context?type=morning|evening|weekly` — 投資報告結構化資料
+- 驗證：需 `Authorization: Bearer <token>`
+- 回傳主要欄位：`status`, `report_type`, `real_holdings`, `simulated_positions`, `technical_indicators`, `institution_chips`, `recent_trades`, `eod_analysis`, `system_state`
+- `PORTFOLIO_JSON_PATH` 未設定或檔案不存在時，`real_holdings.holdings` 會回空陣列，不視為 API 錯誤
+
 ### Auth Middleware
 
 - `AuthMiddleware` 強制所有請求帶 `Authorization: Bearer <token>`
@@ -257,6 +263,7 @@ pytest -q   # 根目錄 pytest.ini
 - **FastAPI route 覆蓋率**：成功路徑（`return`）與錯誤路徑（`raise HTTPException`）需各自獨立測試，不能只測其中一個
 - **`full_client` fixture 陷阱**：`importlib.reload()` 會覆蓋 autouse fixture 的 monkeypatch → 必須在 test method 內、`full_client` 解構後才 monkeypatch
 - **`close_position` 時段檢查**：`_is_tw_trading_hours()` 在非交易時段回 403，測試必須 `monkeypatch.setattr(port, "_is_tw_trading_hours", lambda: True)`
+- **Simulation-aware reconciliation 測試**：模擬盤下 broker 持倉為空屬預期，不應直接斷言 auto-lock 或 unresolved incident；需同時驗證 `resolved_simulation` 與 false-positive suppression
 
 ### 前端 JavaScript（vitest）
 
