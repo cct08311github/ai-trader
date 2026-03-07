@@ -11,7 +11,18 @@ This runbook covers the new operational hardening jobs:
 
 All paths below assume the repository root:
 
-`/Users/openclaw/.openclaw/shared/projects/ai-trader`
+`/Users/openclaw/.openclaw/shared/projects/ai-trader` *(Legacy: production deployment uses Portable Paths computed via SCRIPT_DIR/OPENCLAW_ROOT_ENV).*
+
+## Configuration Governance
+
+Configuration files in `config/` are strictly divided into two categories:
+
+1. **Deploy Baselines** (Tracked in Git)
+   - Examples: `capital.json`, `drawdown_policy_v1.json`, `locked_symbols.json`.
+   - Policy: These dictate production limits (e.g., maximum position size). Any change to these limits requires a PR/Git commit and team review. Do not override these via runtime memory.
+2. **Runtime State** (Untracked, `.gitignore`)
+   - Examples: `system_state.json`, `daily_pm_state.json`.
+   - Policy: These are dynamically generated and updated by the system or operator API actions. They are excluded from version control to prevent Git workspace pollution. Safe defaults are provided in code during bootstrapping.
 
 ## Services
 

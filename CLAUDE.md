@@ -14,6 +14,9 @@
 | FastAPI 後端 | `frontend/backend/` | REST API + SSE，SQLite 讀寫 |
 | React 前端 | `frontend/web/` | Vite + Tailwind，即時儀表板 |
 | 設定 | `config/` | system_state.json、daily_pm_state.json、watchlist.json |
+
+**分支策略（Branching）**：
+- `main` 是目前 **唯一運行中且活躍的主線（sole active line）**。所有其他的 `codex/*` 實驗分支已經被合併或刪除，請直接對 `main` 操作。
 | 資料庫 | `data/sqlite/trades.db` | 唯一共用 SQLite，前後端與 watcher 共用 |
 
 ---
@@ -29,6 +32,15 @@ trading_enabled = true
 - `simulation_mode: true` = 模擬盤（預設）；`false` = 實際盤
 - 切換至實際盤會自動停用 auto trading（雙重保險）
 - `config/system_state.json` 為主開關，不要直接手動改，用 API
+
+### Runtime Config Baseline Policy (設定檔治理)
+專案內的 `config/` 遵循嚴格的區分：
+1. **Deploy Baselines（部署基準配置）**：
+   - *例子*：`capital.json` (資金分配), `drawdown_policy_v1.json`, `locked_symbols.json` 等。
+   - *政策*：這些檔案 **必須** 保留在 Git 中追蹤。如果你要在生產環境放寬這些限制（例如調高部位上限），必須透過正規的 Git Commit 與 PR 審查。不允許透過後台修改直接覆寫生產策略。
+2. **Runtime State（執行期狀態）**：
+   - *例子*：`system_state.json` (主開關), `daily_pm_state.json` (每日審核結果)。
+   - *政策*：這些檔案會被系統頻繁讀寫（如 Operator 觸發緊急停止，或每日盤前 LLM PM 產生報告）。為了避免污染 Git 工作區，它們已加入 `.gitignore`，**不再被追蹤**。若新部署環境缺乏這些檔案，系統程式碼 (`system_state_store.py`, `daily_pm_review.py`) 會自動 fail-safe 並提供安全預設值（例如：預設封鎖交易 `trading_enabled=False`）。
 
 ---
 
@@ -95,6 +107,10 @@ trading_enabled = true
 - 驗證：需 `Authorization: Bearer <token>`
 - 回傳主要欄位：`status`, `report_type`, `real_holdings`, `simulated_positions`, `technical_indicators`, `institution_chips`, `recent_trades`, `eod_analysis`, `system_state`
 - `PORTFOLIO_JSON_PATH` 未設定或檔案不存在時，`real_holdings.holdings` 會回空陣列，不視為 API 錯誤
+- **Production Consumer Path（整合途徑）**：
+  外部 Agent 或腳本需要取得報告時，建議透過官方封裝的 Helper，避免重複寫 HTTP 呼叫邏輯：
+  1. Python Client: `from openclaw.report_context_client import fetch_and_format_report_context` (`src/openclaw/report_context_client.py`)
+  2. CLI 工具: `PYTHONPATH=src bin/venv/bin/python tools/fetch_report_context.py --type morning`
 
 ### Auth Middleware
 
@@ -198,6 +214,12 @@ pm2 restart ai-trader-api   # 重啟 API
 pm2 logs ai-trader-watcher  # 看掃盤 log
 pm2 reload ecosystem.config.js --only ai-trader-ops-summary,ai-trader-reconciliation,ai-trader-incident-hygiene
 ```
+
+### Portable Path Convention (可攜帶路徑慣例)
+為確保部署與 CI 可攜性，所有 Production 代碼 **禁止硬編碼 `/Users/openclaw` 或 `~/.openclaw`（少數例外為 `.env` 載入 fallback）**：
+- Shell Script 部署：統一使用 `SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"` 與 `REPO="$(cd "$SCRIPT_DIR/.." && pwd)"` 模式推導。
+- Node.js：使用 `path.join(__dirname, ...)` 推導。
+- Python：使用 `Path(__file__).resolve().parents...` 或透過 `OPENCLAW_ROOT_ENV` 環境變數指定。
 
 `broker_reconciliation` 若診斷出 `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`，會自動把 `config/system_state.json` 的 `trading_enabled` 關閉，並寫入 `auto_lock_*` 欄位；operator 必須先確認帳戶/模式與持倉真值，再手動重新 enable。
 
