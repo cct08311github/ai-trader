@@ -10,10 +10,14 @@ Last updated: 2026-03-07 Asia/Taipei
 
 ## Worktrees
 
+- `main`
+  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader`
+  - focus: sole active mainline after integrating operator remediation, operator drilldown, and System UI work
+  - status: active
 - `codex/integration-recovery`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-integration-recovery`
   - focus: single mainline for remediation, operator API, and System UI after integration recovery
-  - status: active
+  - status: retired after fast-forward into `main`
 - `codex/remediation-api`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-remediation-api`
   - focus: operator remediation, incident handling, quarantine workflow, CLI/API hardening
@@ -60,6 +64,10 @@ Last updated: 2026-03-07 Asia/Taipei
 11. `2026-03-07 mainline consolidation`
    - retired split worktrees after successful integration
    - `codex/integration-recovery` is now the only active operator hardening line
+12. `2026-03-07 main promotion`
+   - `main` fast-forwarded from `cba9fc5` to `f4ef55b`
+   - previous dirty `main` changes were preserved in `stash@{0}` with message `main-wip-before-integration-2026-03-07`
+   - integrated backend tests, `System.test.jsx`, and production build all passed on `main`
 
 ## Verified Test Commands
 
@@ -85,17 +93,18 @@ Additional smoke checks completed:
 
 ## In Progress
 
-### Integration Line
+### Mainline
 
-- branch/worktree: `codex/integration-recovery`
+- branch/worktree: `main`
 - current state:
   - remediation API/CLI commits are integrated
   - operator-drilldown API/CLI commits are integrated
   - System operator UI commits are integrated
-  - integrated verification is green for backend tests, `System.test.jsx`, and production build
+  - integrated verification is green for backend tests, `System.test.jsx`, and production build on `main`
+  - previous uncommitted `main` work is preserved in `stash@{0}` as `main-wip-before-integration-2026-03-07`
   - split implementation worktrees are retired
 - target:
-  - use this branch as the sole active mainline until the dirty `main` worktree is intentionally reconciled
+  - use `main` as the sole active line going forward
 
 ## Rules For Other AI Sessions
 
