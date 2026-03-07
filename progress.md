@@ -7,217 +7,188 @@ Last updated: 2026-03-07 Asia/Taipei
 - Primary coordination file for parallel AI work.
 - Update this file after every meaningful batch.
 - Keep entries factual: branch, worktree, scope, tests, commit, next step.
+- **Checklist format**: `[x]` = done, `[ ]` = pending. Sub-tasks indented under parent.
 
-## Worktrees
+## Active Branch
 
-- `main`
-  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader`
-  - focus: sole active mainline after integrating operator remediation, operator drilldown, and System UI work
-  - status: active
-- `codex/integration-recovery`
-  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-integration-recovery`
-  - focus: single mainline for remediation, operator API, and System UI after integration recovery
-  - status: retired after fast-forward into `main`
-- `codex/remediation-api`
-  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-remediation-api`
-  - focus: operator remediation, incident handling, quarantine workflow, CLI/API hardening
-  - status: retired after integration into `codex/integration-recovery`
-- `codex/system-ops-ui`
-  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-system-ops-ui`
-  - focus: System page operator UI for quarantine/incidents/remediation history
-  - status: retired after integration into `codex/integration-recovery`
-- `codex/operator-drilldown`
-  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-operator-drilldown`
-  - focus: backend filtering/query ergonomics for operator APIs
-  - status: retired after integration into `codex/integration-recovery`
+- `main` — sole active mainline
+- path: `/Users/openclaw/.openclaw/shared/projects/ai-trader`
+- all retired worktrees (`codex/integration-recovery`, `codex/remediation-api`, `codex/system-ops-ui`, `codex/operator-drilldown`) have been merged and deleted
+- runtime config stash has been dropped (all obsolete)
 
-## Completed Batches
+## Completed Checklist
 
-1. `a253377` `feat: harden operator incident workflows`
-   - added reconciliation diagnostics and incident hygiene improvements
-2. `c7822a3` `feat: auto-lock trading on reconciliation drift`
-   - reconciliation can auto-disable `trading_enabled`
-3. `8e98f32` `feat: add reconciliation quarantine workflow`
-   - added quarantine planning/apply framework
-4. `cba9fc5` `feat: add reversible quarantine controls`
-   - clear/rebuild quarantine flow
-5. `cad1a10` `feat: add quarantine remediation api`
-   - added `/api/system/quarantine-plan`
-   - added `/api/system/quarantine/apply`
-   - added `/api/system/quarantine/clear`
-6. `1337b7e` `feat: add remediation audit trail`
-   - added remediation journal
-   - added `/api/system/remediation-history`
-7. `1741e2f` `feat: add incident resolution api`
-   - added `/api/system/incidents/open`
-   - added `/api/system/incidents/resolve`
-8. `25ae475` `feat: add incident resolution cli`
-   - added `tools/run_incident_resolution.py`
-   - added `bin/run_incident_resolution.sh`
-9. `1a31836` `docs: add shared progress ledger`
-   - shared coordination ledger for split worktrees
-10. `2026-03-07 integration verification`
-   - all remediation, operator-drilldown, and system-ops-ui commits cherry-picked into `codex/integration-recovery`
-   - backend operator tests passed on the integrated branch
-   - `System.test.jsx` passed on the integrated branch
-   - `frontend/web` production build passed on the integrated branch
-11. `2026-03-07 mainline consolidation`
-   - retired split worktrees after successful integration
-   - `codex/integration-recovery` is now the only active operator hardening line
-12. `2026-03-07 main promotion`
-   - `main` fast-forwarded from `cba9fc5` to `f4ef55b`
-   - previous dirty `main` changes were preserved in `stash@{0}` with message `main-wip-before-integration-2026-03-07`
-   - integrated backend tests, `System.test.jsx`, and production build all passed on `main`
-13. `2026-03-07 stash recovery batch 1`
-   - restored `pre_trade_guard` and `llm_governance` from the saved `main` stash
-   - wired pre-trade hard guard into `main.py`, `ticker_watcher.py`, and manual close in `portfolio.py`
-   - restored proposal execution journal hardening and related tests
-   - restored LLM governance metadata persistence and related tests
-14. `2026-03-07 stash recovery batch 2`
-   - restored `/api/reports/context` into the FastAPI mainline
-   - added backend route tests for structured report context and optional-source fallback
-   - fixed report technical-indicator generation for short price histories
-15. `2026-03-07 stash recovery batch 3`
-   - restored `AGENTS.md` for future Codex sessions
-   - restored the automated trading hardening plan under `doc/plans/`
-   - left runtime JSON state snapshots in stash instead of committing environment drift
+### Batch 1–15: Operator Hardening & Stash Recovery
 
-## Verified Test Commands
+- [x] `a253377` harden operator incident workflows
+- [x] `c7822a3` auto-lock trading on reconciliation drift
+- [x] `8e98f32` reconciliation quarantine workflow
+- [x] `cba9fc5` reversible quarantine controls
+- [x] `cad1a10` quarantine remediation API (`/api/system/quarantine-plan`, `apply`, `clear`)
+- [x] `1337b7e` remediation audit trail (`/api/system/remediation-history`)
+- [x] `1741e2f` incident resolution API (`/api/system/incidents/open`, `resolve`)
+- [x] `25ae475` incident resolution CLI (`tools/run_incident_resolution.py`)
+- [x] `1a31836` shared progress ledger
+- [x] integration verification (cherry-pick + tests green)
+- [x] mainline consolidation (retired split worktrees)
+- [x] main promotion (fast-forward to `f4ef55b`)
+- [x] stash recovery batch 1: pre_trade_guard, llm_governance, proposal execution journal
+- [x] stash recovery batch 2: `/api/reports/context` + tests
+- [x] stash recovery batch 3: AGENTS.md, doc/plans
 
-```bash
-PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_position_quarantine.py src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py
-npm test -- --run src/pages/System.test.jsx
-npm run build
-PYTHONPATH=src /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_pre_trade_guard.py src/tests/test_proposal_executor.py src/tests/test_ticker_watcher.py src/tests/test_main.py src/tests/test_llm_observability.py
-/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q frontend/backend/tests/test_portfolio_api.py
-/Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q frontend/backend/tests/test_reports_api.py frontend/backend/tests/test_main.py
-```
+### Batch 16: P0 + P1 Hardening (2026-03-07)
 
-Additional smoke checks completed:
-
-- FastAPI `quarantine_apply -> remediation-history -> quarantine_clear`
-- FastAPI `incidents/open -> incidents/resolve -> remediation-history`
-- CLI `bin/run_incident_resolution.sh` list + apply
-- frontend `npm run build`
-- frontend `npm test -- --run src/pages/System.test.jsx`
-
-## Current Production/Operational Context
-
-- real reconciliation mismatch cluster remains the highest priority operational issue
-- auto-lock behavior is already implemented for `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
-- incident storm has already been reduced from hundreds of raw rows to a small actionable set
-- repository mainline is now `main`; split codex integration branches/worktrees have been retired
-- only remaining saved-but-not-committed material from the old `main` WIP is `stash@{0}` with runtime config snapshots:
-  - `config/daily_pm_state.json`
-  - `config/system_state.json`
-  - `config/watchlist.json`
-
-16. `2026-03-07 P0 reconciliation mismatch root cause`
-   - root cause: simulation mode reconciliation compares local positions against empty Shioaji simulation account → structural false positive
-   - fix: simulation-aware reconciliation (Plan C)
-     - `operator_jobs.py`: skip `apply_reconciliation_auto_lock` when `resolved_simulation=True`
-     - `broker_reconciliation.py`: skip incident creation when simulation + `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
-     - reconciliation report still written for audit visibility
-   - resolved 1 false positive `RECONCILIATION_MISMATCH` incident in DB
-   - added `test_run_reconciliation_job_live_mode_applies_auto_lock` (live mode still locks)
-   - updated existing tests to match new simulation-aware behavior
-   - tests: 12/12 reconciliation + operator_jobs, 37/37 related operator/system tests
-
-## QA Results
-
-### 2026-03-07 Full QA Pass
-
-All completed batches (1–15) verified on `main`:
-
-| Test Suite | Count | Result |
-|------------|-------|--------|
-| Core Engine (pre_trade_guard, proposal_executor, ticker_watcher, main, llm_observability) | 76 | ✅ pass |
-| Operator (quarantine, remediation, incident, system_api) | 54 | ✅ pass |
-| FastAPI (reports_api, main, portfolio_api) | 67 | ✅ pass |
-| Frontend vitest (10 files) | 124 | ✅ pass |
-| Frontend production build | — | ✅ built |
-
-No failures. Only cosmetic warnings (React `act()` wrapping, deprecated `utcnow()`).
-
-## In Progress
-
-### Mainline
-
-- branch/worktree: `main`
-- current state:
-  - all 15 completed batches QA-verified green
-  - remediation API/CLI, operator-drilldown, System operator UI fully integrated
-  - stash recovery batches 1–3 integrated; only runtime config snapshots remain in `stash@{0}`
-  - split implementation worktrees are retired
-- target:
-  - use `main` as the sole active line going forward
-
-## Backlog Checklist
-
-### P0 Production Incidents
-
-- [x] **Reconciliation mismatch root cause** (batch 16)
-  - root cause: simulation mode structural false positive (broker always empty)
-  - fix: simulation-aware reconciliation — report still generated, auto-lock + incident suppressed
-- [x] **Network allowlist incident root cause** (batch 16)
-  - root cause: 430 incidents are test artifacts (fake IPs: `8.8.8.8`, `203.0.113.10`)
-  - `OPENCLAW_IP_ALLOWLIST` not set → no-op in production; resolved 2 open incidents → 0 remain
-
-### P1 Operational Hardening
-
-- [x] **PM2 and operator runbook validation** (batch 16)
+- [x] **P0: Reconciliation mismatch root cause** — `d298ebf`
+  - [x] root cause identified: simulation mode = broker always empty → structural false positive
+  - [x] `operator_jobs.py`: skip auto-lock when `resolved_simulation=True`
+  - [x] `broker_reconciliation.py`: skip incident when simulation + `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
+  - [x] reconciliation report still written for audit
+  - [x] resolved 1 false positive incident in DB
+  - [x] added live-mode auto-lock positive test
+  - [x] tests: 12/12 reconciliation + 37/37 operator/system
+- [x] **P0: Network allowlist incident root cause** — `d298ebf`
+  - [x] root cause: 430 incidents are test artifacts (fake IPs `8.8.8.8`, `203.0.113.10`)
+  - [x] `OPENCLAW_IP_ALLOWLIST` not set → no-op in production
+  - [x] resolved 2 open incidents → 0 open incidents remain
+- [x] **P1: PM2 and operator runbook validation** — `92aaf7f`
   - [x] PM2 process list matches ecosystem.config.js (7 services + 1 external `agent-monitor-web`)
   - [x] 3 cron jobs produce output in `data/ops/` as documented
   - [x] no stale worktree/branch references in docs
-- [x] **Runtime config snapshot review** (batch 16)
-  - [x] inspected `stash@{0}`: all 3 configs obsolete (empty PM state, false-positive auto-lock, redundant watchlist keys)
-  - [x] compared with current runtime state — repo versions are correct
-  - [x] dropped `stash@{0}`
+- [x] **P1: Runtime config snapshot review** — `92aaf7f`
+  - [x] inspected `stash@{0}`: all 3 configs obsolete
+  - [x] dropped stash
+- [x] **P1: Eliminate owned-code deprecation warnings** — `f22c3d3`
+  - [x] replaced 5 owned `utcnow()` → `datetime.now(UTC)`
+  - [x] fixed 2 test files
+  - [x] strict `-W error::DeprecationWarning` passes 101/101
+- [x] **P1: Expand regression coverage** — `c45d9f2`
+  - [x] reports API: invalid type, missing auth, DB error, missing chips/analysis tables
+  - [x] pre-trade guard: 3 env override tests
+  - [ ] execution journal stale recovery (deferred — requires end-to-end broker mock)
 
-### P1 QA and Reliability
+### QA Snapshot (2026-03-07)
 
-- [x] **Eliminate owned-code deprecation warnings** (batch 16)
-  - [x] replaced 5 owned `utcnow()` → `datetime.now(UTC)` (portfolio, settings, pnl_engine, resume_protocol)
-  - [x] fixed 2 test files (test_pnl_engine, test_resume_protocol)
-  - [x] strict `-W error::DeprecationWarning` passes 101/101; remaining warnings are third-party (shioaji)
-- [x] **Expand regression coverage for recovered features** (batch 16)
-  - [x] negative-path tests for `/api/reports/context` (invalid type, missing auth, DB error → 4xx/5xx)
-  - [x] report context with missing chips/analysis tables (institution_chips={}, eod_analysis=None)
-  - [x] pre-trade guard env override behavior (3 tests: override max_qty, max_notional, allow larger)
-  - [ ] execution journal stale recovery across watcher flow (deferred — requires end-to-end broker mock)
+| Test Suite | Count | Result |
+|------------|-------|--------|
+| Core Engine | 76 | pass |
+| Operator | 54 | pass |
+| FastAPI | 67+ | pass |
+| Frontend vitest | 124 | pass |
+| Frontend build | — | pass |
+| Reports API (new) | 6 | pass |
+| Pre-trade guard (new) | 8 | pass |
+| Reconciliation + operator_jobs (new) | 12 | pass |
+
+0 open incidents in DB. 0 owned-code deprecation warnings.
+
+---
+
+## Pending Checklist
+
+### P1 Deferred
+
+- [ ] **Execution journal stale recovery test**
+  - [ ] build end-to-end broker mock for watcher → intent → execute → journal flow
+  - [ ] test stale journal entry recovery across watcher restart
+  - [ ] test `mark_intent_failed` prevents infinite retry
+  - acceptance: execution journal has both success and failure-path coverage in integration context
 
 ### P2 Product and API Follow-up
 
 - [ ] **Reports API documentation and consumer integration**
-  - [ ] document endpoint in README/AGENTS
-  - [ ] confirm auth expectations and response shape
-  - [ ] identify consumers and add smoke test
+  - [ ] document `/api/reports/context` in CLAUDE.md § FastAPI 後端 → API 路由
+  - [ ] document in AGENTS.md § FastAPI 後端 → API 路由
+  - [ ] document auth: requires `Authorization: Bearer <token>` header
+  - [ ] document response shape: `{status, report_type, real_holdings, simulated_positions, technical_indicators, institution_chips, recent_trades, eod_analysis, system_state}`
+  - [ ] document query params: `type=morning|evening|weekly` (default: morning)
+  - [ ] identify actual consumers (OpenClaw finance/researcher agents) and confirm integration
+  - acceptance: future AI sessions find the endpoint in docs without reading code
+
 - [ ] **Operator UI polish and chunking**
-  - [ ] review large chunk build warning
-  - [ ] consider splitting `System.jsx` if bundle grows
-  - [ ] tighten payload formatting and empty-state behavior
+  - [ ] review `frontend/web` build warning: `index.js` 790KB > 500KB threshold
+  - [ ] evaluate code-splitting options:
+    - [ ] `React.lazy()` for System page operator panels (quarantine/incidents/remediation)
+    - [ ] `React.lazy()` for Analysis page (heavy charts)
+    - [ ] dynamic import for recharts
+  - [ ] tighten operator panel empty-state behavior (no data → clear message)
+  - [ ] verify mobile responsiveness of operator panels
+  - acceptance: chunk warning reduced or consciously documented as accepted debt
 
 ### P2 Documentation Maintenance
 
 - [ ] **Sync all operator/hardening docs**
-  - [ ] align `README.md`, `AGENTS.md`, operator runbook, `progress.md`
-  - [ ] remove stale references to retired codex branches/worktrees
+  - [ ] CLAUDE.md updates:
+    - [ ] add `/api/reports/context` to API 路由 table
+    - [ ] add `reports` router to router list
+    - [ ] update § 變更歷史 with batch 16 summary
+    - [ ] update § 測試規範 with new test patterns (simulation-aware reconciliation)
+  - [ ] AGENTS.md updates:
+    - [ ] add `reports` router to § FastAPI 後端 → API 路由
+    - [ ] add batch 16 to § 變更歷史
+  - [ ] operator runbook (`doc/2026-03-06-operator-runbook.md`):
+    - [ ] add simulation-aware reconciliation behavior note
+    - [ ] add incident cleanup procedures used in batch 16
+  - [ ] verify no cross-doc contradictions about active workflow
+  - acceptance: all docs agree on endpoints, services, and workflow
+
+### P3 Future Enhancements (not urgent)
+
+- [ ] **Reconciliation improvement: simulation-mode position tracking**
+  - [ ] consider separate reconciliation mode for simulation that compares local DB against expected paper positions
+  - [ ] alternative: skip reconciliation entirely in simulation and only enable when `simulation_mode=false`
+  - acceptance: reconciliation provides value in both simulation and live modes
+
+- [ ] **Frontend React warnings cleanup**
+  - [ ] wrap state updates in `act()` for: AnalysisPage, InventoryPage, PortfolioPage, PositionDetailDrawer
+  - [ ] upgrade React Router to v7 or add `v7_startTransition` future flag
+  - acceptance: zero React warnings in test output
+
+---
+
+## Verified Test Commands
+
+```bash
+# Core engine
+PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q \
+  src/tests/test_pre_trade_guard.py src/tests/test_proposal_executor.py \
+  src/tests/test_ticker_watcher.py src/tests/test_main.py \
+  src/tests/test_llm_observability.py
+
+# Operator
+PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q \
+  src/tests/test_position_quarantine.py src/tests/test_operator_remediation.py \
+  src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py
+
+# Reconciliation
+PYTHONPATH=src:frontend/backend bin/venv/bin/python -m pytest -q \
+  src/tests/test_broker_reconciliation.py src/tests/test_operator_jobs.py
+
+# FastAPI
+bin/venv/bin/python -m pytest -q \
+  frontend/backend/tests/test_portfolio_api.py \
+  frontend/backend/tests/test_reports_api.py \
+  frontend/backend/tests/test_main.py
+
+# Frontend
+cd frontend/web && npm test -- --run && npm run build
+```
 
 ## Handoff Notes
 
-- next AI session should start from `main`
-- next task: **P1 Operational Hardening → PM2 and operator runbook validation**
-- do not re-open or recreate retired codex worktrees unless a new isolated stream is actually needed
-- if runtime config snapshots are needed, inspect `stash@{0}` first instead of assuming repo drift
-- 0 open incidents remain in DB
+- branch: `main` — sole active line
+- 0 open incidents in DB
+- runtime config stash dropped (all obsolete)
+- next task: pick from **Pending Checklist** (P1 deferred or P2)
+- P2 items are independent — safe for parallel AI sessions
+- do not re-open retired codex worktrees
 
 ## Rules For Other AI Sessions
 
-- do not modify runtime files such as `config/system_state.json` unless the task explicitly requires it
+- do not modify runtime files (`config/system_state.json`) unless the task explicitly requires it
 - do not revert unrelated user changes in the main worktree
 - prefer isolated worktrees for independent streams
-- update this file after each batch with:
-  - worktree
-  - commit
-  - tests run
-  - remaining risk
+- update this file after each batch:
+  - move `[ ]` → `[x]` for completed items
+  - add commit hash
+  - add test results
+  - note any remaining risk
