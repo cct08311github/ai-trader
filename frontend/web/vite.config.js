@@ -49,6 +49,17 @@ export default defineConfig(({ mode }) => {
         '127.0.0.1',
       ],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-router': ['react-router', 'react-router-dom'],
+            'vendor-recharts': ['recharts'],
+          },
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       globals: true,
