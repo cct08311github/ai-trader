@@ -10,6 +10,10 @@ Last updated: 2026-03-07 Asia/Taipei
 
 ## Worktrees
 
+- `codex/integration-recovery`
+  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-integration-recovery`
+  - focus: cherry-pick and verify remediation, operator API, and System UI streams on one clean line
+  - status: active
 - `codex/remediation-api`
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-remediation-api`
   - focus: operator remediation, incident handling, quarantine workflow, CLI/API hardening
@@ -48,11 +52,18 @@ Last updated: 2026-03-07 Asia/Taipei
    - added `bin/run_incident_resolution.sh`
 9. `1a31836` `docs: add shared progress ledger`
    - shared coordination ledger for split worktrees
+10. `2026-03-07 integration verification`
+   - all remediation, operator-drilldown, and system-ops-ui commits cherry-picked into `codex/integration-recovery`
+   - backend operator tests passed on the integrated branch
+   - `System.test.jsx` passed on the integrated branch
+   - `frontend/web` production build passed on the integrated branch
 
 ## Verified Test Commands
 
 ```bash
 PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_position_quarantine.py src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py
+npm test -- --run src/pages/System.test.jsx
+npm run build
 ```
 
 Additional smoke checks completed:
@@ -70,6 +81,17 @@ Additional smoke checks completed:
 - incident storm has already been reduced from hundreds of raw rows to a small actionable set
 
 ## In Progress
+
+### Integration Line
+
+- branch/worktree: `codex/integration-recovery`
+- current state:
+  - remediation API/CLI commits are integrated
+  - operator-drilldown API/CLI commits are integrated
+  - System operator UI commits are integrated
+  - integrated verification is green for backend tests, `System.test.jsx`, and production build
+- target:
+  - keep this branch as the clean merge-ready line until the dirty main worktree is reconciled
 
 ### Stream A: Operator Remediation
 
