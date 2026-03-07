@@ -20,6 +20,9 @@ def _write_state_file(tmp_path, trading_enabled=False, simulation_mode=True):
     p.write_text(json.dumps(state))
     return p
 
+def _raise_exc(*args, **kwargs):
+    raise RuntimeError("forced error for test")
+
 
 @pytest.fixture
 def patched_client(client, tmp_path, monkeypatch):
@@ -240,35 +243,34 @@ class TestClearShioajiCache:
 
 class TestControlExceptionPaths:
     def test_enable_500_when_state_file_missing(self, client, monkeypatch):
-        """enable endpoint returns 500 when state file not found."""
         import app.api.control as ctrl
-        monkeypatch.setattr(ctrl, "SYSTEM_STATE_PATH", "/nonexistent/path/state.json")
+        monkeypatch.setattr(ctrl, "update_system_state", _raise_exc)
         r = client.post("/api/control/enable", headers=_AUTH)
         assert r.status_code == 500
 
     def test_disable_500_when_state_file_missing(self, client, monkeypatch):
         import app.api.control as ctrl
-        monkeypatch.setattr(ctrl, "SYSTEM_STATE_PATH", "/nonexistent/path/state.json")
+        monkeypatch.setattr(ctrl, "update_system_state", _raise_exc)
         r = client.post("/api/control/disable", headers=_AUTH)
         assert r.status_code == 500
 
     def test_simulation_500_when_state_file_missing(self, client, monkeypatch):
         import app.api.control as ctrl
-        monkeypatch.setattr(ctrl, "SYSTEM_STATE_PATH", "/nonexistent/path/state.json")
+        monkeypatch.setattr(ctrl, "update_system_state", _raise_exc)
         monkeypatch.setattr(ctrl, "_clear_shioaji_cache", lambda: None)
         r = client.post("/api/control/simulation", headers=_AUTH)
         assert r.status_code == 500
 
     def test_live_500_when_state_file_missing(self, client, monkeypatch):
         import app.api.control as ctrl
-        monkeypatch.setattr(ctrl, "SYSTEM_STATE_PATH", "/nonexistent/path/state.json")
+        monkeypatch.setattr(ctrl, "update_system_state", _raise_exc)
         monkeypatch.setattr(ctrl, "_clear_shioaji_cache", lambda: None)
         r = client.post("/api/control/live", headers=_AUTH)
         assert r.status_code == 500
 
     def test_status_500_when_state_file_missing(self, client, monkeypatch):
         import app.api.control as ctrl
-        monkeypatch.setattr(ctrl, "SYSTEM_STATE_PATH", "/nonexistent/path/state.json")
+        monkeypatch.setattr(ctrl, "read_system_state", _raise_exc)
         r = client.get("/api/control/status", headers=_AUTH)
         assert r.status_code == 500
 
