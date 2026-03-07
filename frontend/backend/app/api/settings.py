@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import json, os, sqlite3
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
@@ -179,7 +179,7 @@ def update_authority(req: AuthorityLevelRequest):
         raise HTTPException(status_code=400, detail="level 必須為 0-3")
     try:
         con = sqlite3.connect(DB_PATH_ENV)
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         con.execute(
             "INSERT INTO authority_policy (level, changed_by, reason, effective_from, updated_at) VALUES (?, ?, ?, ?, ?)",
             (req.level, "user (via UI)", req.reason, now, now)

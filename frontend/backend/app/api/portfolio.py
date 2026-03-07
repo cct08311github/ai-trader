@@ -409,7 +409,7 @@ def get_portfolio_kpis():
     P1-5: KPI 卡片補齊缺失指標: 可用現金、今日成交筆數、整體勝率。
     """
     import datetime
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
 
     import os, json
     cap_path = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
@@ -764,7 +764,7 @@ def close_position(symbol: str):
 
     # ── 4. 建立 decision record ───────────────────────────────────────────
     decision_id = str(uuid.uuid4())
-    now_iso = _dt.datetime.utcnow().isoformat(timespec="microseconds") + "+00:00"
+    now_iso = _dt.datetime.now(_dt.UTC).isoformat(timespec="microseconds")
 
     # ── 5. SimBrokerAdapter 提交賣單 ──────────────────────────────────────
     try:

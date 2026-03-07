@@ -116,7 +116,7 @@ class TestSnapshot:
         cm.__exit__ = MagicMock(return_value=False)
 
         # Manually set _last_snapshot_time far in the past
-        tracker._last_snapshot_time = datetime.datetime.utcnow() - datetime.timedelta(seconds=10)
+        tracker._last_snapshot_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=10)
 
         with patch("openclaw.resume_protocol.get_connection", return_value=cm):
             result = tracker.snapshot({"mode": "ok"}, [], 100_000.0, reason="periodic")

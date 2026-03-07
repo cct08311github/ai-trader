@@ -26,7 +26,7 @@ class ResumeProtocolTracker:
         """
         Takes a snapshot of the current positions and basic system safety rules.
         """
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
         if reason == "periodic" and self._last_snapshot_time:
             if (now - self._last_snapshot_time).total_seconds() < self._interval:
                 return False # Skipping snapshot to reduce DB load

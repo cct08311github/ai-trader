@@ -258,8 +258,8 @@ def test_equity_curve_empty():
 def test_equity_curve_builds_cumsum():
     conn = _conn()
     # Insert recent data (within 30 days)
-    from datetime import datetime, timedelta
-    today = datetime.utcnow()
+    from datetime import datetime, timedelta, UTC
+    today = datetime.now(UTC)
     for i, pnl in enumerate([1000.0, -500.0, 2000.0]):
         d = (today - timedelta(days=2 - i)).strftime("%Y-%m-%d")
         conn.execute(

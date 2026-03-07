@@ -176,10 +176,10 @@ No failures. Only cosmetic warnings (React `act()` wrapping, deprecated `utcnow(
 
 ### P1 QA and Reliability
 
-- [ ] **Eliminate owned-code deprecation warnings**
-  - [ ] replace `utcnow()` / `utcfromtimestamp()` → timezone-aware UTC
-  - [ ] prioritize: `portfolio.py`, `pnl_engine.py`
-  - [ ] leave third-party warnings untouched
+- [x] **Eliminate owned-code deprecation warnings** (batch 16)
+  - [x] replaced 5 owned `utcnow()` → `datetime.now(UTC)` (portfolio, settings, pnl_engine, resume_protocol)
+  - [x] fixed 2 test files (test_pnl_engine, test_resume_protocol)
+  - [x] strict `-W error::DeprecationWarning` passes 101/101; remaining warnings are third-party (shioaji)
 - [ ] **Expand regression coverage for recovered features**
   - [ ] negative-path tests for `/api/reports/context`
   - [ ] report context with missing chips/analysis tables

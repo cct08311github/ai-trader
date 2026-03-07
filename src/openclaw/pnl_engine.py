@@ -228,7 +228,7 @@ def get_overall_win_rate(conn: sqlite3.Connection) -> float:
 
 def get_equity_curve(conn: sqlite3.Connection, days: int, start_equity: float) -> list:
     """Build equity curve from daily_pnl_summary (realized_pnl cumsum)."""
-    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+    cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
     rows = conn.execute(
         """SELECT trade_date, realized_pnl
            FROM daily_pnl_summary
