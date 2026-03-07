@@ -18,6 +18,10 @@ Last updated: 2026-03-07 Asia/Taipei
   - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-system-ops-ui`
   - focus: System page operator UI for quarantine/incidents/remediation history
   - status: active
+- `codex/operator-drilldown`
+  - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader-work-operator-drilldown`
+  - focus: backend filtering/query ergonomics for operator APIs
+  - status: active
 
 ## Completed Batches
 
@@ -42,8 +46,8 @@ Last updated: 2026-03-07 Asia/Taipei
 8. `25ae475` `feat: add incident resolution cli`
    - added `tools/run_incident_resolution.py`
    - added `bin/run_incident_resolution.sh`
-9. `29f4124` `docs: add shared progress ledger`
-   - synchronized `progress.md` into UI worktree
+9. `1a31836` `docs: add shared progress ledger`
+   - shared coordination ledger for split worktrees
 
 ## Verified Test Commands
 
@@ -97,6 +101,23 @@ Additional smoke checks completed:
 - target:
   - keep UI consistent with existing `System.jsx` visual language
   - optional next step: add saved filter presets and richer payload formatting
+
+### Stream C: Operator Drilldown API
+
+- branch/worktree: `codex/operator-drilldown`
+- current state:
+  - remediation history supports `action_type` filter
+  - remediation history supports `target_ref` substring filter
+  - incident cluster listing supports `source` filter
+  - incident cluster listing supports `code` filter
+  - incident cluster listing supports `severity` filter
+  - CLI supports `--source`, `--code`, `--severity`, `--action-type`, `--target-ref`
+  - CLI supports `--summary-only`
+  - CLI supports `--jsonl`
+- verified by:
+  - `PYTHONPATH=src:frontend/backend /Users/openclaw/.openclaw/shared/projects/ai-trader/bin/venv/bin/python -m pytest -q src/tests/test_operator_remediation.py src/tests/test_incident_resolution.py frontend/backend/tests/test_system_api.py`
+- target:
+  - optional next step: keep backend filter/query ergonomics aligned with UI controls
 
 ## Rules For Other AI Sessions
 

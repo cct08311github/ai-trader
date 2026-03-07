@@ -147,20 +147,20 @@ def quarantine_status():
 
 
 @router.get("/remediation-history")
-def remediation_history(limit: int = 20):
+def remediation_history(limit: int = 20, action_type: str | None = None, target_ref: str | None = None):
     from openclaw.operator_remediation import list_operator_remediations
 
     with READONLY_POOL.conn() as conn:
-        data = list_operator_remediations(conn, limit=limit)
+        data = list_operator_remediations(conn, limit=limit, action_type=action_type, target_ref=target_ref)
     return data
 
 
 @router.get("/incidents/open")
-def open_incident_clusters():
+def open_incident_clusters(source: str | None = None, code: str | None = None, severity: str | None = None):
     from openclaw.incident_resolution import list_open_incident_clusters
 
     with READONLY_POOL.conn() as conn:
-        data = list_open_incident_clusters(conn)
+        data = list_open_incident_clusters(conn, source=source, code=code, severity=severity)
     return data
 
 

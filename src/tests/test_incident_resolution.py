@@ -74,3 +74,21 @@ def test_resolve_open_incidents_marks_matching_cluster_resolved_and_logs():
     ).fetchone()
     assert log_row["action_type"] == "incident_resolve"
     assert log_row["status"] == "resolved"
+
+
+def test_list_open_incident_clusters_supports_filters():
+    conn = make_db()
+    conn.execute(
+        "INSERT INTO incidents VALUES ('i1', '2026-03-06T10:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+        ('{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}',),
+    )
+    conn.execute(
+        "INSERT INTO incidents VALUES ('i2', '2026-03-06T09:00:00Z', 'warning', 'broker_reconciliation', 'RECONCILIATION_MISMATCH', ?, 0)",
+        ('{"mismatch_count":1}',),
+    )
+    conn.commit()
+
+    result = list_open_incident_clusters(conn, source="network_security", code="SEC_NETWORK_IP_DENIED", severity="critical")
+
+    assert result["count"] == 1
+    assert result["items"][0]["source"] == "network_security"

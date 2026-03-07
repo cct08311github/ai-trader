@@ -132,6 +132,18 @@ def _init_system_db(path: Path) -> None:
             payload_json TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS operator_remediation_log (
+            action_id TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_ref TEXT,
+            actor TEXT NOT NULL,
+            status TEXT NOT NULL,
+            payload_json TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -325,6 +337,24 @@ class TestSystemHealth:
         assert data["items"][0]["action_type"] == "quarantine_apply"
         assert data["items"][0]["target_ref"] == "2330"
 
+    def test_remediation_history_supports_filters(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO operator_remediation_log VALUES ('a1', 10, 'incident_resolve', 'incident_cluster', 'network_security|SEC_NETWORK_IP_DENIED|x', 'operator', 'resolved', '{}')"
+        )
+        conn.execute(
+            "INSERT INTO operator_remediation_log VALUES ('a2', 9, 'quarantine_apply', 'symbol', '2330', 'broker_reconciliation', 'applied', '{}')"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/remediation-history?limit=5&action_type=incident_resolve&target_ref=network_security", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] == 1
+        assert data["items"][0]["action_type"] == "incident_resolve"
+
     def test_open_incident_clusters_groups_duplicates(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))
@@ -344,6 +374,25 @@ class TestSystemHealth:
         data = r.json()
         assert data["count"] == 1
         assert data["items"][0]["count"] == 2
+        assert data["items"][0]["source"] == "network_security"
+
+    def test_open_incident_clusters_supports_filters(self, sys_client):
+        c, _, db_path = sys_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-net-1', '2026-03-06T10:00:00Z', 'critical', 'network_security', 'SEC_NETWORK_IP_DENIED', ?, 0)",
+            ('{"allowlist":["192.168.1.0/24"],"current_ip":"8.8.8.8"}',),
+        )
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i-recon-1', '2026-03-06T09:00:00Z', 'warning', 'broker_reconciliation', 'RECONCILIATION_MISMATCH', '{}', 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/incidents/open?source=network_security&code=SEC_NETWORK_IP_DENIED&severity=critical", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] == 1
         assert data["items"][0]["source"] == "network_security"
 
     def test_resolve_incident_cluster_marks_incidents_resolved(self, sys_client):

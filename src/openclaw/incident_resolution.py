@@ -8,14 +8,32 @@ from openclaw.incident_hygiene import incident_fingerprint
 from openclaw.operator_remediation import record_operator_remediation
 
 
-def list_open_incident_clusters(conn: sqlite3.Connection) -> dict[str, Any]:
+def list_open_incident_clusters(
+    conn: sqlite3.Connection,
+    *,
+    source: str | None = None,
+    code: str | None = None,
+    severity: str | None = None,
+) -> dict[str, Any]:
+    where = ["resolved=0"]
+    params: list[str] = []
+    if source:
+        where.append("source=?")
+        params.append(str(source))
+    if code:
+        where.append("code=?")
+        params.append(str(code))
+    if severity:
+        where.append("severity=?")
+        params.append(str(severity))
     rows = conn.execute(
-        """
+        f"""
         SELECT incident_id, ts, severity, source, code, detail_json
           FROM incidents
-         WHERE resolved=0
+         WHERE {' AND '.join(where)}
       ORDER BY ts DESC, incident_id DESC
-        """
+        """,
+        tuple(params),
     ).fetchall()
     clusters: dict[str, dict[str, Any]] = {}
     for row in rows:

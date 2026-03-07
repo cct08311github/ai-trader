@@ -7,6 +7,14 @@ import uuid
 from typing import Any
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
 def ensure_operator_remediation_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
@@ -81,17 +89,28 @@ def list_operator_remediations(
     conn: sqlite3.Connection,
     *,
     limit: int = 20,
+    action_type: str | None = None,
+    target_ref: str | None = None,
 ) -> dict[str, Any]:
-    ensure_operator_remediation_schema(conn)
-    rows = conn.execute(
-        """
+    if not _table_exists(conn, "operator_remediation_log"):
+        return {"count": 0, "items": []}
+    where = []
+    params: list[Any] = []
+    if action_type:
+        where.append("action_type=?")
+        params.append(str(action_type))
+    if target_ref:
+        where.append("target_ref LIKE ?")
+        params.append(f"%{str(target_ref)}%")
+    sql = """
         SELECT action_id, created_at, action_type, target_type, target_ref, actor, status, payload_json
           FROM operator_remediation_log
-      ORDER BY created_at DESC, action_id DESC
-         LIMIT ?
-        """,
-        (max(int(limit), 1),),
-    ).fetchall()
+    """
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY created_at DESC, action_id DESC LIMIT ?"
+    params.append(max(int(limit), 1))
+    rows = conn.execute(sql, tuple(params)).fetchall()
     items = []
     for row in rows:
         try:

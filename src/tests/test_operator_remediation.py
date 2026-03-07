@@ -67,3 +67,32 @@ def test_list_operator_remediations_returns_payloads():
     assert result["count"] == 2
     assert result["items"][0]["action_type"] == "quarantine_clear"
     assert result["items"][0]["payload"]["requested_symbols"] == ["2330"]
+
+
+def test_list_operator_remediations_supports_filters():
+    conn = make_db()
+    record_operator_remediation(
+        conn,
+        action_type="incident_resolve",
+        target_type="incident_cluster",
+        target_ref="network_security|SEC_NETWORK_IP_DENIED|x",
+        actor="operator",
+        status="resolved",
+        payload={"reason": "allowlist updated"},
+        created_at=2,
+    )
+    record_operator_remediation(
+        conn,
+        action_type="quarantine_apply",
+        target_type="symbol",
+        target_ref="2330",
+        actor="broker_reconciliation",
+        status="applied",
+        payload={"report_id": "r2"},
+        created_at=1,
+    )
+
+    result = list_operator_remediations(conn, action_type="incident_resolve", target_ref="network_security")
+
+    assert result["count"] == 1
+    assert result["items"][0]["action_type"] == "incident_resolve"
