@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 import sqlite3
+from difflib import SequenceMatcher
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from openclaw.agents.base import (
     AgentResult, COMMITTEE_MODEL, call_agent_llm, open_conn,
@@ -86,6 +87,10 @@ _ARBITER_PROMPT = """\
 ```
     """
 
+_DEDUP_LOOKBACK_HOURS = 12
+_DEDUP_VALUE_SIMILARITY_THRESHOLD = 0.74
+_DEDUP_COMBINED_SIMILARITY_THRESHOLD = 0.7
+
 
 def _build_market_context(conn: sqlite3.Connection) -> str:
     positions = query_db(
@@ -115,6 +120,65 @@ def _build_market_context(conn: sqlite3.Connection) -> str:
         f"最新價量樣本：{latest_prices}\n"
         f"近期決策樣本：{recent_decisions}"
     )
+
+
+def _normalize_strategy_text(*parts: str) -> str:
+    normalized = " ".join((part or "").strip().lower() for part in parts if part)
+    return " ".join(normalized.split())
+
+
+def _find_recent_similar_strategy_direction(
+    conn: sqlite3.Connection,
+    *,
+    proposed_value: str,
+    supporting_evidence: str,
+    lookback_hours: int = _DEDUP_LOOKBACK_HOURS,
+    value_similarity_threshold: float = _DEDUP_VALUE_SIMILARITY_THRESHOLD,
+    combined_similarity_threshold: float = _DEDUP_COMBINED_SIMILARITY_THRESHOLD,
+) -> Optional[dict[str, Any]]:
+    lookback_ms = int(datetime.now(timezone.utc).timestamp() * 1000) - (lookback_hours * 60 * 60 * 1000)
+    candidate_rows = conn.execute(
+        """
+        SELECT proposal_id, proposed_value, supporting_evidence, created_at
+          FROM strategy_proposals
+         WHERE generated_by='strategy_committee'
+           AND target_rule='STRATEGY_DIRECTION'
+           AND created_at >= ?
+         ORDER BY created_at DESC
+         LIMIT 10
+        """,
+        (lookback_ms,),
+    ).fetchall()
+
+    current_value = _normalize_strategy_text(proposed_value)
+    current_evidence = _normalize_strategy_text(supporting_evidence)
+    current_text = _normalize_strategy_text(proposed_value, supporting_evidence)
+    if not current_value and not current_text:
+        return None
+
+    for row in candidate_rows:
+        previous_value = _normalize_strategy_text(row["proposed_value"])
+        previous_evidence = _normalize_strategy_text(row["supporting_evidence"])
+        previous_text = _normalize_strategy_text(row["proposed_value"], row["supporting_evidence"])
+        if not previous_value and not previous_text:
+            continue
+        value_similarity = SequenceMatcher(None, current_value, previous_value).ratio()
+        evidence_similarity = SequenceMatcher(None, current_evidence, previous_evidence).ratio()
+        combined_similarity = SequenceMatcher(None, current_text, previous_text).ratio()
+        if (
+            value_similarity >= value_similarity_threshold
+            or combined_similarity >= combined_similarity_threshold
+        ):
+            return {
+                "proposal_id": row["proposal_id"],
+                "created_at": row["created_at"],
+                "similarity": round(max(value_similarity, combined_similarity), 4),
+                "value_similarity": round(value_similarity, 4),
+                "evidence_similarity": round(evidence_similarity, 4),
+                "combined_similarity": round(combined_similarity, 4),
+                "lookback_hours": lookback_hours,
+            }
+    return None
 
 
 def run_strategy_committee(
@@ -157,10 +221,54 @@ def run_strategy_committee(
 
         # ── 寫入提案（必須人工確認）───────────────────────────────────────
         result = to_agent_result(arbiter_resp)
+        duplicate_alerts: list[dict[str, Any]] = []
+        persisted_proposals: list[dict[str, Any]] = []
+
         for p in result.proposals:
+            target_rule = p.get("target_rule", "STRATEGY")
+            proposed_value = str(p.get("proposed_value", ""))
+            supporting_evidence = str(p.get("supporting_evidence", ""))
+
+            duplicate_info = None
+            if target_rule == "STRATEGY_DIRECTION":
+                duplicate_info = _find_recent_similar_strategy_direction(
+                    _conn,
+                    proposed_value=proposed_value,
+                    supporting_evidence=supporting_evidence,
+                )
+
+            if duplicate_info:
+                duplicate_alert = {
+                    "target_rule": target_rule,
+                    "proposed_value": proposed_value,
+                    "supporting_evidence": supporting_evidence,
+                    "duplicate_of": duplicate_info["proposal_id"],
+                    "similarity": duplicate_info["similarity"],
+                    "lookback_hours": duplicate_info["lookback_hours"],
+                    "action": "suppressed",
+                }
+                duplicate_alerts.append(duplicate_alert)
+                write_trace(
+                    _conn,
+                    agent="strategy_committee",
+                    prompt="[Duplicate Guard] suppress similar STRATEGY_DIRECTION proposal",
+                    result={
+                        "summary": (
+                            "相似策略提案已抑制，避免短時間重複產出相同方向。"
+                            f" similarity={duplicate_info['similarity']}"
+                        ),
+                        "confidence": float(p.get("confidence", result.confidence)),
+                        "action_type": "observe",
+                        "duplicate_alert": duplicate_alert,
+                        "_model": COMMITTEE_MODEL,
+                        "_latency_ms": 0,
+                    },
+                )
+                continue
+
             proposal_payload = {
                 "generated_by": "strategy_committee",
-                "target_rule": p.get("target_rule", "STRATEGY"),
+                "target_rule": target_rule,
                 "rule_category": p.get("rule_category", "strategy"),
                 "type": "suggest",
                 "committee_context": {
@@ -186,15 +294,20 @@ def run_strategy_committee(
             write_proposal(
                 _conn,
                 generated_by="strategy_committee",
-                target_rule=p.get("target_rule", "STRATEGY"),
+                target_rule=target_rule,
                 rule_category=p.get("rule_category", "strategy"),
-                proposed_value=str(p.get("proposed_value", "")),
-                supporting_evidence=str(p.get("supporting_evidence", "")),
+                proposed_value=proposed_value,
+                supporting_evidence=supporting_evidence,
                 confidence=float(p.get("confidence", 0.5)),
                 requires_human_approval=1,   # 策略小組建議必須人工確認
                 proposal_type="suggest",
                 proposal_payload=proposal_payload,
             )
+            persisted_proposals.append(p)
+
+        if duplicate_alerts:
+            result.raw["duplicate_alerts"] = duplicate_alerts
+        result.proposals = persisted_proposals
         return result
     finally:
         if conn is None:

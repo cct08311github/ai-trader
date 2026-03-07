@@ -316,6 +316,100 @@ class TestStrategyCommitteeAgent:
         assert payload["committee_context"]["bull"]["thesis"] == "看多：半導體短期趨勢向上"
         assert payload["committee_context"]["bear"]["thesis"] == "看空：外資連續賣超，注意回檔"
 
+    def test_suppresses_recent_similar_strategy_direction_proposal(self, mem_db):
+        from openclaw.agents.base import write_proposal
+
+        write_proposal(
+            mem_db,
+            generated_by="strategy_committee",
+            target_rule="STRATEGY_DIRECTION",
+            rule_category="strategy",
+            proposed_value="調整至謹慎且保本的策略，逐步減碼高估值 AI 持股並提高現金水位",
+            supporting_evidence="市場過熱、估值偏高、籌碼集中，需防範修正風險",
+            confidence=0.68,
+            requires_human_approval=1,
+        )
+
+        bull_resp = _mock_gemini("看多：AI 題材延續", confidence=0.66, action_type="suggest")
+        bear_resp = _mock_gemini("看空：估值與籌碼風險升高", confidence=0.72, action_type="suggest")
+        arbiter_resp = _mock_gemini(
+            "建議採取保守策略，降低高估值 AI 部位並提高現金",
+            confidence=0.7,
+            action_type="suggest",
+            proposals=[{
+                "target_rule": "STRATEGY_DIRECTION",
+                "rule_category": "strategy",
+                "proposed_value": "調整至謹慎保本策略，降低高估值 AI 部位並拉高現金水位",
+                "supporting_evidence": "市場過熱與籌碼集中風險升高，應防範回檔修正",
+                "confidence": 0.7,
+                "requires_human_approval": 1,
+            }],
+        )
+
+        with patch(
+            "openclaw.agents.strategy_committee.call_agent_llm",
+            side_effect=[bull_resp, bear_resp, arbiter_resp],
+        ):
+            from openclaw.agents.strategy_committee import run_strategy_committee
+            result = run_strategy_committee(conn=mem_db)
+
+        proposal_count = mem_db.execute(
+            "SELECT COUNT(*) FROM strategy_proposals WHERE target_rule='STRATEGY_DIRECTION'"
+        ).fetchone()[0]
+        trace_count = mem_db.execute(
+            "SELECT COUNT(*) FROM llm_traces WHERE agent='strategy_committee'"
+        ).fetchone()[0]
+
+        assert proposal_count == 1
+        assert trace_count == 4
+        assert result.proposals == []
+        assert result.raw["duplicate_alerts"][0]["action"] == "suppressed"
+
+    def test_allows_distinct_strategy_direction_proposal(self, mem_db):
+        from openclaw.agents.base import write_proposal
+
+        write_proposal(
+            mem_db,
+            generated_by="strategy_committee",
+            target_rule="STRATEGY_DIRECTION",
+            rule_category="strategy",
+            proposed_value="提高現金水位並減碼高波動科技股",
+            supporting_evidence="市場過熱，先控制回撤",
+            confidence=0.64,
+            requires_human_approval=1,
+        )
+
+        bull_resp = _mock_gemini("看多：內需與金融輪動有利", confidence=0.67, action_type="suggest")
+        bear_resp = _mock_gemini("看空：出口鏈風險仍高", confidence=0.6, action_type="suggest")
+        arbiter_resp = _mock_gemini(
+            "建議中性偏建設性，從 AI 轉向防禦與高股息輪動",
+            confidence=0.69,
+            action_type="suggest",
+            proposals=[{
+                "target_rule": "STRATEGY_DIRECTION",
+                "rule_category": "strategy",
+                "proposed_value": "維持中性，但逐步轉向高股息與防禦型資產",
+                "supporting_evidence": "輪動跡象增加，可降低 AI 集中度但不必全面去風險",
+                "confidence": 0.69,
+                "requires_human_approval": 1,
+            }],
+        )
+
+        with patch(
+            "openclaw.agents.strategy_committee.call_agent_llm",
+            side_effect=[bull_resp, bear_resp, arbiter_resp],
+        ):
+            from openclaw.agents.strategy_committee import run_strategy_committee
+            result = run_strategy_committee(conn=mem_db)
+
+        proposal_count = mem_db.execute(
+            "SELECT COUNT(*) FROM strategy_proposals WHERE target_rule='STRATEGY_DIRECTION'"
+        ).fetchone()[0]
+
+        assert proposal_count == 2
+        assert len(result.proposals) == 1
+        assert "duplicate_alerts" not in result.raw
+
 
 # ── SystemOptimizationAgent ───────────────────────────────────────────────────
 
