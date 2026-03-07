@@ -225,31 +225,46 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
   - [x] configured React Router future flags (`v7_startTransition`, `v7_relativeSplatPath`) to clear console churn
   - [x] QA: `npm test` zero warnings baseline (pass)
 
+### Batch 25: Dashboard Optimization & API Hardening (2026-03-07)
+
+- [x] **Workstream I: SSE Throttle & State Consolidation** — `24fbe24`
+  - [x] `LogTerminal.jsx`: implemented rAF-based log buffer flush to handle message bursts
+  - [x] `QuotePanel`: rAF-throttled bid/ask updates to prevent UI flickering
+  - [x] `Portfolio.jsx`: refactored to `useReducer` for atomic state transitions
+- [x] **API Resilience & Accuracy** — `7563488`
+  - [x] fixed `reports API` real_holdings always returning empty array when file exists
+  - [x] synchronized margin data query to reduce report lag
+  - [x] QA: verified report context with live simulation holdings (pass)
+
 ---
 
 ## Pending Checklist
 
-### Workstream I: Dashboard Throughput Optimization
-- [ ] **SSE Stream Throttling**
-  - [ ] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
-  - [ ] implement `requestAnimationFrame` or `lodash.throttle` for log message rendering
-- [ ] **State Update Consolidation**
-  - [ ] implement `useReducer` or `useSyncExternalStore` in `PortfolioPage` to avoid cascaded re-renders
-  - [ ] evaluate `TanStack Query` (React Query) for API polling instead of manual `useEffect`
+### Workstream I: Optimization Verification
 - [ ] **Stress Testing**
-  - [ ] create a mock script that emits 100+ SSE messages/sec
-  - [ ] verify UI remains responsive on low-end hardware (simulated)
+  - [ ] build `tools/stress_test_sse.py` to emit 200+ events/sec
+  - [ ] verify browser memory usage remains stable during 10-minute soak test
+  - [ ] verify UI lag / interaction responsiveness on low-CPU throttling
 
 ### Workstream J: PM Review Persistence & Observability
-- [ ] **DB Migration**
-  - [ ] create `pm_reviews` table in SQLite (timestamp, result, approved, reason, confidence, metadata)
-  - [ ] update `daily_pm_review.py` to write to DB instead of `daily_pm_state.json`
-- [ ] **Review History UI**
-  - [ ] create `/api/pm/history` endpoint
-  - [ ] add "Review History" tab or modal in `System.jsx` to see past PM decisions
-- [ ] **Resilience**
-  - [ ] implement retry logic in `trigger_pm_review.py` for network timeouts
-  - [ ] add Prometheus-style metrics for "Review Confidence" trend
+- [ ] **Database Schema Upgrade**
+  - [ ] add `pm_reviews` table: `timestamp`, `date`, `approved`, `reason`, `confidence`, `raw_payload`
+  - [ ] add index on `date` for fast historical lookup
+- [ ] **Agent Integration**
+  - [ ] modify `src/openclaw/agents/daily_pm_review.py` to use `DB.get_conn_rw()`
+  - [ ] transition from `daily_pm_state.json` fallback to DB query
+- [ ] **Operator Observability**
+  - [ ] `GET /api/pm/history`: implement paginated review history endpoint
+  - [ ] `System.jsx`: add "Review History" modal or tab with trend visualization (Confidence %)
+- [ ] **CLI Hardening**
+  - [ ] add `--persist` flag to `tools/trigger_pm_review.py`
+  - [ ] add retry logic (exp-backoff) for network-induced review failures
+
+### Workstream K: Sentinel & Health Monitoring V2
+- [ ] **Process Liveness Checks**
+  - [ ] integrate PM2 status check into `ops-summary` (detect if `watcher` is errored/stopped)
+- [ ] **Alert Thresholds**
+  - [ ] implement configurable slack/telegram alerts for persistent high CPU/Disk usage
 
 
 ---
