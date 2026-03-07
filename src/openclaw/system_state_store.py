@@ -16,8 +16,20 @@ def default_system_state_path() -> str:
 
 def read_system_state(path: str | None = None) -> dict[str, Any]:
     target = path or default_system_state_path()
-    with open(target, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(target, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {
+            "system_name": "AI-Trader v1.0",
+            "version": "1.0.0",
+            "description": "系統主開關與執行狀態配置 (自動生成)",
+            "trading_enabled": False,
+            "simulation_mode": True,
+            "last_modified": dt.datetime.now().isoformat(),
+            "last_modified_by": "bootstrap",
+            "notes": "此為安全預設值。trading_enabled 必須為 true 且無 .EMERGENCY_STOP",
+        }
 
 
 def write_system_state(state: dict[str, Any], path: str | None = None) -> dict[str, Any]:
