@@ -206,7 +206,8 @@ def test_run_reconciliation_job_writes_snapshot_and_report(tmp_path):
     assert latest["broker_source"] == "mock"
     assert latest["resolved_simulation"] is True
     assert latest["broker_accounts"] == ["SIMULATION"]
-    assert latest["report"]["mismatch_count"] >= 1
+    assert latest["report"]["report_id"] == "bypassed-simulation"
+    assert latest["report"]["mismatch_count"] == 0
     assert latest["auto_lock_applied"] is False
 
 
@@ -230,12 +231,36 @@ def test_run_reconciliation_job_simulation_skips_auto_lock(tmp_path):
     )
 
     diagnostics = result["report"]["diagnostics"]
-    assert diagnostics["suspected_mode_or_account_mismatch"] is True
+    assert diagnostics["resolved_simulation"] is True
     latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
-    assert latest["report"]["diagnostics"]["resolved_simulation"] is True
+    assert latest["report"]["report_id"] == "bypassed-simulation"
     assert latest["auto_lock_applied"] is False
     state = json.loads(system_state_path.read_text(encoding="utf-8"))
     assert state["trading_enabled"] is True
+
+def test_run_reconciliation_job_simulation_forced(tmp_path, monkeypatch):
+    """Setting RECON_FORCE_SIMULATION=1 enables real reconciliation in sim mode."""
+    db_path = tmp_path / "trades.db"
+    out_dir = tmp_path / "recon"
+    system_state_path = tmp_path / "system_state.json"
+    make_db(db_path)
+    make_system_state(system_state_path)
+
+    monkeypatch.setenv("RECON_FORCE_SIMULATION", "1")
+    result = run_reconciliation_job(
+        db_path=db_path,
+        output_dir=out_dir,
+        broker_positions=[],
+        broker_source="shioaji",
+        simulation=None,
+        resolved_simulation=True,
+        broker_accounts=[],
+        system_state_path=system_state_path,
+    )
+
+    assert result["report"]["report_id"] != "bypassed-simulation"
+    assert result["report"]["mismatch_count"] > 0
+    assert result["report"]["diagnostics"]["suspected_mode_or_account_mismatch"] is True
 
 
 def test_run_reconciliation_job_live_mode_applies_auto_lock(tmp_path):

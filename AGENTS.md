@@ -341,7 +341,7 @@ tail -80 ~/.pm2/logs/ai-trader-api-error-1.log
 | v4.13.x | 盤後分析頁面強化：股票名稱顯示（useSymbolNames）；KlineChart 共用元件；市場資料管線（market_data_fetcher：TWSE T86+MI_MARGN）；法人籌碼 API（/api/chips）；Analysis 法人籌碼 Tab |
 | v4.13.1 | proposal_executor intent-based 重構（修 phantom orders）；concentration_guard dedup；price=0 guard；mark_intent_failed 防無限重試；silent failure hardening；timestamp 統一毫秒；CI 全綠（close_position 403 修復） |
 | v4.13.2 | eod_ingest 統一法人籌碼管線（T86+MI_MARGN 寫入 eod_institution_flows）；market_data_fetcher 獨立錯誤隔離；移除冗餘 institution_ingest cron 步驟 |
-| v4.14.0 | Operator hardening：quarantine/remediation/incident API+CLI+UI；simulation-aware reconciliation（skip false-positive auto-lock）；`/api/reports/context`；`utcnow()` deprecation cleanup；pre-trade guard env overrides |
+| v4.14.0 | Operator hardening：quarantine/remediation/incident API+CLI+UI；simulation-aware reconciliation（default bypass in simulation to avoid paper drift noise；RECON_FORCE_SIMULATION=1 to override）；`/api/reports/context`；`utcnow()` deprecation cleanup；pre-trade guard env overrides |
 
 ---
 

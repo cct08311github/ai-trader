@@ -212,13 +212,16 @@ curl -sk "https://127.0.0.1:8080/api/system/remediation-history?limit=10" \
 
 Simulation-mode note:
 
+- By default, reconciliation is **bypassed** in simulation mode to avoid false-positive drift alerts from ephemeral paper trading environments.
 - if `data/ops/reconciliation/latest.json` shows:
+  - `report_id = "bypassed-simulation"`
   - `resolved_simulation = true`
+- This indicates the run was skipped. auto-lock and critical incidents are NOT triggered.
+- **To enable paper reconciliation**: set `RECON_FORCE_SIMULATION=1` in the environment or `.env`. This is useful if you want to audit paper position drift against a dedicated simulation account.
+- If enabled and `data/ops/reconciliation/latest.json` shows:
   - `diagnosis_codes` includes `MODE_OR_ACCOUNT_MISMATCH_SUSPECTED`
-  - broker positions are empty while local paper positions exist
-- then treat it as an audit-only simulation mismatch, not a live broker drift incident
-- do not quarantine or auto-lock solely from that signal
-- switch to live-mode verification only after confirming `simulation_mode=false`
+  - then treat it as an audit-only simulation mismatch, still not a live broker drift incident.
+- switch to live-mode verification only after confirming `simulation_mode=false`.
 
 ### Ops summary critical
 

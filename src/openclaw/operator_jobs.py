@@ -76,21 +76,53 @@ def run_reconciliation_job(
     broker_accounts: list[str] | None = None,
     system_state_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    conn = sqlite3.connect(str(db_path))
-    try:
-        report = reconcile_broker_state(
-            conn,
-            broker_positions=broker_positions,
-            broker_open_orders=broker_open_orders or [],
-            broker_context={
-                "broker_source": broker_source,
-                "requested_simulation": simulation,
-                "resolved_simulation": resolved_simulation if resolved_simulation is not None else simulation,
-                "broker_accounts": broker_accounts or [],
+    effective_simulation = resolved_simulation if resolved_simulation is not None else simulation
+    import os
+    force_sim = os.environ.get("RECON_FORCE_SIMULATION", "").lower() in ("1", "true", "yes")
+
+    if effective_simulation and not force_sim:
+        # Option 2: Suppress reconciliation entirely in simulation mode
+        report = {
+            "report_id": "bypassed-simulation",
+            "created_at": int(dt.datetime.now(tz=dt.timezone.utc).timestamp() * 1000),
+            "mismatch_count": 0,
+            "ok": True,
+            "mismatches": {
+                "missing_local_position": [],
+                "missing_broker_position": [],
+                "quantity_mismatch": [],
+                "missing_broker_order": [],
             },
-        )
-    finally:
-        conn.close()
+            "diagnostics": {
+                "resolved_simulation": True,
+                "notes": ["Reconciliation bypassed in simulation mode (set RECON_FORCE_SIMULATION=1 to enable)."],
+            },
+        }
+        auto_lock_state = None
+    else:
+        conn = sqlite3.connect(str(db_path))
+        try:
+            report = reconcile_broker_state(
+                conn,
+                broker_positions=broker_positions,
+                broker_open_orders=broker_open_orders or [],
+                broker_context={
+                    "broker_source": broker_source,
+                    "requested_simulation": simulation,
+                    "resolved_simulation": resolved_simulation if resolved_simulation is not None else simulation,
+                    "broker_accounts": broker_accounts or [],
+                },
+            )
+        finally:
+            conn.close()
+
+        if effective_simulation:
+            auto_lock_state = None
+        else:
+            auto_lock_state = apply_reconciliation_auto_lock(
+                report=report,
+                path=str(system_state_path or system_state_path_from_env()),
+            )
 
     payload = {
         "broker_source": broker_source,
@@ -99,14 +131,6 @@ def run_reconciliation_job(
         "broker_accounts": sorted({str(a) for a in (broker_accounts or []) if str(a)}),
         "report": report,
     }
-    effective_simulation = resolved_simulation if resolved_simulation is not None else simulation
-    if effective_simulation:
-        auto_lock_state = None
-    else:
-        auto_lock_state = apply_reconciliation_auto_lock(
-            report=report,
-            path=str(system_state_path or system_state_path_from_env()),
-        )
     payload["auto_lock_applied"] = auto_lock_state is not None
     if auto_lock_state is not None:
         payload["system_state"] = {
