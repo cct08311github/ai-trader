@@ -15,6 +15,14 @@ if [ -f "$OPENCLAW_ENV" ]; then
     set +a
 fi
 
+# Load local backend .env (PORTFOLIO_JSON_PATH, AUTH_TOKEN etc.)
+LOCAL_ENV="$SCRIPT_DIR/.env"
+if [ -f "$LOCAL_ENV" ]; then
+    set -a
+    source "$LOCAL_ENV"
+    set +a
+fi
+
 export PYTHONPATH="${PYTHONPATH:-$REPO/src:$REPO/frontend/backend}"
 export DB_PATH="${DB_PATH:-$REPO/data/sqlite/trades.db}"
 
