@@ -11,7 +11,7 @@ function renderPage() {
   return render(
     <ThemeProvider defaultTheme="dark">
       <ToastProvider>
-        <MemoryRouter initialEntries={['/portfolio']}>
+        <MemoryRouter initialEntries={['/portfolio']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <PortfolioPage />
         </MemoryRouter>
       </ToastProvider>
@@ -20,10 +20,12 @@ function renderPage() {
 }
 
 describe('PortfolioPage', () => {
-  it('renders KPI cards and positions table headers', () => {
+  it('renders KPI cards and positions table headers', async () => {
     renderPage()
 
-    expect(screen.getByText(/庫存總覽/i)).toBeInTheDocument()
+    // Wait for async loading to finish (or at least start) to avoid act() warnings
+    expect(await screen.findByText(/庫存總覽/i)).toBeInTheDocument()
+
     expect(screen.getByText('總資產')).toBeInTheDocument()
     expect(screen.getByText('日損益')).toBeInTheDocument()
     expect(screen.getByText('累計損益')).toBeInTheDocument()
@@ -39,6 +41,8 @@ describe('PortfolioPage', () => {
 
   it('has no obvious a11y violations (basic)', async () => {
     const { container } = renderPage()
+    // Wait for the same reason
+    await screen.findByText(/庫存總覽/i)
     const results = await axe(container)
     expect(results).toHaveNoViolations()
   })

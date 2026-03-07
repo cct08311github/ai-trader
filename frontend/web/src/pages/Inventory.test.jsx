@@ -4,15 +4,15 @@ import { render, screen } from '@testing-library/react'
 import InventoryPage from './Inventory'
 
 describe('InventoryPage', () => {
-  it('renders inventory dashboard title', () => {
+  it('renders inventory dashboard title', async () => {
     render(<InventoryPage />)
-    expect(screen.getByText(/庫存總覽/i)).toBeDefined()
+    expect(await screen.findByText(/庫存總覽/i)).toBeInTheDocument()
   })
 
-  it('shows loading state initially', () => {
+  it('shows loading state initially', async () => {
     render(<InventoryPage />)
-    // Multiple elements may show loading text simultaneously (table + status bar)
-    const loadingEls = screen.queryAllByText(/讀取庫存資料中/i)
+    // Wait for the loading indicators to appear and potentially resolve
+    const loadingEls = await screen.findAllByText(/讀取庫存資料中/i)
     expect(loadingEls.length).toBeGreaterThan(0)
   })
 })
