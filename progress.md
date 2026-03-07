@@ -213,41 +213,44 @@ Last updated: 2026-03-07 17:35 Asia/Taipei
   - [x] documented portable path convention
   - [x] QA: structural review (pass)
 
+### Batch 24: Simulation Hardening & Frontend Cleanup (2026-03-07)
+
+- [x] **Workstream G: Simulation-Mode Reconciliation Tracking** — `da72c03`
+  - [x] modified `operator_jobs.py` to bypass reconciliation in simulation mode by default
+  - [x] added `RECON_FORCE_SIMULATION=1` environment override for manual auditing
+  - [x] updated operator runbook with bypass interpretation
+  - [x] QA: `pytest src/tests/test_operator_jobs.py` (pass)
+- [x] **Workstream H: Frontend React Warning Cleanup** — `54dfdf5`
+  - [x] addressed `act()` warnings in `Portfolio.test.jsx`, `Inventory.test.jsx`, `Analysis.test.jsx`
+  - [x] configured React Router future flags (`v7_startTransition`, `v7_relativeSplatPath`) to clear console churn
+  - [x] QA: `npm test` zero warnings baseline (pass)
+
 ---
 
 ## Pending Checklist
 
-### ~~Workstream A: Runtime Config Governance~~ ✅ DONE (Batch 23)
+### Workstream I: Dashboard Throughput Optimization
+- [ ] **SSE Stream Throttling**
+  - [ ] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
+  - [ ] implement `requestAnimationFrame` or `lodash.throttle` for log message rendering
+- [ ] **State Update Consolidation**
+  - [ ] implement `useReducer` or `useSyncExternalStore` in `PortfolioPage` to avoid cascaded re-renders
+  - [ ] evaluate `TanStack Query` (React Query) for API polling instead of manual `useEffect`
+- [ ] **Stress Testing**
+  - [ ] create a mock script that emits 100+ SSE messages/sec
+  - [ ] verify UI remains responsive on low-end hardware (simulated)
 
-### ~~Workstream B: Reports API Consumer Rollout~~ ✅ DONE (Batch 23)
+### Workstream J: PM Review Persistence & Observability
+- [ ] **DB Migration**
+  - [ ] create `pm_reviews` table in SQLite (timestamp, result, approved, reason, confidence, metadata)
+  - [ ] update `daily_pm_review.py` to write to DB instead of `daily_pm_state.json`
+- [ ] **Review History UI**
+  - [ ] create `/api/pm/history` endpoint
+  - [ ] add "Review History" tab or modal in `System.jsx` to see past PM decisions
+- [ ] **Resilience**
+  - [ ] implement retry logic in `trigger_pm_review.py` for network timeouts
+  - [ ] add Prometheus-style metrics for "Review Confidence" trend
 
-### ~~Workstream C: Operator UI Chunking And UX~~ ✅ DONE (Batch 23)
-
-### ~~Workstream D: Ops Summary Semantics~~ ✅ DONE (Batch 23)
-
-### ~~Workstream E: CI Guardrail Hardcoded Path Audit~~ ✅ DONE (Batch 21)
-
-### ~~Workstream F: Documentation Consistency Sweep~~ ✅ DONE (Batch 23)
-
-### Parked / Future Work
-
-### ~~Workstream G: Simulation-mode reconciliation tracking~~ ✅ DONE (Batch 24)
-- [x] Chose Option: Bypassed by default in simulation mode, with `RECON_FORCE_SIMULATION=1` toggle.
-- [x] Implemented in `operator_jobs.py`.
-- [x] Verified with unit tests.
-
-### ~~Workstream H: Frontend React warnings cleanup~~ ✅ DONE (Batch 24)
-- [x] Wrapped async updates in `act()` (or used `await findByText`) for all main pages and components.
-- [x] Configured React Router future flags (`v7_startTransition`, `v7_relativeSplatPath`) globally and in tests.
-- [x] Verified zero console warnings in `npm test`.
-
-### Parked / Future Work
-
-- [ ] **Workstream I: Dashboard Throughput Optimization**
-  - [ ] Evaluate `OpsSummary` polling frequency vs event-based updates
-  - [ ] Implement throttle for SSE streams to prevent UI lag
-  - [ ] QA: Stress test UI with mock high-frequency updates
-  - [ ] Acceptance: UI remains responsive even with 10+ symbols streaming data
 
 ---
 
