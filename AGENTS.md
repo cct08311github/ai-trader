@@ -19,6 +19,23 @@
 **分支策略（Branching）**：
 - `main` 是目前 **唯一運行中且活躍的主線（sole active line）**。所有其他的 `codex/*` 實驗分支已經被合併或刪除，請直接對 `main` 操作。
 
+### GitHub Issue / PR Workflow Policy
+
+從 2026-03-08 起，GitHub Issues 與 PR 是**唯一正式**的開發任務追蹤機制；`progress.md` 只保留高階 handoff / 狀態摘要，不再作為 detailed backlog source of truth。
+
+**預設流程**：
+1. 先檢查 GitHub 是否已有對應 issue。
+2. 若是新工作，先建立 issue，再標記為 `in-progress`。
+3. 從 `main` 切出開發分支（建議 `codex/<short-topic>`）。
+4. 完成實作、測試、push、建立 PR。
+5. 將 PR 連結回填到 issue；issue 與 PR 必須互相可追溯。
+
+**執行規則**：
+- 不要直接用 `progress.md` 新增/維護細項 checklist 來取代 GitHub issue。
+- 任何 meaningful code/doc change 都應該能對應到一張 issue 或既有 PR。
+- 若 issue 不存在，先建 issue，再開始做事。
+- PR 說明必須至少包含：scope、tests、risk、related issue。
+
 ---
 
 ## 二、系統安全模型
