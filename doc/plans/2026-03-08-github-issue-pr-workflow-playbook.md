@@ -276,3 +276,69 @@ Copy this into any project:
 > Create a dedicated branch from `main`, complete the work, run tests, push, and open a PR.
 > Add the PR link back to the issue.
 > Local progress files may be used only for high-level handoff summaries, not as the detailed source of truth.
+
+## Reusable Versions
+
+### 1. AI Short Version
+
+Use this in a global AI instruction file or a lightweight project-level rule block:
+
+```md
+We use GitHub Issues and PRs as the primary development workflow.
+
+1. Check for an existing GitHub issue before starting work.
+2. If none exists, create one and mark it `in-progress` when implementation starts.
+3. Create a dedicated branch from `main`.
+4. Complete the work, run tests, push, and open a PR.
+5. Add the PR link back to the issue.
+6. Local progress files may be used only for high-level handoff summaries, not as the detailed source of truth.
+```
+
+### 2. README / CONTRIBUTING Version
+
+Use this in `README.md` or `CONTRIBUTING.md` for human contributors:
+
+```md
+## Development Workflow
+
+We manage development through GitHub Issues and Pull Requests.
+
+- Check for an existing issue before starting work.
+- If the task is new, create an issue first.
+- Mark the issue `in-progress` when implementation begins.
+- Create a dedicated branch from `main`.
+- Keep the branch scoped to that issue.
+- Run the relevant tests before opening a PR.
+- Open a PR and link it to the issue.
+- Add the PR URL back to the issue for traceability.
+
+Local progress files may be used for handoff notes or project status summaries, but they are not the detailed source of truth for task management.
+```
+
+### 3. AGENTS.md Strong Enforcement Version
+
+Use this in repo-level `AGENTS.md` when you want AI agents to follow the workflow strictly:
+
+```md
+## GitHub Issue / PR Workflow Policy
+
+GitHub Issues and PRs are the only official task tracking system for this repository.
+Local progress files may be used for high-level handoff only and must not be treated as the detailed backlog source of truth.
+
+### Required Workflow
+1. Check GitHub for an existing matching issue before starting work.
+2. If no issue exists, create one first.
+3. Mark the issue `in-progress` when implementation begins.
+4. Create a dedicated branch from `main`.
+5. Implement the scoped work.
+6. Run relevant tests.
+7. Push the branch and open a PR.
+8. Add the PR link back to the issue.
+
+### Enforcement Rules
+- Do not start meaningful code or doc work without an issue.
+- Do not track detailed task state only in local markdown files.
+- Do not mix unrelated work in one branch or PR.
+- Every PR must identify its related issue.
+- Every in-progress issue should point to its active PR.
+```
