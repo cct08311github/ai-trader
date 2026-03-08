@@ -4,10 +4,10 @@ Last updated: 2026-03-08 00:20 Asia/Taipei
 
 ## Coordination
 
-- Primary coordination file for parallel AI work.
-- Update this file after every meaningful batch.
+- High-level coordination file for parallel AI work.
 - Keep entries factual: branch, worktree, scope, tests, commit, next step.
-- **Checklist format**: `[x]` = done, `[ ]` = pending. Sub-tasks indented under parent.
+- Detailed task tracking now lives in GitHub Issues and PRs, not in this file.
+- Do not add new detailed checklists here unless the user explicitly asks for a temporary local planning note.
 
 ## Active Branch
 
@@ -17,7 +17,22 @@ Last updated: 2026-03-08 00:20 Asia/Taipei
 - runtime config stash has been dropped (all obsolete)
 - branch audit (2026-03-08): local branches already merged into `main` were deleted from the primary worktree
 - remaining non-merged local branches are legacy snapshots or side experiments; do **not** auto-merge them into `main` without a fresh review/rebase
-- only active PR at audit time: dependabot `#164` (`dependabot/npm_and_yarn/frontend/web/multi-65dc50f05c`)
+- GitHub Issues are now the primary backlog / execution tracker
+
+## Active Backlog (GitHub)
+
+- `#169` Adopt GitHub issue + PR workflow as the primary development process
+- `#167` Workstream I follow-up: verify dashboard throughput and evaluate API polling strategy
+- `#168` Workstream J backend: persist PM reviews in DB and expose history API
+- `#170` Workstream J frontend and CLI: PM review observability, history UI, and trigger hardening
+- `#166` Workstream K: add process liveness and alert threshold monitoring to ops summary
+
+## Current Rule
+
+- Before starting work, check GitHub for an existing issue.
+- New work starts by creating or claiming an issue and marking it `in-progress`.
+- Implementation happens on a dedicated branch from `main`.
+- Every PR must link back to its issue, and every in-progress issue should link to its PR.
 
 ## Completed Checklist
 
@@ -243,43 +258,6 @@ Last updated: 2026-03-08 00:20 Asia/Taipei
 
 ---
 
-## Pending Checklist
-
-### Workstream I: Dashboard Throughput Optimization
-- [ ] **SSE Stream Throttling**
-  - [x] audit `LogTerminal` and `QuotePanel` for high-frequency DOM updates
-  - [x] implement `requestAnimationFrame` throttling for log and quote rendering
-- [ ] **State Update Consolidation**
-  - [x] implement `useReducer` in `PortfolioPage` to avoid cascaded re-renders
-  - [ ] evaluate `TanStack Query` (React Query) for API polling instead of manual `useEffect`
-- [ ] **Stress Testing**
-  - [ ] build `tools/stress_test_sse.py` to emit 200+ events/sec
-  - [ ] verify browser memory usage remains stable during 10-minute soak test
-  - [ ] verify UI lag / interaction responsiveness on low-CPU throttling
-
-### Workstream J: PM Review Persistence & Observability
-- [ ] **Database Schema Upgrade**
-  - [ ] add `pm_reviews` table: `timestamp`, `date`, `approved`, `reason`, `confidence`, `raw_payload`
-  - [ ] add index on `date` for fast historical lookup
-- [ ] **Agent Integration**
-  - [ ] modify `src/openclaw/agents/daily_pm_review.py` to use `DB.get_conn_rw()`
-  - [ ] transition from `daily_pm_state.json` fallback to DB query
-- [ ] **Operator Observability**
-  - [ ] `GET /api/pm/history`: implement paginated review history endpoint
-  - [ ] `System.jsx`: add "Review History" modal or tab with trend visualization (Confidence %)
-- [ ] **CLI Hardening**
-  - [ ] add `--persist` flag to `tools/trigger_pm_review.py`
-  - [ ] add retry logic (exp-backoff) for network-induced review failures
-
-### Workstream K: Sentinel & Health Monitoring V2
-- [ ] **Process Liveness Checks**
-  - [ ] integrate PM2 status check into `ops-summary` (detect if `watcher` is errored/stopped)
-- [ ] **Alert Thresholds**
-  - [ ] implement configurable slack/telegram alerts for persistent high CPU/Disk usage
-
-
----
-
 ## Verified Test Commands
 
 ```bash
@@ -308,14 +286,14 @@ bin/venv/bin/python -m pytest -q \
 cd frontend/web && npm test -- --run && npm run build
 ```
 
-## Handoff Notes (Batch 25)
+## Handoff Notes
 
 - branch: `main` — sole active line
 - 0 open incidents in DB
 - **Workstream G completed**: Simulation-mode reconciliation bypassed by default (`da72c03`).
 - **Workstream H completed**: Frontend React warnings eliminated (`54dfdf5`).
 - **Workstream I partially completed**: rAF throttling and `useReducer` landed (`fc279d5`).
-- next task: complete Workstream I verification (`stress_test_sse.py`, soak test, low-CPU validation) or start Workstream J.
+- next task: pick an open GitHub issue (`#167`, `#168`, `#170`, `#166`) and follow the issue-first / PR-linked workflow.
 - last batch (Batch 25) completed successfully.
 - last batch:
   - `fc279d5` — throttle dashboard SSE updates and consolidate portfolio state
@@ -330,9 +308,12 @@ cd frontend/web && npm test -- --run && npm run build
 
 - do not modify runtime files (`config/system_state.json`) unless the task explicitly requires it
 - do not revert unrelated user changes in the main worktree
-- prefer isolated worktrees for independent streams
-- update this file after each batch:
-  - move `[ ]` → `[x]` for completed items
-  - add commit hash
-  - add test results
-  - note any remaining risk
+- prefer isolated worktrees for independent streams when multiple tasks run in parallel
+- do not use this file as the detailed backlog
+- before coding:
+  - check whether a matching GitHub issue already exists
+  - if not, create one
+  - mark the issue `in-progress`
+  - work on a dedicated branch from `main`
+  - open a PR and add the PR link back to the issue
+- update this file only for high-level status, handoff notes, and branch / workflow policy changes
