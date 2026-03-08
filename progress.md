@@ -1,6 +1,6 @@
 # AI Trader Hardening Progress
 
-Last updated: 2026-03-07 22:15 Asia/Taipei
+Last updated: 2026-03-08 00:20 Asia/Taipei
 
 ## Coordination
 
@@ -15,6 +15,9 @@ Last updated: 2026-03-07 22:15 Asia/Taipei
 - path: `/Users/openclaw/.openclaw/shared/projects/ai-trader`
 - all retired worktrees (`codex/integration-recovery`, `codex/remediation-api`, `codex/system-ops-ui`, `codex/operator-drilldown`) have been merged and deleted
 - runtime config stash has been dropped (all obsolete)
+- branch audit (2026-03-08): local branches already merged into `main` were deleted from the primary worktree
+- remaining non-merged local branches are legacy snapshots or side experiments; do **not** auto-merge them into `main` without a fresh review/rebase
+- only active PR at audit time: dependabot `#164` (`dependabot/npm_and_yarn/frontend/web/multi-65dc50f05c`)
 
 ## Completed Checklist
 
