@@ -1,14 +1,31 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from openclaw.system_state_store import system_state_path_from_env
 from openclaw.position_quarantine import get_quarantine_status
+
+_log = logging.getLogger("ops_health")
+
+# Critical services that must be online for trading to function
+_CRITICAL_SERVICES = {"ai-trader-api", "ai-trader-watcher"}
+
+# Default alert thresholds — override via config/alert_policy.json
+_DEFAULT_THRESHOLDS = {
+    "cpu_percent_warn": 80,
+    "cpu_percent_critical": 95,
+    "memory_percent_warn": 80,
+    "memory_percent_critical": 95,
+    "disk_percent_warn": 85,
+    "disk_percent_critical": 95,
+}
 
 
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
@@ -71,6 +88,117 @@ def _sum_actionable_reconciliation_mismatches(conn: sqlite3.Connection, since_ms
             continue
         actionable += int(mismatch_count or 0)
     return actionable
+
+
+def load_alert_thresholds() -> dict[str, Any]:
+    """Load alert thresholds from config/alert_policy.json, falling back to defaults."""
+    config_path = Path(__file__).resolve().parents[2] / "config" / "alert_policy.json"
+    thresholds = dict(_DEFAULT_THRESHOLDS)
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            overrides = json.load(f)
+        thresholds.update(overrides)
+    except FileNotFoundError:
+        pass  # Use defaults
+    except Exception:
+        _log.warning("Failed to load alert_policy.json, using defaults", exc_info=True)
+    return thresholds
+
+
+def get_pm2_processes() -> dict[str, Any]:
+    """Query PM2 for process status. Returns structured process info.
+
+    Returns dict with:
+      - processes: dict mapping name -> {status, pid, memory_mb, restart_count, uptime_s}
+      - health: {total, online, stopped, errored}
+      - critical_down: list of critical service names that are NOT online
+    """
+    result: dict[str, Any] = {
+        "processes": {},
+        "health": {"total": 0, "online": 0, "stopped": 0, "errored": 0},
+        "critical_down": [],
+    }
+    try:
+        raw = subprocess.check_output(
+            ["pm2", "jlist"], text=True, stderr=subprocess.DEVNULL, timeout=10
+        )
+        processes = json.loads(raw)
+    except Exception:
+        return result
+
+    for proc in processes:
+        name = proc.get("name", "unknown")
+        pm2_env = proc.get("pm2_env", {})
+        monit = proc.get("monit", {})
+        status = pm2_env.get("status", "unknown")
+
+        result["processes"][name] = {
+            "status": status,
+            "pid": proc.get("pid", 0),
+            "memory_mb": round((monit.get("memory", 0) or 0) / (1024 * 1024), 1),
+            "restart_count": pm2_env.get("restart_time", 0),
+            "uptime_s": int((time.time() * 1000 - (pm2_env.get("pm_uptime", 0) or 0)) / 1000)
+            if pm2_env.get("pm_uptime")
+            else 0,
+        }
+
+        result["health"]["total"] += 1
+        if status == "online":
+            result["health"]["online"] += 1
+        elif status == "errored":
+            result["health"]["errored"] += 1
+        else:
+            result["health"]["stopped"] += 1
+
+    for svc in _CRITICAL_SERVICES:
+        proc_info = result["processes"].get(svc)
+        if proc_info is None or proc_info["status"] != "online":
+            result["critical_down"].append(svc)
+
+    return result
+
+
+def check_resource_alerts(
+    summary: dict[str, Any], thresholds: dict[str, Any]
+) -> list[dict[str, str]]:
+    """Check resource metrics against thresholds. Returns list of alerts."""
+    alerts: list[dict[str, str]] = []
+
+    pm2 = summary.get("pm2", {})
+    for svc in pm2.get("critical_down", []):
+        alerts.append({
+            "severity": "critical",
+            "source": "pm2",
+            "message": f"Critical service '{svc}' is not online",
+        })
+
+    for name, proc in pm2.get("processes", {}).items():
+        if proc.get("status") == "errored":
+            alerts.append({
+                "severity": "critical",
+                "source": "pm2",
+                "message": f"Process '{name}' is in errored state (restarts: {proc.get('restart_count', 0)})",
+            })
+
+    return alerts
+
+
+def send_ops_alerts(alerts: list[dict[str, str]]) -> None:
+    """Send critical/warning alerts via Telegram. Non-blocking, never raises."""
+    if not alerts:
+        return
+    try:
+        from openclaw.tg_notify import send_message
+        critical = [a for a in alerts if a["severity"] == "critical"]
+        if not critical:
+            return
+
+        lines = ["⚠️ <b>[Ops Alert]</b> 系統健康警報\n"]
+        for a in critical:
+            lines.append(f"🔴 [{a['source']}] {a['message']}")
+        send_message("\n".join(lines))
+    except Exception:
+        _log.warning("Failed to send ops alerts via Telegram", exc_info=True)
 
 
 def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -192,13 +320,28 @@ def collect_ops_health_summary(conn: sqlite3.Connection) -> dict[str, Any]:
     except Exception:
         pass
 
+    # PM2 process liveness
+    pm2_data = get_pm2_processes()
+    summary["pm2"] = pm2_data
+    summary["metrics"]["pm2_errored"] = pm2_data["health"]["errored"]
+    summary["metrics"]["pm2_critical_down"] = len(pm2_data["critical_down"])
+
+    # Overall status determination
     if (
         summary["metrics"]["open_incidents"] > 0
         or summary["metrics"]["failed_executions"] > 0
         or summary["metrics"]["auto_lock_active"] > 0
+        or summary["metrics"]["pm2_critical_down"] > 0
+        or summary["metrics"]["pm2_errored"] > 0
     ):
         summary["overall"] = "critical"
     elif summary["metrics"]["pre_trade_rejects_24h"] > 10 or summary["metrics"]["reconciliation_mismatches_24h"] > 0:
         summary["overall"] = "warning"
+
+    # Check and send alerts
+    thresholds = load_alert_thresholds()
+    alerts = check_resource_alerts(summary, thresholds)
+    summary["alerts"] = alerts
+    send_ops_alerts(alerts)
 
     return summary
