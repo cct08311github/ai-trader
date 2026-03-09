@@ -2,6 +2,7 @@
 
 Endpoints:
   GET  /api/pm/status          → 今日審核狀態
+  GET  /api/pm/history         → 歷史審核紀錄（分頁）
   POST /api/pm/approve         → 人工授權今日交易
   POST /api/pm/reject          → 人工封鎖今日交易
   POST /api/pm/review          → 觸發 LLM 審核（需 llm_call 已配置）
@@ -14,7 +15,7 @@ import os
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -33,11 +34,62 @@ from openclaw.daily_pm_review import (
 router = APIRouter(prefix="/api/pm", tags=["pm"])
 logger = logging.getLogger("pm_api")
 
+_PM_REVIEWS_DDL = """
+CREATE TABLE IF NOT EXISTS pm_reviews (
+    review_id TEXT PRIMARY KEY,
+    review_date TEXT NOT NULL,
+    approved INTEGER NOT NULL,
+    confidence REAL NOT NULL,
+    source TEXT NOT NULL,
+    reason TEXT,
+    recommended_action TEXT,
+    bull_case TEXT,
+    bear_case TEXT,
+    neutral_case TEXT,
+    consensus_points TEXT,
+    divergence_points TEXT,
+    reviewed_at INTEGER NOT NULL,
+    llm_trace_id TEXT
+);
+"""
+_PM_REVIEWS_IDX = "CREATE INDEX IF NOT EXISTS idx_pm_reviews_date ON pm_reviews(review_date DESC);"
+
+
+def _ensure_pm_reviews_table(conn) -> None:
+    """Create pm_reviews table if it doesn't exist."""
+    conn.execute(_PM_REVIEWS_DDL)
+    conn.execute(_PM_REVIEWS_IDX)
+
 
 @router.get("/status")
 def pm_status():
     """Return today's PM review state."""
     return {"status": "ok", "data": get_daily_pm_state()}
+
+
+@router.get("/history")
+def pm_history(
+    limit: int = Query(default=30, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """Return paginated PM review history, newest first."""
+    try:
+        from app.db import get_conn
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM pm_reviews ORDER BY review_date DESC, reviewed_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+            total = conn.execute("SELECT COUNT(*) FROM pm_reviews").fetchone()[0]
+            return {
+                "status": "ok",
+                "data": [dict(r) for r in rows],
+                "pagination": {"total": total, "limit": limit, "offset": offset},
+            }
+    except Exception as e:
+        if "no such table" in str(e).lower():
+            return {"status": "ok", "data": [], "pagination": {"total": 0, "limit": limit, "offset": offset}}
+        raise
 
 
 class OverrideRequest(BaseModel):
@@ -48,6 +100,7 @@ class OverrideRequest(BaseModel):
 def pm_approve(body: OverrideRequest = OverrideRequest()):
     """Human operator approves today's trading."""
     state = manual_override(approved=True, reason=body.reason or "人工授權")
+    _write_pm_review_to_db(state)
     return {"status": "ok", "data": state}
 
 
@@ -55,6 +108,7 @@ def pm_approve(body: OverrideRequest = OverrideRequest()):
 def pm_reject(body: OverrideRequest = OverrideRequest()):
     """Human operator rejects today's trading."""
     state = manual_override(approved=False, reason=body.reason or "人工封鎖")
+    _write_pm_review_to_db(state)
     return {"status": "ok", "data": state}
 
 
@@ -64,6 +118,45 @@ def _get_llm_call():
         from openclaw.llm_gemini import gemini_call
         return gemini_call
     return None
+
+
+def _write_pm_review_to_db(state: dict, llm_trace_id: str | None = None) -> None:
+    """Persist PM review to pm_reviews table for durable history."""
+    import json, time, uuid
+    if state.get("source") not in ("llm", "manual"):
+        return
+    try:
+        from app.db import get_conn_rw
+        with get_conn_rw() as conn:
+            _ensure_pm_reviews_table(conn)
+            review_date = state.get("date", "")
+            review_id = f"pm_{review_date}_{uuid.uuid4().hex[:8]}"
+            now_ms = int(time.time() * 1000)
+            conn.execute(
+                """INSERT INTO pm_reviews
+                   (review_id, review_date, approved, confidence, source,
+                    reason, recommended_action, bull_case, bear_case, neutral_case,
+                    consensus_points, divergence_points, reviewed_at, llm_trace_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    review_id,
+                    review_date,
+                    1 if state.get("approved") else 0,
+                    state.get("confidence", 0.0),
+                    state.get("source", ""),
+                    state.get("reason", ""),
+                    state.get("recommended_action", ""),
+                    state.get("bull_case", ""),
+                    state.get("bear_case", ""),
+                    state.get("neutral_case", ""),
+                    json.dumps(state.get("consensus_points", []), ensure_ascii=False),
+                    json.dumps(state.get("divergence_points", []), ensure_ascii=False),
+                    now_ms,
+                    llm_trace_id,
+                ),
+            )
+    except Exception:
+        logger.exception("Failed to persist PM review to pm_reviews")
 
 
 def _write_debate_to_db(state: dict) -> None:
@@ -134,6 +227,9 @@ def pm_review():
 
     # Write prompt + raw response to llm_traces for full transparency
     _write_llm_trace(state, model)
+
+    # Persist to pm_reviews for durable history / API queries
+    _write_pm_review_to_db(state)
 
     # Telegram 通知 PM review 結果（不阻塞 API 回應）
     _notify_pm_review(state)

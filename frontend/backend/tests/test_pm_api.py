@@ -1,4 +1,4 @@
-"""Tests for app/api/pm.py — targeting 55% → near 100%."""
+"""Tests for app/api/pm.py — PM review API including history persistence."""
 from __future__ import annotations
 
 import json
@@ -216,3 +216,153 @@ class TestWriteLlmTrace:
         assert "_raw_response" not in state
         assert "_latency_ms" not in state
         assert "other_key" in state
+
+
+class TestPmHistory:
+    def test_history_empty(self, client):
+        r = client.get("/api/pm/history", headers=_AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        assert body["data"] == []
+        assert body["pagination"]["total"] == 0
+
+    def test_history_returns_records(self, client, monkeypatch):
+        """After approve, history should contain the persisted review."""
+        client.post("/api/pm/approve", json={"reason": "test persist"}, headers=_AUTH)
+        r = client.get("/api/pm/history", headers=_AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pagination"]["total"] >= 1
+        rec = body["data"][0]
+        assert rec["approved"] == 1
+        assert rec["source"] == "manual"
+        assert "test persist" in (rec.get("reason") or "")
+
+    def test_history_pagination(self, client):
+        """Pagination params are respected."""
+        r = client.get("/api/pm/history?limit=5&offset=0", headers=_AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["pagination"]["limit"] == 5
+        assert body["pagination"]["offset"] == 0
+
+    def test_history_no_auth(self, client):
+        r = client.get("/api/pm/history")
+        assert r.status_code == 401
+
+    def test_history_graceful_when_table_missing(self, client, monkeypatch):
+        """If pm_reviews table doesn't exist in readonly path, return empty."""
+        import contextlib
+        import app.db as db_mod
+
+        original_get_conn = db_mod.get_conn
+
+        @contextlib.contextmanager
+        def conn_without_pm_reviews():
+            """Yield a connection to a DB that lacks pm_reviews."""
+            import tempfile, os
+            tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+            tmp.close()
+            conn = sqlite3.connect(tmp.name)
+            conn.row_factory = sqlite3.Row
+            try:
+                yield conn
+            finally:
+                conn.close()
+                os.unlink(tmp.name)
+
+        monkeypatch.setattr(db_mod, "get_conn", conn_without_pm_reviews)
+        r = client.get("/api/pm/history", headers=_AUTH)
+        assert r.status_code == 200
+        assert r.json()["data"] == []
+
+
+class TestWritePmReviewToDb:
+    def test_skips_non_valid_source(self, client):
+        from app.api.pm import _write_pm_review_to_db
+        _write_pm_review_to_db({"source": "pending", "date": "2026-03-09"})
+        # Should not raise, and no row written
+
+    def test_writes_llm_review(self, client, monkeypatch):
+        from app.api.pm import _write_pm_review_to_db
+        import os
+        state = {
+            "source": "llm",
+            "date": "2026-03-09",
+            "approved": True,
+            "confidence": 0.85,
+            "reason": "Market is bullish",
+            "recommended_action": "BUY",
+            "bull_case": "Strong earnings",
+            "bear_case": "Inflation risk",
+            "neutral_case": "Mixed signals",
+            "consensus_points": ["Growth"],
+            "divergence_points": ["Rates"],
+        }
+        _write_pm_review_to_db(state)
+
+        # Verify persisted
+        r = client.get("/api/pm/history", headers=_AUTH)
+        body = r.json()
+        assert body["pagination"]["total"] >= 1
+        rec = body["data"][0]
+        assert rec["review_date"] == "2026-03-09"
+        assert rec["approved"] == 1
+        assert rec["confidence"] == 0.85
+        assert rec["source"] == "llm"
+
+    def test_writes_manual_review(self, client):
+        from app.api.pm import _write_pm_review_to_db
+        state = {
+            "source": "manual",
+            "date": "2026-03-08",
+            "approved": False,
+            "confidence": 1.0,
+            "reason": "Force block",
+        }
+        _write_pm_review_to_db(state)
+
+        r = client.get("/api/pm/history", headers=_AUTH)
+        data = r.json()["data"]
+        manual_recs = [d for d in data if d["review_date"] == "2026-03-08"]
+        assert len(manual_recs) >= 1
+        assert manual_recs[0]["approved"] == 0
+
+    def test_approve_endpoint_persists(self, client):
+        """POST /api/pm/approve should persist to pm_reviews."""
+        client.post("/api/pm/approve", json={"reason": "LGTM"}, headers=_AUTH)
+        r = client.get("/api/pm/history", headers=_AUTH)
+        data = r.json()["data"]
+        assert any(d["source"] == "manual" and d["approved"] == 1 for d in data)
+
+    def test_reject_endpoint_persists(self, client):
+        """POST /api/pm/reject should persist to pm_reviews."""
+        client.post("/api/pm/reject", json={"reason": "Too risky"}, headers=_AUTH)
+        r = client.get("/api/pm/history", headers=_AUTH)
+        data = r.json()["data"]
+        assert any(d["source"] == "manual" and d["approved"] == 0 for d in data)
+
+    def test_review_endpoint_persists(self, client, monkeypatch):
+        """POST /api/pm/review (mocked LLM) should persist to pm_reviews."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mock_state = {
+            "date": "2026-03-07",
+            "approved": True,
+            "source": "llm",
+            "reason": "Bullish outlook",
+            "confidence": 0.9,
+            "bull_case": "Earnings beat",
+            "bear_case": "Geopolitical",
+            "neutral_case": "Sideways",
+            "consensus_points": [],
+            "divergence_points": [],
+            "recommended_action": "BUY",
+        }
+        with patch("app.api.pm.run_daily_pm_review", return_value=mock_state):
+            r = client.post("/api/pm/review", headers=_AUTH)
+        assert r.status_code == 200
+
+        r = client.get("/api/pm/history", headers=_AUTH)
+        data = r.json()["data"]
+        assert any(d["review_date"] == "2026-03-07" and d["source"] == "llm" for d in data)

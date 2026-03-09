@@ -36,6 +36,29 @@ def _init_test_db(path: Path) -> None:
             """
         )
         conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pm_reviews (
+                review_id TEXT PRIMARY KEY,
+                review_date TEXT NOT NULL,
+                approved INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                source TEXT NOT NULL,
+                reason TEXT,
+                recommended_action TEXT,
+                bull_case TEXT,
+                bear_case TEXT,
+                neutral_case TEXT,
+                consensus_points TEXT,
+                divergence_points TEXT,
+                reviewed_at INTEGER NOT NULL,
+                llm_trace_id TEXT
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_pm_reviews_date ON pm_reviews(review_date DESC)"
+        )
+        conn.execute(
             "INSERT OR REPLACE INTO strategy_proposals(proposal_id, status, created_at) VALUES(?, ?, ?) ",
             ("p1", "pending", 123),
         )
