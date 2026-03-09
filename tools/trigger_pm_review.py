@@ -45,6 +45,9 @@ _ssl_ctx.check_hostname = False
 _ssl_ctx.verify_mode = ssl.CERT_NONE
 
 
+_RETRY_WAITS = [5, 15, 30]  # seconds between retries
+
+
 def call_pm_review() -> dict:
     url = f"{API_BASE}/api/pm/review"
     req = urllib.request.Request(
@@ -60,10 +63,26 @@ def call_pm_review() -> dict:
         return json.loads(resp.read().decode())
 
 
+def call_with_retry() -> dict:
+    """Call PM review API with exponential backoff on network/server errors."""
+    import time
+    last_exc = None
+    for attempt, wait in enumerate([0] + _RETRY_WAITS, start=1):
+        if wait:
+            print(f"[PM Review] 重試 {attempt}/{len(_RETRY_WAITS) + 1}，等待 {wait}s…")
+            time.sleep(wait)
+        try:
+            return call_pm_review()
+        except Exception as exc:
+            last_exc = exc
+            print(f"[PM Review] 第 {attempt} 次失敗：{exc}", file=sys.stderr)
+    raise last_exc  # type: ignore[misc]
+
+
 if __name__ == "__main__":
     print(f"[PM Review] 呼叫 {API_BASE}/api/pm/review ...")
     try:
-        result = call_pm_review()
+        result = call_with_retry()
         data = result.get("data", {})
         approved = data.get("approved", False)
         reason   = data.get("reason", "")
@@ -73,5 +92,5 @@ if __name__ == "__main__":
         print(f"[PM Review] {status} | 信心 {conf:.0%} | {reason} ({source})")
         sys.exit(0)
     except Exception as e:
-        print(f"[PM Review] 錯誤：{e}", file=sys.stderr)
+        print(f"[PM Review] 所有重試失敗：{e}", file=sys.stderr)
         sys.exit(1)

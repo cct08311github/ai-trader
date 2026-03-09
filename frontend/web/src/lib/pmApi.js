@@ -40,3 +40,16 @@ export async function pmTriggerReview() {
   if (!res.ok) throw new Error('AI 審核失敗')
   return (await res.json()).data
 }
+
+export async function fetchPmHistory({ limit = 30, offset = 0 } = {}) {
+  try {
+    const res = await authFetch(
+      `${getApiBase()}/api/pm/history?limit=${limit}&offset=${offset}`
+    )
+    if (res.ok) {
+      const body = await res.json()
+      return { data: body.data || [], pagination: body.pagination || { total: 0, limit, offset } }
+    }
+  } catch { /* ignore */ }
+  return { data: [], pagination: { total: 0, limit, offset } }
+}

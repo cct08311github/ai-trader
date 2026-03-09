@@ -1,5 +1,6 @@
 import React from 'react'
 import ControlPanel from '../components/ControlPanel'
+import PmReviewHistoryPanel from '../components/PmReviewHistoryPanel'
 import LogTerminal from '../components/LogTerminal'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -783,6 +784,7 @@ export default function SystemPage() {
         {/* 左欄：操作控制 + 事件時間軸 */}
         <div className="space-y-6">
           <ControlPanel />
+          <PmReviewHistoryPanel />
           <OperatorSnapshotPanel
             quarantineStatus={quarantineStatus}
             quarantinePlan={quarantinePlan}
