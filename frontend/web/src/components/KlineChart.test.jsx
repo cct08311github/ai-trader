@@ -204,21 +204,21 @@ describe('KlineChart — candle color logic', () => {
   it('up candle (close >= open) uses green', async () => {
     authFetch.mockReturnValue(makeOkResponse([upCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖'))
-    // Green emerald color: #10b981
-    const rects = Array.from(container.querySelectorAll('rect'))
-    const greenRects = rects.filter(r => r.getAttribute('fill') === '#10b981')
-    expect(greenRects.length).toBeGreaterThan(0)
+    await waitFor(() => {
+      const rects = Array.from(container.querySelectorAll('rect'))
+      const greenRects = rects.filter(r => r.getAttribute('fill') === '#10b981')
+      expect(greenRects.length).toBeGreaterThan(0)
+    })
   })
 
   it('down candle (close < open) uses red', async () => {
     authFetch.mockReturnValue(makeOkResponse([downCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖'))
-    // Red rose color: #f43f5e
-    const rects = Array.from(container.querySelectorAll('rect'))
-    const redRects = rects.filter(r => r.getAttribute('fill') === '#f43f5e')
-    expect(redRects.length).toBeGreaterThan(0)
+    await waitFor(() => {
+      const rects = Array.from(container.querySelectorAll('rect'))
+      const redRects = rects.filter(r => r.getAttribute('fill') === '#f43f5e')
+      expect(redRects.length).toBeGreaterThan(0)
+    })
   })
 
   it('zero-volume candle renders without crash (min height=1)', async () => {
