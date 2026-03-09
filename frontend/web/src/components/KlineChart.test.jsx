@@ -124,9 +124,11 @@ describe('KlineChart — single candle edge case', () => {
   it('renders correctly with a single candle', async () => {
     authFetch.mockReturnValue(makeOkResponse([upCandle]))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖'))
-    expect(container.querySelector('svg')).toBeTruthy()
-    expect(screen.getByText(/2026-01-02/)).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByText('K 線圖')).toBeTruthy()
+      expect(container.querySelector('svg')).toBeTruthy()
+      expect(container.textContent).toContain('2026-01-02')
+    })
   })
 })
 
