@@ -33,6 +33,10 @@ vi.mock('../components/ControlPanel', () => ({
   default: () => <div>ControlPanel Mock</div>,
 }))
 
+vi.mock('../components/PmReviewHistoryPanel', () => ({
+  default: () => <div>PmReviewHistoryPanel Mock</div>,
+}))
+
 vi.mock('../components/LogTerminal', () => ({
   default: () => <div>LogTerminal Mock</div>,
 }))
