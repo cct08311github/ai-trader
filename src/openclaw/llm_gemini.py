@@ -84,7 +84,14 @@ def gemini_call(model: str, prompt: str) -> Dict[str, Any]:
     latency_ms = int((time.time() - t0) * 1000)
 
     raw_text = response.text
-    result = _extract_json(raw_text)
+    parsed = _extract_json(raw_text)
+
+    # _extract_json may return a list when LLM outputs a JSON array.
+    # Wrap in a dict so callers always get dict with metadata attached.
+    if isinstance(parsed, list):
+        result: Dict[str, Any] = {"items": parsed}
+    else:
+        result = parsed
 
     # Attach metadata for caller to log to llm_traces
     result["_prompt"] = prompt
