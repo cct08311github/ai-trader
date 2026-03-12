@@ -328,11 +328,12 @@ def _llm_refine_candidates(
     result = call_agent_llm(prompt, model=DEFAULT_MODEL)
     write_trace(conn, agent="screener_llm", prompt=prompt[:500], result=result)
 
-    # Parse — expect list or dict with "candidates" key
+    # Parse — gemini_call wraps array responses as {"items": [...]};
+    # also accept {"candidates": [...]} for flexibility.
     refined: List[Dict] = []
-    if isinstance(result, list):
-        refined = result
-    elif isinstance(result, dict) and "candidates" in result:
+    if isinstance(result, dict) and "items" in result and isinstance(result["items"], list):
+        refined = result["items"]
+    elif isinstance(result, dict) and "candidates" in result and isinstance(result["candidates"], list):
         refined = result["candidates"]
     else:
         log.warning("[SCREENER] LLM returned unexpected format, keeping rule results")
