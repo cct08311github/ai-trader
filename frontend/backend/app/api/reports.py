@@ -56,12 +56,14 @@ def _get_sim_positions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
         rows = conn.execute(
             "SELECT p.symbol, p.quantity, p.avg_price, p.current_price, "
             "p.unrealized_pnl, p.state, p.high_water_mark, p.entry_trading_day, "
-            "e.name AS stock_name "
+            "e.name AS stock_name, e.close AS eod_close "
             "FROM positions p "
-            "LEFT JOIN (SELECT symbol, name FROM eod_prices "
-            "           WHERE name IS NOT NULL "
-            "           GROUP BY symbol HAVING trade_date=MAX(trade_date)) e "
-            "ON p.symbol = e.symbol "
+            "LEFT JOIN ("
+            "  SELECT ep.symbol, ep.name, ep.close "
+            "  FROM eod_prices ep "
+            "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
+            "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
+            ") e ON p.symbol = e.symbol "
             "WHERE p.quantity > 0 ORDER BY p.symbol"
         ).fetchall()
         return [
@@ -70,8 +72,24 @@ def _get_sim_positions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
                 "name": r["stock_name"] or r["symbol"],
                 "quantity": int(r["quantity"]),
                 "avg_price": float(r["avg_price"] or 0),
-                "current_price": float(r["current_price"]) if r["current_price"] else None,
-                "unrealized_pnl": float(r["unrealized_pnl"]) if r["unrealized_pnl"] else None,
+                "current_price": (
+                    float(r["current_price"])
+                    if r["current_price"] is not None
+                    else (float(r["eod_close"]) if r["eod_close"] is not None else None)
+                ),
+                "unrealized_pnl": (
+                    float(r["unrealized_pnl"])
+                    if r["unrealized_pnl"] is not None
+                    else (
+                        round(
+                            ((float(r["current_price"]) if r["current_price"] is not None else float(r["eod_close"])) - float(r["avg_price"] or 0))
+                            * int(r["quantity"]),
+                            2,
+                        )
+                        if (r["current_price"] is not None or r["eod_close"] is not None)
+                        else None
+                    )
+                ),
                 "state": r["state"],
                 "high_water_mark": float(r["high_water_mark"]) if r["high_water_mark"] else None,
                 "entry_trading_day": r["entry_trading_day"],

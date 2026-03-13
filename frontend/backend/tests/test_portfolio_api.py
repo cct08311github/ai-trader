@@ -211,6 +211,27 @@ class TestPortfolioPositions:
         r = c.get("/api/portfolio/positions")
         assert r.status_code == 401
 
+    def test_positions_fallbacks_to_latest_eod_close_when_current_price_missing(self, full_client):
+        c, db_path = full_client
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO positions VALUES (?,?,?,?,?,?,?)",
+            ("3008", 135, 379.6, None, None, 8, "Optics")
+        )
+        conn.execute(
+            "INSERT INTO eod_prices(trade_date, market, symbol, name, close, source_url) VALUES (?,?,?,?,?,?)",
+            ("2026-03-12", "TWSE", "3008", "大立光", 2390.0, "test")
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/portfolio/positions", headers=_AUTH)
+        assert r.status_code == 200
+        positions = r.json()["positions"]
+        p3008 = next(p for p in positions if p["symbol"] == "3008")
+        assert p3008["last_price"] == 2390.0
+        assert p3008["unrealized_pnl"] == 271404.0
+
 
 class TestListTrades:
     def test_trades_returns_ok(self, full_client):
