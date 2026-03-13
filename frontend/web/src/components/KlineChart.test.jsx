@@ -104,19 +104,21 @@ describe('KlineChart — normal rendering with data', () => {
   it('renders candle rectangles for each data point', async () => {
     authFetch.mockReturnValue(makeOkResponse(multipleCandles))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖'))
-    // Each candle has body rect + volume rect = 2 rects per candle, plus potential others
-    const rects = container.querySelectorAll('rect')
-    expect(rects.length).toBeGreaterThanOrEqual(multipleCandles.length)
+    await waitFor(() => {
+      // Each candle has body rect + volume rect = 2 rects per candle, plus potential others
+      const rects = container.querySelectorAll('rect')
+      expect(rects.length).toBeGreaterThanOrEqual(multipleCandles.length)
+    })
   })
 
   it('renders wick lines for each candle', async () => {
     authFetch.mockReturnValue(makeOkResponse(multipleCandles))
     const { container } = render(<KlineChart symbol="2330" />)
-    await waitFor(() => screen.getByText('K 線圖'))
-    const lines = container.querySelectorAll('line')
-    // At minimum: candle wicks (1 per candle) + grid lines + separator
-    expect(lines.length).toBeGreaterThanOrEqual(multipleCandles.length)
+    await waitFor(() => {
+      const lines = container.querySelectorAll('line')
+      // At minimum: candle wicks (1 per candle) + grid lines + separator
+      expect(lines.length).toBeGreaterThanOrEqual(multipleCandles.length)
+    })
   })
 })
 
