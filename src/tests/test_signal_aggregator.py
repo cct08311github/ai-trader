@@ -367,6 +367,7 @@ def test_black_swan_market_snap_zero_reference_no_override(mock_candles, mock_re
     assert not any("BLACK_SWAN_OVERRIDE" in r for r in result.reasons)
 
 
+
 @patch("openclaw.signal_aggregator.compute_signal", return_value="flat")
 @patch("openclaw.signal_aggregator.classify_market_regime")
 @patch("openclaw.signal_aggregator.fetch_candles")
