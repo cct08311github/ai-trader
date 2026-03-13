@@ -72,12 +72,14 @@ def portfolio_positions(simulation: Optional[bool] = None):
             rows = conn.execute(
                 "SELECT p.symbol, p.quantity, p.avg_price, p.current_price, "
                 "p.unrealized_pnl, p.chip_health_score, p.sector, "
-                "e.name AS stock_name "
+                "e.name AS stock_name, e.close AS eod_close "
                 "FROM positions p "
-                "LEFT JOIN (SELECT symbol, name FROM eod_prices "
-                "           WHERE name IS NOT NULL "
-                "           GROUP BY symbol HAVING trade_date=MAX(trade_date)) e "
-                "ON p.symbol = e.symbol "
+                "LEFT JOIN ("
+                "  SELECT ep.symbol, ep.name, ep.close "
+                "  FROM eod_prices ep "
+                "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
+                "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
+                ") e ON p.symbol = e.symbol "
                 "WHERE p.quantity > 0 ORDER BY p.symbol"
             ).fetchall()
         if rows:
@@ -88,8 +90,24 @@ def portfolio_positions(simulation: Optional[bool] = None):
                     "name": r["stock_name"] if r["stock_name"] and r["stock_name"] != r["symbol"] else None,
                     "qty": int(r["quantity"]),
                     "avg_price": float(r["avg_price"] or 0),
-                    "last_price": float(r["current_price"]) if r["current_price"] else None,
-                    "unrealized_pnl": float(r["unrealized_pnl"]) if r["unrealized_pnl"] else None,
+                    "last_price": (
+                        float(r["current_price"])
+                        if r["current_price"] is not None
+                        else (float(r["eod_close"]) if r["eod_close"] is not None else None)
+                    ),
+                    "unrealized_pnl": (
+                        float(r["unrealized_pnl"])
+                        if r["unrealized_pnl"] is not None
+                        else (
+                            round(
+                                ((float(r["current_price"]) if r["current_price"] is not None else float(r["eod_close"])) - float(r["avg_price"] or 0))
+                                * int(r["quantity"]),
+                                2,
+                            )
+                            if (r["current_price"] is not None or r["eod_close"] is not None)
+                            else None
+                        )
+                    ),
                     "chip_health_score": r["chip_health_score"],
                     "sector": r["sector"],
                     "locked": r["symbol"].upper() in locked_set,

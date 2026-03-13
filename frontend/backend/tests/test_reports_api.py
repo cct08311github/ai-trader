@@ -204,6 +204,31 @@ def test_reports_context_tolerates_missing_optional_sources(tmp_path, monkeypatc
     assert payload["simulated_positions"]["positions"][0]["symbol"] == "2330"
 
 
+def test_reports_context_fallbacks_to_latest_eod_close_when_current_price_missing(tmp_path, monkeypatch):
+    with _make_client(tmp_path, monkeypatch) as client:
+        import app.db as db
+
+        with db.get_conn_rw() as conn:
+            conn.execute("DELETE FROM positions")
+            conn.execute(
+                """
+                INSERT INTO positions(symbol, quantity, avg_price, current_price, unrealized_pnl, state, high_water_mark, entry_trading_day)
+                VALUES ('3008', 135, 379.6, NULL, NULL, 'HOLDING', NULL, '2026-03-01')
+                """
+            )
+            conn.execute(
+                "INSERT INTO eod_prices(trade_date, symbol, name, close) VALUES ('2026-03-12', '3008', '大立光', 2390.0)"
+            )
+
+        r = client.get("/api/reports/context?type=morning", headers=_AUTH)
+
+    assert r.status_code == 200
+    payload = r.json()
+    p3008 = next(p for p in payload["simulated_positions"]["positions"] if p["symbol"] == "3008")
+    assert p3008["current_price"] == 2390.0
+    assert p3008["unrealized_pnl"] == 271404.0
+
+
 def test_reports_context_invalid_type_rejected(tmp_path, monkeypatch):
     """Query param type must be morning/evening/weekly — invalid value is rejected."""
     with _make_client(tmp_path, monkeypatch) as client:
