@@ -231,6 +231,7 @@ class TestPortfolioPositions:
         p3008 = next(p for p in positions if p["symbol"] == "3008")
         assert p3008["last_price"] == 2390.0
         assert p3008["unrealized_pnl"] == 271404.0
+        assert p3008["price_source"] == "eod"
 
 
 class TestListTrades:

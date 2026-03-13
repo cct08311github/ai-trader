@@ -90,6 +90,10 @@ def _get_sim_positions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
                         else None
                     )
                 ),
+                "price_source": (
+                    "realtime" if r["current_price"] is not None
+                    else ("eod" if r["eod_close"] is not None else None)
+                ),
                 "state": r["state"],
                 "high_water_mark": float(r["high_water_mark"]) if r["high_water_mark"] else None,
                 "entry_trading_day": r["entry_trading_day"],

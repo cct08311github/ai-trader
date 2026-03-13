@@ -108,6 +108,10 @@ def portfolio_positions(simulation: Optional[bool] = None):
                             else None
                         )
                     ),
+                    "price_source": (
+                        "realtime" if r["current_price"] is not None
+                        else ("eod" if r["eod_close"] is not None else None)
+                    ),
                     "chip_health_score": r["chip_health_score"],
                     "sector": r["sector"],
                     "locked": r["symbol"].upper() in locked_set,
