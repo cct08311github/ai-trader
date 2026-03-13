@@ -227,6 +227,7 @@ def test_reports_context_fallbacks_to_latest_eod_close_when_current_price_missin
     p3008 = next(p for p in payload["simulated_positions"]["positions"] if p["symbol"] == "3008")
     assert p3008["current_price"] == 2390.0
     assert p3008["unrealized_pnl"] == 271404.0
+    assert p3008["price_source"] == "eod"
 
 
 def test_reports_context_invalid_type_rejected(tmp_path, monkeypatch):

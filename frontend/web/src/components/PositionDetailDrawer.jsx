@@ -277,7 +277,7 @@ export default function PositionDetailDrawer({ symbol, position, isLocked, onLoc
                                     <div className="grid grid-cols-2 gap-3">
                                         <DetailField label="數量" value={formatNumber(position.qty || 0)} />
                                         <DetailField label="均價" value={formatCurrency(position.avgCost || position.avg_price || 0)} />
-                                        <DetailField label="現價" value={
+                                        <DetailField label={position.price_source === 'eod' ? '現價（收盤）' : '現價'} value={
                                             (position.lastPrice || position.last_price)
                                                 ? formatCurrency(position.lastPrice || position.last_price)
                                                 : <span className="text-slate-500">市場休市中</span>

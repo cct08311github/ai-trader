@@ -356,7 +356,12 @@ export default function PortfolioPage() {
                       {p.name && <div className="text-xs text-[rgb(var(--muted))]">{p.name}</div>}
                     </td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{Number.isFinite(avg) ? formatCurrency(avg) : '-'}</td>
-                    <td className="px-4 py-3 text-[rgb(var(--text))]">{formatCurrency(last)}</td>
+                    <td className="px-4 py-3 text-[rgb(var(--text))]">
+                      {formatCurrency(last)}
+                      {p.price_source === 'eod' && (
+                        <span className="ml-1 text-[10px] text-amber-400/70">收盤</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[rgb(var(--text))]">{formatNumber(qty, { maximumFractionDigits: 4 })}</td>
                     <td className={`px-4 py-3 ${pnlTone}`}>{unreal == null ? '-' : formatCurrency(unreal)}</td>
                     <td className="hidden sm:table-cell px-4 py-3 text-[rgb(var(--text))]">{formatPercent(weight)}</td>
