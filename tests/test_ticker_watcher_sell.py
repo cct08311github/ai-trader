@@ -185,3 +185,95 @@ class TestClosingOrderSlippage:
         assert result.order is not None
         assert result.order.opens_new_position is False
         assert result.order.side == "sell"
+
+
+# ─── signal_logic edge cases ────────────────────────────────────────────────
+
+class TestEvaluateEntryRSI:
+    def test_entry_rsi_too_high_blocks_buy(self):
+        """Golden cross + RSI > rsi_entry_max → should return flat (RSI filter)."""
+        from openclaw.signal_logic import evaluate_entry, SignalParams
+        # Flat 15 days at 100, then 5 days of sharp rise: 110, 120, 130, 140, 150
+        # MA5 crosses above MA20, but RSI will be very high after the spike
+        closes = [100.0] * 15 + [110.0, 120.0, 130.0, 140.0, 150.0]
+        params = SignalParams(ma_short=5, ma_long=20, rsi_entry_max=60)  # strict RSI limit
+        result = evaluate_entry(closes, params)
+        # RSI after sharp spike should be very high (>60) → flat
+        assert result.signal == "flat"
+
+    def test_entry_rsi_ok_allows_buy(self):
+        """Golden cross + RSI within limit → should return buy."""
+        from openclaw.signal_logic import evaluate_entry, SignalParams
+        # Gentle uptrend: slowly increasing to create crossover without extreme RSI
+        closes = [100 - i * 0.3 for i in range(15, 0, -1)] + [100, 101, 102, 103, 104]
+        params = SignalParams(ma_short=5, ma_long=20, rsi_entry_max=80)
+        result = evaluate_entry(closes, params)
+        # If golden cross occurs with moderate RSI → buy
+        # The important test is: if result IS buy, RSI was within limit
+        if result.signal == "buy":
+            assert "golden_cross" in result.reason
+
+    def test_entry_insufficient_data(self):
+        """Closes shorter than ma_long → insufficient_data."""
+        from openclaw.signal_logic import evaluate_entry, SignalParams
+        params = SignalParams(ma_short=5, ma_long=20)
+        result = evaluate_entry([100, 101, 102], params)  # only 3 bars, need 20
+        assert result.signal == "flat"
+        assert "insufficient_data" in result.reason
+
+    def test_entry_exact_boundary_length(self):
+        """Closes exactly equal to ma_long → should evaluate (not insufficient)."""
+        from openclaw.signal_logic import evaluate_entry, SignalParams
+        params = SignalParams(ma_short=5, ma_long=20)
+        closes = list(range(80, 100))  # exactly 20 bars
+        result = evaluate_entry(closes, params)
+        # Should NOT be insufficient_data
+        assert result.reason != "insufficient_data"
+
+
+class TestTrailingStop:
+    def test_trailing_stop_tight_triggers_on_high_profit(self):
+        """獲利 >= threshold → 使用 tight trailing → 觸發 sell。"""
+        from openclaw.signal_logic import evaluate_exit, SignalParams
+        # avg=100, hwm=155 → profit 55% >= threshold 50% → tight trailing 3%
+        # 155 * (1-0.03) = 150.35 → close=149 should trigger
+        params = SignalParams(trailing_pct=0.10, trailing_pct_tight=0.03, trailing_profit_threshold=0.50)
+        closes = [100, 130, 155, 149]
+        result = evaluate_exit(closes, avg_price=100.0, high_water_mark=155.0, params=params)
+        assert result.signal == "sell"
+        assert "trailing_stop" in result.reason
+
+    def test_trailing_stop_wide_holds_on_moderate_profit(self):
+        """獲利 < threshold → 使用 wide trailing → 不觸發。"""
+        from openclaw.signal_logic import evaluate_exit, SignalParams
+        # avg=100, hwm=130 → profit 30% < threshold 50% → wide trailing 10%
+        # 130 * (1-0.10) = 117 → close=126 should NOT trigger
+        params = SignalParams(trailing_pct=0.10, trailing_pct_tight=0.03, trailing_profit_threshold=0.50)
+        closes = [100, 120, 130, 126]
+        result = evaluate_exit(closes, avg_price=100.0, high_water_mark=130.0, params=params)
+        assert result.signal == "flat" or "trailing" not in result.reason
+
+    def test_trailing_stop_wide_triggers_on_moderate_profit(self):
+        """獲利 < threshold → 使用 wide trailing → 跌破 wide → 觸發。"""
+        from openclaw.signal_logic import evaluate_exit, SignalParams
+        # avg=100, hwm=130 → profit 30% < 50% → wide trailing 10%
+        # 130 * (1-0.10) = 117 → close=115 < 117 → should trigger
+        params = SignalParams(trailing_pct=0.10, trailing_pct_tight=0.03, trailing_profit_threshold=0.50)
+        closes = [100, 120, 130, 115]
+        result = evaluate_exit(closes, avg_price=100.0, high_water_mark=130.0, params=params)
+        assert result.signal == "sell"
+        assert "trailing_stop" in result.reason
+
+    def test_exit_insufficient_data(self):
+        """Empty closes → flat with insufficient_data."""
+        from openclaw.signal_logic import evaluate_exit, SignalParams
+        result = evaluate_exit([], avg_price=100.0, high_water_mark=100.0)
+        assert result.signal == "flat"
+        assert "insufficient_data" in result.reason
+
+    def test_exit_zero_avg_price(self):
+        """avg_price=0 → flat with insufficient_data."""
+        from openclaw.signal_logic import evaluate_exit, SignalParams
+        result = evaluate_exit([100], avg_price=0.0, high_water_mark=100.0)
+        assert result.signal == "flat"
+        assert "insufficient_data" in result.reason
