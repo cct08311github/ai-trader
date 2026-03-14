@@ -179,3 +179,26 @@ def test_run_backtest_empty_data():
     # equity 應等於初始資本（誤差容忍 0.01）
     assert abs(result.equity_curve[0] - 500_000.0) < 0.01
     assert result.metrics.total_trades == 0
+
+
+# ─── Test 4: load_params_from_file ────────────────────────────────────────────
+
+def test_load_signal_params_from_json(tmp_path):
+    import json
+    from openclaw.signal_logic import load_params_from_file
+    params_file = tmp_path / "signal_params.json"
+    params_file.write_text(json.dumps({
+        "params": {"ma_short": 8, "ma_long": 30, "rsi_entry_max": 60,
+                   "stop_loss_pct": 0.07, "take_profit_pct": 0.10, "trailing_pct": 0.08}
+    }))
+    params = load_params_from_file(str(params_file))
+    assert params.ma_short == 8
+    assert params.ma_long == 30
+    assert params.stop_loss_pct == 0.07
+
+
+def test_load_signal_params_fallback_on_missing():
+    from openclaw.signal_logic import load_params_from_file, SignalParams
+    params = load_params_from_file("/nonexistent/path.json")
+    default = SignalParams()
+    assert params.ma_short == default.ma_short
