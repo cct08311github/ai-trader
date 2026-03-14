@@ -73,3 +73,132 @@ def test_submit_order_gives_up():
         result = adapter.submit_order("order-3", candidate)
     assert result.status == "rejected"
     assert adapter.api.place_order.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# map_shioaji_error_to_reason_code tests
+# ---------------------------------------------------------------------------
+from openclaw.broker import map_shioaji_error_to_reason_code
+
+
+def test_error_mapping_auth_by_code():
+    """Auth-related error code → EXEC_BROKER_AUTH."""
+    assert map_shioaji_error_to_reason_code("AUTH_FAILED", "") == "EXEC_BROKER_AUTH"
+
+
+def test_error_mapping_token_expired_by_code():
+    """TOKEN_EXPIRED error code → EXEC_BROKER_AUTH."""
+    assert map_shioaji_error_to_reason_code("TOKEN_EXPIRED", "") == "EXEC_BROKER_AUTH"
+
+
+def test_error_mapping_insufficient_balance():
+    """Insufficient funds by code → EXEC_INSUFFICIENT_BALANCE."""
+    assert map_shioaji_error_to_reason_code("INSUFFICIENT_BALANCE", "") == "EXEC_INSUFFICIENT_BALANCE"
+
+
+def test_error_mapping_insufficient_balance_by_message():
+    """Insufficient funds by message keyword → EXEC_INSUFFICIENT_BALANCE."""
+    assert map_shioaji_error_to_reason_code(None, "balance too low") == "EXEC_INSUFFICIENT_BALANCE"
+
+
+def test_error_mapping_insufficient_by_message_keyword():
+    """'insufficient' keyword in message → EXEC_INSUFFICIENT_BALANCE."""
+    assert map_shioaji_error_to_reason_code(None, "insufficient funds") == "EXEC_INSUFFICIENT_BALANCE"
+
+
+def test_error_mapping_message_fallback_auth():
+    """When code is None, AUTH keyword in message → EXEC_BROKER_AUTH."""
+    assert map_shioaji_error_to_reason_code(None, "auth token invalid") == "EXEC_BROKER_AUTH"
+
+
+def test_error_mapping_message_fallback_network():
+    """When code is None, NETWORK keyword in message → EXEC_NETWORK_ERROR."""
+    assert map_shioaji_error_to_reason_code(None, "network connection refused") == "EXEC_NETWORK_ERROR"
+
+
+def test_error_mapping_unknown_fallback():
+    """Unknown error → EXEC_BROKER_UNKNOWN."""
+    assert map_shioaji_error_to_reason_code(None, "some random error") == "EXEC_BROKER_UNKNOWN"
+
+
+def test_error_mapping_empty_code_and_message():
+    """Both code and message empty → EXEC_BROKER_UNKNOWN."""
+    assert map_shioaji_error_to_reason_code(None, "") == "EXEC_BROKER_UNKNOWN"
+
+
+def test_submit_gives_up_has_correct_reason_code():
+    """After 3 retries, result.reason_code should be populated."""
+    adapter = _make_adapter()
+    adapter.api.place_order.side_effect = Exception("persistent failure")
+    candidate = OrderCandidate(symbol="2330", side="buy", qty=100, price=600.0)
+    with patch("time.sleep"):
+        result = adapter.submit_order("order-err", candidate)
+    assert result.status == "rejected"
+    assert result.reason_code != ""  # Should have a reason code
+    assert "persistent failure" in result.reason
+
+
+# ---------------------------------------------------------------------------
+# cancel_order tests
+# ---------------------------------------------------------------------------
+
+
+def test_cancel_order_not_found():
+    """Cancel nonexistent order → rejected with EXEC_BROKER_UNKNOWN."""
+    adapter = _make_adapter()
+    result = adapter.cancel_order("nonexistent")
+    assert result.status == "rejected"
+    assert result.reason_code == "EXEC_BROKER_UNKNOWN"
+
+
+def test_cancel_order_success():
+    """Cancel existing order → submitted."""
+    adapter = _make_adapter()
+    mock_trade = MagicMock()
+    adapter._trades["test-oid"] = mock_trade
+    result = adapter.cancel_order("test-oid")
+    assert result.status == "submitted"
+    adapter.api.cancel_order.assert_called_once_with(mock_trade)
+
+
+def test_cancel_order_api_exception():
+    """Cancel API throws → rejected with reason_code."""
+    adapter = _make_adapter()
+    mock_trade = MagicMock()
+    adapter._trades["test-oid"] = mock_trade
+    adapter.api.cancel_order.side_effect = Exception("network error")
+    result = adapter.cancel_order("test-oid")
+    assert result.status == "rejected"
+    assert result.reason_code != ""
+
+
+# ---------------------------------------------------------------------------
+# wait_for_terminal tests
+# ---------------------------------------------------------------------------
+
+
+def test_wait_for_terminal_filled():
+    """wait_for_terminal returns early when filled."""
+    adapter = _make_adapter()
+    mock_trade = MagicMock()
+    mock_trade.status.status = "Filled"
+    mock_trade.status.deal_quantity = 100
+    mock_trade.status.avg_price = 600.0
+    adapter._trades["test-oid"] = mock_trade
+    with patch("time.sleep"):
+        result = adapter.wait_for_terminal("test-oid")
+    assert result.status == "filled"
+
+
+def test_wait_for_terminal_timeout():
+    """wait_for_terminal returns last status on timeout (max_poll_seconds=0)."""
+    adapter = _make_adapter()
+    adapter.max_poll_seconds = 0  # immediate timeout
+    mock_trade = MagicMock()
+    mock_trade.status.status = "Submitted"
+    mock_trade.status.deal_quantity = 0
+    mock_trade.status.avg_price = 0.0
+    adapter._trades["test-oid"] = mock_trade
+    # With max_poll_seconds=0, the while loop never executes; returns initial "submitted"
+    result = adapter.wait_for_terminal("test-oid")
+    assert result.broker_order_id == "test-oid"
