@@ -568,6 +568,19 @@ def run_watcher() -> None:
     from openclaw.risk_store import LimitQuery, load_limits
     from openclaw.daily_pm_review import get_daily_pm_approval
 
+    trading_mode = os.environ.get("TRADING_MODE", "simulation")
+    simulation = trading_mode != "live"
+    if not simulation:
+        _safety_path = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "..", ".EMERGENCY_STOP")
+        _safe, _safe_reason = _check_live_mode_safety(
+            emergency_stop_path=_safety_path,
+            trading_enabled=True,
+        )
+        if not _safe:
+            log.error("[LIVE MODE] Safety check FAILED: %s — falling back to simulation", _safe_reason)
+            simulation = True
+    log.info("=== Ticker Watcher === mode=%s", "SIMULATION" if simulation else "[LIVE MODE]")
+
     broker = SimBrokerAdapter()
 
     # 嘗試連接 Shioaji；無憑證或連線失敗時 fallback mock
@@ -577,7 +590,7 @@ def run_watcher() -> None:
     if sj_key and sj_secret:
         try:
             import shioaji as sj  # type: ignore
-            api = sj.Shioaji(simulation=True)
+            api = sj.Shioaji(simulation=simulation)
             api.login(api_key=sj_key, secret_key=sj_secret)
             # 確保股票合約資料已載入（shioaji 1.3.x: fetch_contracts() 無 contract_type 參數）
             try:
@@ -585,7 +598,7 @@ def run_watcher() -> None:
                 log.info("Shioaji contracts fetched (simulation=True)")
             except Exception as fe:
                 log.warning("fetch_contracts failed (%s) — snapshots may use fallback", fe)
-            log.info("Shioaji connected (simulation=True) — using real market data")
+            log.info("Shioaji connected (simulation=%s) — using real market data", simulation)
         except Exception as e:
             log.warning("Shioaji not available — mock data mode: %s", e)
 
@@ -738,6 +751,110 @@ def run_watcher() -> None:
                     "UPDATE positions SET current_price=?, unrealized_pnl=? WHERE symbol=?",
                     (_pos.last_price, _upnl, _sym),
                 )
+
+            # ── Sell 自動觸發：對已持倉 symbol 評估 exit ──────────────────────
+            from openclaw.signal_logic import evaluate_exit as _eval_exit, SignalParams as _SigParams
+            _locked_syms: set = set()
+            try:
+                from openclaw.risk_engine import _is_symbol_locked
+                _locked_syms = {s for s in positions if _is_symbol_locked(s)}
+            except Exception:
+                pass
+
+            for _exit_sym, (_exit_qty, _exit_avg) in list(positions.items()):
+                _exit_closes = price_history.get(_exit_sym, [])
+                if len(_exit_closes) < 1:
+                    continue
+                if _exit_sym in _locked_syms:
+                    log.debug("[%s] sell skipped — locked symbol", _exit_sym)
+                    continue
+                _exit_sig = _eval_exit(
+                    _exit_closes, _exit_avg, high_water_marks.get(_exit_sym), _SigParams()
+                )
+                if _exit_sig.signal != "sell":
+                    continue
+                log.info("[%s] exit signal=%s reason=%s", _exit_sym, _exit_sig.signal, _exit_sig.reason)
+                _sell_decision_id = str(uuid.uuid4())
+                _sell_decision = Decision(
+                    decision_id=_sell_decision_id,
+                    ts_ms=scan_ms,
+                    symbol=_exit_sym,
+                    strategy_id=STRATEGY_ID,
+                    signal_side="sell",
+                    signal_score=0.9,
+                )
+                _exit_snap = snaps.get(_exit_sym, {"bid": _exit_avg, "ask": _exit_avg, "volume": 1})
+                _exit_market = MarketState(
+                    best_bid=_exit_snap["bid"],
+                    best_ask=_exit_snap["ask"],
+                    volume_1m=_exit_snap["volume"],
+                    feed_delay_ms=50,
+                )
+                _exit_portfolio = PortfolioState(
+                    nav=SIM_NAV, cash=SIM_CASH,
+                    realized_pnl_today=0.0, unrealized_pnl=0.0,
+                    positions=all_pos_map,
+                )
+                _exit_system = SystemState(
+                    now_ms=scan_ms,
+                    trading_locked=False,
+                    broker_connected=True,
+                    db_write_p99_ms=20,
+                    orders_last_60s=0,
+                    reduce_only_mode=cash_mode_state,
+                )
+                _exit_result = evaluate_and_build_order(
+                    _sell_decision, _exit_market, _exit_portfolio, limits, _exit_system
+                )
+                if not _exit_result.approved or _exit_result.order is None:
+                    log.info("[%s] SELL blocked by risk: %s", _exit_sym, _exit_result.reject_code)
+                    continue
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    _persist_decision(conn, decision_id=_sell_decision_id, symbol=_exit_sym,
+                                      signal="sell", now_iso=_utc_now_iso())
+                    _persist_risk_check(conn, decision_id=_sell_decision_id, passed=True,
+                                        reject_code=None, metrics=_exit_result.metrics)
+                    conn.commit()
+                    conn.execute("BEGIN IMMEDIATE")
+                    _ok, _oid = _execute_sim_order(
+                        conn, broker=broker,
+                        decision_id=_sell_decision_id,
+                        symbol=_exit_sym,
+                        side="sell",
+                        qty=_exit_result.order.qty,
+                        price=_exit_result.order.price,
+                        candidate=_exit_result.order,
+                        guard_limits=limits,
+                    )
+                    conn.commit()
+                    if _ok:
+                        try:
+                            _trade_date = dt.datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+                            _fill_row = conn.execute(
+                                "SELECT COALESCE(SUM(fee),0.0), COALESCE(SUM(tax),0.0)"
+                                " FROM fills WHERE order_id=?",
+                                (_oid,),
+                            ).fetchone()
+                            on_sell_filled(
+                                conn, symbol=_exit_sym,
+                                sell_qty=_exit_result.order.qty,
+                                sell_price=_exit_result.order.price,
+                                sell_fee=float(_fill_row[0]),
+                                sell_tax=float(_fill_row[1]),
+                                trade_date=_trade_date,
+                            )
+                        except Exception as _pnl_err:
+                            log.warning("[%s] pnl_engine error: %s", _exit_sym, _pnl_err)
+                        positions.pop(_exit_sym, None)
+                        high_water_marks.pop(_exit_sym, None)
+                        log.info("[%s] SELL executed: reason=%s", _exit_sym, _exit_sig.reason)
+                except Exception as _sell_err:
+                    log.error("[%s] sell execution error: %s", _exit_sym, _sell_err, exc_info=True)
+                    try:
+                        conn.execute("ROLLBACK")
+                    except Exception:
+                        pass
 
             for symbol in active_watchlist:
                 snap      = snaps[symbol]
