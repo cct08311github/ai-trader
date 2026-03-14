@@ -546,6 +546,18 @@ def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
     return (final_status == "filled"), order_id
 
 
+def _check_live_mode_safety(
+    emergency_stop_path: str = ".EMERGENCY_STOP",
+    trading_enabled: bool = False,
+) -> tuple[bool, str]:
+    """Live 模式安全檢查。回傳 (safe, reason)。"""
+    if os.path.exists(emergency_stop_path):
+        return False, "EMERGENCY_STOP file exists"
+    if not trading_enabled:
+        return False, "trading_enabled is False"
+    return True, "OK"
+
+
 # ── 主迴圈 ────────────────────────────────────────────────────────────────────
 def run_watcher() -> None:
     from openclaw.risk_engine import (
