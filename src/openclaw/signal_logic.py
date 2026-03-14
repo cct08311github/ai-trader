@@ -97,3 +97,18 @@ def evaluate_entry(
             return SignalResult("buy", f"golden_cross:ma{params.ma_short}>{params.ma_long},rsi={rsi_val}")
 
     return SignalResult("flat", "no_entry_signal")
+
+
+def load_params_from_file(path: str) -> SignalParams:
+    """從 JSON 檔案讀取信號參數，不存在則 fallback 到預設值。"""
+    try:
+        import json
+        with open(path, "r") as f:
+            data = json.load(f)
+        p = data.get("params", {})
+        return SignalParams(**{
+            k: v for k, v in p.items()
+            if k in SignalParams.__dataclass_fields__
+        })
+    except Exception:
+        return SignalParams()

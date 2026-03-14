@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import time
 from typing import Any
 from typing import Protocol
 
 from .risk_engine import OrderCandidate
+
+log = logging.getLogger(__name__)
+
+_MAX_SUBMIT_RETRIES = 3
+_RETRY_BASE_SEC = 1.0
 
 
 @dataclass
@@ -183,36 +189,42 @@ class ShioajiAdapter:
         self._trades: dict[str, Any] = {}
 
     def submit_order(self, order_id: str, candidate: OrderCandidate) -> BrokerSubmission:
-        try:
-            # These fields are intentionally explicit for auditability.
-            order = self.api.Order(
-                price=candidate.price,
-                quantity=candidate.qty,
-                action="Buy" if candidate.side == "buy" else "Sell",
-                price_type="LMT" if candidate.order_type == "limit" else "MKT",
-                order_type="ROD" if candidate.tif == "ROD" else candidate.tif,
-                order_lot="Common",
-                custom_field=order_id,
-            )
-            # NOTE: Replace contract lookup strategy as needed for futures/options.
-            contract = self.api.Contracts.Stocks[candidate.symbol]
-            trade = self.api.place_order(contract, order)
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_SUBMIT_RETRIES):
+            try:
+                # These fields are intentionally explicit for auditability.
+                order = self.api.Order(
+                    price=candidate.price,
+                    quantity=candidate.qty,
+                    action="Buy" if candidate.side == "buy" else "Sell",
+                    price_type="LMT" if candidate.order_type == "limit" else "MKT",
+                    order_type="ROD" if candidate.tif == "ROD" else candidate.tif,
+                    order_lot="Common",
+                    custom_field=order_id,
+                )
+                # NOTE: Replace contract lookup strategy as needed for futures/options.
+                contract = self.api.Contracts.Stocks[candidate.symbol]
+                trade = self.api.place_order(contract, order)
 
-            broker_order_id = getattr(trade.status, "id", "") or f"SHIOAJI-{order_id}"
-            self._trades[broker_order_id] = trade
-            return BrokerSubmission(
-                broker_order_id=broker_order_id,
-                status="submitted",
-            )
-        except Exception as exc:
-            raw_code = getattr(exc, "code", None)
-            reason_code = map_shioaji_error_to_reason_code(raw_code, str(exc))
-            return BrokerSubmission(
-                broker_order_id="",
-                status="rejected",
-                reason=str(exc),
-                reason_code=reason_code,
-            )
+                broker_order_id = getattr(trade.status, "id", "") or f"SHIOAJI-{order_id}"
+                self._trades[broker_order_id] = trade
+                return BrokerSubmission(broker_order_id=broker_order_id, status="submitted")
+            except Exception as exc:
+                last_exc = exc
+                if attempt < _MAX_SUBMIT_RETRIES - 1:
+                    time.sleep(_RETRY_BASE_SEC * (2 ** attempt))
+                    log.warning(
+                        "submit_order retry %d/%d for %s: %s",
+                        attempt + 1, _MAX_SUBMIT_RETRIES, candidate.symbol, exc,
+                    )
+        raw_code = getattr(last_exc, "code", None)
+        reason_code = map_shioaji_error_to_reason_code(raw_code, str(last_exc))
+        return BrokerSubmission(
+            broker_order_id="",
+            status="rejected",
+            reason=str(last_exc),
+            reason_code=reason_code,
+        )
 
     def poll_order_status(self, broker_order_id: str) -> BrokerOrderStatus | None:
         """

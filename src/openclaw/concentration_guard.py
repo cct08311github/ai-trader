@@ -26,8 +26,15 @@ class ConcentrationProposal(TypedDict):
     reduce_pct: float
 
 
-def check_concentration(conn: sqlite3.Connection) -> list[ConcentrationProposal]:
+def check_concentration(
+    conn: sqlite3.Connection,
+    locked_symbols: set[str] | None = None,
+) -> list[ConcentrationProposal]:
     """計算各持倉集中度，對超標標的生成 proposal 並寫入 DB。
+
+    Args:
+        conn: SQLite 連線
+        locked_symbols: 鎖定標的集合（可買不可賣）；在集中度檢查中跳過，不產生賣出 proposal
 
     Returns:
         需要處理的 ConcentrationProposal 清單（含已寫入 DB 的提案資訊）
@@ -63,6 +70,11 @@ def check_concentration(conn: sqlite3.Connection) -> list[ConcentrationProposal]
         if symbol in pending_symbols:
             log.info("Concentration %s: %.1f%% — skipped (pending sell orders exist)",
                      symbol, weight * 100)
+            continue
+
+        if locked_symbols and symbol in locked_symbols:
+            log.warning("Concentration %s: %.1f%% — skipped (locked symbol, sell prohibited)",
+                        symbol, weight * 100)
             continue
 
         auto_approve = weight >= _AUTO_REDUCE_THRESHOLD
