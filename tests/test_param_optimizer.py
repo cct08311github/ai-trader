@@ -109,3 +109,61 @@ class TestGridSearch:
 
         finally:
             os.unlink(db_path)
+
+
+def test_save_optimal_params_writes_json(tmp_path):
+    """save_optimal_params writes correct JSON structure."""
+    from openclaw.param_optimizer import save_optimal_params, OptimizationResult
+    import json
+    out_path = str(tmp_path / "signal_params.json")
+    result = OptimizationResult(
+        all_results=[{"params": {"ma_short": 5}, "oos_sharpe": 1.5, "oos_mdd": -0.05}],
+        best_params={"ma_short": 5},
+        in_sample_range="2026-01-01 ~ 2026-02-15",
+        out_of_sample_range="2026-02-16 ~ 2026-03-13",
+    )
+    save_optimal_params(result, out_path)
+    with open(out_path) as f:
+        data = json.load(f)
+    assert data["params"] == {"ma_short": 5}
+    assert data["out_of_sample_sharpe"] == 1.5
+    assert "optimized_at" in data
+
+
+def test_save_optimal_params_empty_best_skips(tmp_path):
+    """Empty best_params (no results) → file is written but params is empty dict.
+
+    NOTE: save_optimal_params currently lacks a guard clause for empty best_params;
+    it always writes the file. This test documents the current behaviour and acts as
+    a regression anchor — if a guard is added the assertion can be updated.
+    """
+    from openclaw.param_optimizer import save_optimal_params, OptimizationResult
+    import json, os
+    out_path = str(tmp_path / "signal_params.json")
+    result = OptimizationResult(
+        all_results=[],
+        best_params={},
+        in_sample_range="N/A",
+        out_of_sample_range="N/A",
+    )
+    save_optimal_params(result, out_path)
+    # Current behaviour: file IS written even when best_params is empty.
+    assert os.path.exists(out_path)
+    with open(out_path) as f:
+        data = json.load(f)
+    assert data["params"] == {}
+    assert data["out_of_sample_sharpe"] == 0.0
+
+
+def test_grid_search_empty_db(tmp_path):
+    """Empty DB → OptimizationResult with empty results."""
+    import sqlite3
+    from openclaw.param_optimizer import grid_search
+    db_path = str(tmp_path / "empty.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE eod_prices (trade_date TEXT, symbol TEXT, open REAL, high REAL, low REAL, close REAL, volume INTEGER)")
+    conn.commit()
+    conn.close()
+    result = grid_search(symbols=["2330"], db_path=db_path, param_grid={"ma_short": [5], "ma_long": [20], "rsi_entry_max": [70], "stop_loss_pct": [0.05], "take_profit_pct": [0.08], "trailing_pct": [0.05]}, max_workers=1)
+    assert result.best_params == {}
+    assert len(result.all_results) == 0

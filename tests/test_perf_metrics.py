@@ -127,3 +127,28 @@ def test_calculate_metrics_all_losses():
     assert m.total_return_pct == pytest.approx(-5.0, rel=1e-3)
 
     assert m.total_trades == 3
+
+
+def test_calculate_metrics_all_wins():
+    """All winning trades → win_rate=1.0, profit_factor depends on impl."""
+    from openclaw.perf_metrics import calculate_metrics
+    equity = [1_000_000, 1_050_000, 1_100_000]
+    trades = [
+        {"pnl": 50_000, "holding_days": 3},
+        {"pnl": 50_000, "holding_days": 4},
+    ]
+    m = calculate_metrics(equity, trades)
+    assert m.win_rate == 1.0
+    assert m.total_trades == 2
+    # profit_factor with 0 losses: implementation-defined (0 or inf)
+    assert m.profit_factor >= 0  # just ensure no crash
+
+
+def test_calculate_metrics_breakeven_trade():
+    """pnl=0 trade → counted as loss (pnl <= 0)."""
+    from openclaw.perf_metrics import calculate_metrics
+    equity = [1_000_000, 1_000_000]
+    trades = [{"pnl": 0.0, "holding_days": 5}]
+    m = calculate_metrics(equity, trades)
+    assert m.win_rate == 0.0  # pnl=0 is not a win
+    assert m.total_trades == 1

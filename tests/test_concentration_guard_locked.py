@@ -124,3 +124,63 @@ class TestBackwardCompatibility:
 
         symbols = [p["symbol"] for p in proposals]
         assert "LOCKED_SYM" in symbols
+
+
+def test_dedup_skips_symbol_with_pending_sell(tmp_path):
+    """Symbol with pending sell order → skipped (no duplicate proposal)."""
+    db_path = tmp_path / "dedup.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER, current_price REAL, avg_price REAL, state TEXT)")
+    conn.execute("CREATE TABLE orders (order_id TEXT PRIMARY KEY, symbol TEXT, side TEXT, status TEXT, qty INTEGER, price REAL, ts_submit TEXT, decision_id TEXT, broker_order_id TEXT, order_type TEXT, tif TEXT, strategy_version TEXT)")
+    conn.execute("CREATE TABLE strategy_proposals (proposal_id TEXT PRIMARY KEY, generated_by TEXT, target_rule TEXT, rule_category TEXT, proposed_value TEXT, supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER, status TEXT, proposal_json TEXT, created_at INTEGER)")
+    conn.execute("INSERT INTO positions VALUES ('HIGH', 700, 100.0, 80.0, 'holding')")
+    conn.execute("INSERT INTO positions VALUES ('LOW', 300, 100.0, 90.0, 'holding')")
+    # HIGH has a pending sell order → should be deduped
+    conn.execute("INSERT INTO orders VALUES ('o1','HIGH','sell','submitted',100,100.0,'2026-03-14',NULL,NULL,NULL,NULL,NULL)")
+    conn.commit()
+
+    from openclaw.concentration_guard import check_concentration
+    proposals = check_concentration(conn)
+    high_proposals = [p for p in proposals if p["symbol"] == "HIGH"]
+    assert len(high_proposals) == 0  # deduped
+
+
+def test_dedup_does_not_skip_filled_sell(tmp_path):
+    """Symbol with FILLED (not submitted) sell → NOT deduped, still generates proposal."""
+    db_path = tmp_path / "dedup2.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER, current_price REAL, avg_price REAL, state TEXT)")
+    conn.execute("CREATE TABLE orders (order_id TEXT PRIMARY KEY, symbol TEXT, side TEXT, status TEXT, qty INTEGER, price REAL, ts_submit TEXT, decision_id TEXT, broker_order_id TEXT, order_type TEXT, tif TEXT, strategy_version TEXT)")
+    conn.execute("CREATE TABLE strategy_proposals (proposal_id TEXT PRIMARY KEY, generated_by TEXT, target_rule TEXT, rule_category TEXT, proposed_value TEXT, supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER, status TEXT, proposal_json TEXT, created_at INTEGER)")
+    conn.execute("INSERT INTO positions VALUES ('HIGH', 700, 100.0, 80.0, 'holding')")
+    conn.execute("INSERT INTO positions VALUES ('LOW', 300, 100.0, 90.0, 'holding')")
+    # HIGH has a FILLED sell order (not submitted) → should NOT be deduped
+    conn.execute("INSERT INTO orders VALUES ('o1','HIGH','sell','filled',100,100.0,'2026-03-14',NULL,NULL,NULL,NULL,NULL)")
+    conn.commit()
+
+    from openclaw.concentration_guard import check_concentration
+    proposals = check_concentration(conn)
+    high_proposals = [p for p in proposals if p["symbol"] == "HIGH"]
+    assert len(high_proposals) == 1  # NOT deduped, auto_approve=True (70%)
+    assert high_proposals[0]["auto_approve"] is True
+
+
+def test_concentration_40_60_pending_proposal(tmp_path):
+    """Symbol at 50% → pending proposal (not auto-approve)."""
+    db_path = tmp_path / "mid.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER, current_price REAL, avg_price REAL, state TEXT)")
+    conn.execute("CREATE TABLE orders (order_id TEXT PRIMARY KEY, symbol TEXT, side TEXT, status TEXT, qty INTEGER, price REAL, ts_submit TEXT, decision_id TEXT, broker_order_id TEXT, order_type TEXT, tif TEXT, strategy_version TEXT)")
+    conn.execute("CREATE TABLE strategy_proposals (proposal_id TEXT PRIMARY KEY, generated_by TEXT, target_rule TEXT, rule_category TEXT, proposed_value TEXT, supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER, status TEXT, proposal_json TEXT, created_at INTEGER)")
+    conn.execute("INSERT INTO positions VALUES ('MID', 500, 100.0, 80.0, 'holding')")
+    conn.execute("INSERT INTO positions VALUES ('LOW', 500, 100.0, 90.0, 'holding')")
+    conn.commit()
+
+    from openclaw.concentration_guard import check_concentration
+    proposals = check_concentration(conn)
+    mid_proposals = [p for p in proposals if p["symbol"] == "MID"]
+    assert len(mid_proposals) == 1
+    assert mid_proposals[0]["auto_approve"] is False  # 50% is between 40-60%
