@@ -93,6 +93,11 @@ _DEDUP_COMBINED_SIMILARITY_THRESHOLD = 0.7
 
 
 def _build_market_context(conn: sqlite3.Connection) -> str:
+    """建構市場上下文數據。
+
+    注意：確保所有市場數據來自同一最新交易日，避免時間錯位問題。
+    帶量定義：成交量 > 20 日均量 * 1.5 倍
+    """
     positions = query_db(
         conn,
         "SELECT symbol, quantity, avg_price, unrealized_pnl FROM positions "
@@ -103,21 +108,74 @@ def _build_market_context(conn: sqlite3.Connection) -> str:
         "SELECT trade_date, SUM(realized_pnl) as pnl FROM daily_pnl_summary "
         "GROUP BY trade_date ORDER BY trade_date DESC LIMIT 5"
     )
-    latest_prices = query_db(
-        conn,
-        "SELECT trade_date, symbol, close, change, volume FROM eod_prices "
-        "ORDER BY trade_date DESC, volume DESC LIMIT 12"
-    )
+
+    # 修復 #205: 時間錯位問題 - 先取得最新交易日期，確保所有數據來自同一天
+    latest_trade_date_row = conn.execute(
+        "SELECT MAX(trade_date) FROM eod_prices WHERE volume > 0"
+    ).fetchone()
+    latest_trade_date = latest_trade_date_row[0] if latest_trade_date_row else None
+
+    if latest_trade_date:
+        # 取得最新交易日的 Top 成交量標的（確保日期一致）
+        latest_prices = query_db(
+            conn,
+            "SELECT trade_date, symbol, close, change, volume FROM eod_prices "
+            "WHERE trade_date = ? "
+            "ORDER BY volume DESC LIMIT 15",
+            (latest_trade_date,)
+        )
+
+        # 計算 20 日均量用於帶量判斷（從最新日期往前推 20 日）
+        avg_volumes = query_db(
+            conn,
+            """
+            SELECT symbol, AVG(volume) as avg_volume_20d
+            FROM eod_prices
+            WHERE trade_date >= date(?, '-20 days') AND trade_date < ?
+            GROUP BY symbol
+            """,
+            (latest_trade_date, latest_trade_date)
+        )
+
+        # 計算每檔標的今日成交量是否「帶量」(>= 20日均量 * 1.5)
+        price_with_vol_info = []
+        avg_vol_dict = {r["symbol"]: r["avg_volume_20d"] for r in avg_volumes}
+
+        for row in latest_prices:
+            symbol = row.get("symbol")
+            volume = row.get("volume", 0)
+            avg_vol = avg_vol_dict.get(symbol, 0)
+            is_high_volume = "是" if avg_vol and volume >= avg_vol * 1.5 else "否"
+            vol_ratio = round(volume / avg_vol, 2) if avg_vol and avg_vol > 0 else 0.0
+            price_with_vol_info.append({
+                **row,
+                "avg_volume_20d": round(avg_vol, 0) if avg_vol else 0,
+                "is_high_volume_1.5x": is_high_volume,
+                "vol_ratio": vol_ratio
+            })
+    else:
+        latest_prices = []
+        price_with_vol_info = []
+
     recent_decisions = query_db(
         conn,
         "SELECT ts, symbol, signal_side, signal_score FROM decisions "
         "ORDER BY ts DESC LIMIT 8"
     )
 
+    # 提供帶量定義說明給 LLM
+    volume_definition = """
+【帶量定義】成交量 >= 20日均量 * 1.5 倍
+- is_high_volume_1.5x = "是" 表示帶量
+- vol_ratio > 1.5 為顯著帶量
+"""
+
     return (
         f"持倉摘要：{positions}\n"
         f"近期損益：{recent_pnl}\n"
-        f"最新價量樣本：{latest_prices}\n"
+        f"最新交易日：{latest_trade_date}\n"
+        f"{volume_definition}\n"
+        f"價量樣本（含帶量標記）：{price_with_vol_info}\n"
         f"近期決策樣本：{recent_decisions}"
     )
 
