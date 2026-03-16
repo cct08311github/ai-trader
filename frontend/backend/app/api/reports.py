@@ -56,14 +56,12 @@ def _get_sim_positions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
         rows = conn.execute(
             "SELECT p.symbol, p.quantity, p.avg_price, p.current_price, "
             "p.unrealized_pnl, p.state, p.high_water_mark, p.entry_trading_day, "
-            "e.name AS stock_name, e.close AS eod_close "
+            "ep.name AS stock_name, ep.close AS eod_close "
             "FROM positions p "
-            "LEFT JOIN ("
-            "  SELECT ep.symbol, ep.name, ep.close "
-            "  FROM eod_prices ep "
-            "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
-            "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
-            ") e ON p.symbol = e.symbol "
+            "LEFT JOIN eod_prices ep ON ep.symbol = p.symbol "
+            "  AND ep.trade_date = ("
+            "    SELECT MAX(trade_date) FROM eod_prices WHERE symbol = p.symbol"
+            "  ) "
             "WHERE p.quantity > 0 ORDER BY p.symbol"
         ).fetchall()
         return [
