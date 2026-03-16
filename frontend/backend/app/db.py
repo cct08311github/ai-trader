@@ -105,6 +105,15 @@ def init_readonly_pool(db_path: Path = DB_PATH) -> None:
     """
 
     READONLY_POOL.init(db_path)
+def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:  # pragma: no cover
+    """Open sqlite connection in read-write mode (shadowed by redefinition below).
+
+    NOTE:
+    - Use this ONLY for explicit operator actions (approve/reject).
+    - Keep the scope tight and always commit.
+    """
+
+    READONLY_POOL.init(db_path)  # pragma: no cover
 
 
 @contextmanager
@@ -119,6 +128,17 @@ def get_conn(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
             yield conn
         finally:
             conn.close()
+
+
+@contextmanager
+def get_conn_rw(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:  # pragma: no cover
+    """Shadowed by redefinition below."""
+    conn = connect_rw(db_path)  # pragma: no cover
+    try:  # pragma: no cover
+        yield conn  # pragma: no cover
+        conn.commit()  # pragma: no cover
+    finally:  # pragma: no cover
+        conn.close()  # pragma: no cover
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
@@ -164,7 +184,6 @@ def fetch_rows(
     rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
-
 def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:
     """Open sqlite connection in read-write mode.
 
@@ -179,7 +198,6 @@ def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path.as_posix(), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 @contextmanager
 def get_conn_rw(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
