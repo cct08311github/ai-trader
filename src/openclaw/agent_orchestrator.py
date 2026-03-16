@@ -97,18 +97,14 @@ def _run_reflection_agent() -> None:
     """同步包裝：在 executor 執行 ReflectionAgent.reflect_weekly()。
     自行開連線，避免與主迴圈共用 conn 導致 ProgrammingError（closed database）。
     """
-    conn = None
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=10)
-        conn.row_factory = sqlite3.Row
+        from openclaw.db_utils import get_readwrite_conn
         from openclaw.strategy_optimizer import ReflectionAgent
-        proposals = ReflectionAgent(conn).reflect_weekly()
+        with get_readwrite_conn(DB_PATH) as conn:
+            proposals = ReflectionAgent(conn).reflect_weekly()
         log.info("[orchestrator] ReflectionAgent 建議 %d 項", len(proposals))
     except Exception as e:
         log.warning("[orchestrator] ReflectionAgent 失敗：%s", e)
-    finally:
-        if conn:
-            conn.close()
 
 
 # ── 主排程迴圈 ────────────────────────────────────────────────────────────────
@@ -128,67 +124,66 @@ async def run_orchestrator() -> None:
     last_health_off_utc: Optional[datetime] = None
     last_opt_trigger_date: Optional[str] = None
 
+    from openclaw.db_utils import get_readwrite_conn
+
     while True:
         now_twn = datetime.now(tz=_TZ_TWN)
         now_utc = datetime.now(tz=timezone.utc)
-        conn = sqlite3.connect(DB_PATH, timeout=10)
-        conn.row_factory = sqlite3.Row
         try:
-            # ── 定時任務 ──────────────────────────────────────────────────
-            if _is_weekday_twn(now_twn):
-                if _should_run_now("08:20", now_twn):
-                    asyncio.create_task(_run_agent("MarketResearchAgent", run_market_research))
+            with get_readwrite_conn(DB_PATH) as conn:
+                # ── 定時任務 ──────────────────────────────────────────────────
+                if _is_weekday_twn(now_twn):
+                    if _should_run_now("08:20", now_twn):
+                        asyncio.create_task(_run_agent("MarketResearchAgent", run_market_research))
 
-                if _should_run_now("14:30", now_twn):
-                    asyncio.create_task(_run_agent("PortfolioReviewAgent", run_portfolio_review))
+                    if _should_run_now("14:30", now_twn):
+                        asyncio.create_task(_run_agent("PortfolioReviewAgent", run_portfolio_review))
 
-                # 每交易日 22:00 TWN → 盤後分析（資料最晚 21:14 入庫，22:00 安全）
-                if _should_run_now("22:00", now_twn):
-                    asyncio.create_task(_run_agent("EODAnalysisAgent", run_eod_analysis))
+                    # 每交易日 22:00 TWN → 盤後分析（資料最晚 21:14 入庫，22:00 安全）
+                    if _should_run_now("22:00", now_twn):
+                        asyncio.create_task(_run_agent("EODAnalysisAgent", run_eod_analysis))
 
-                # 每 30 分鐘系統健康（市場時段）
-                if 9 <= now_twn.hour < 14:
-                    if (last_health_run_utc is None or
-                            (now_utc - last_health_run_utc).seconds >= 1800):
+                    # 每 30 分鐘系統健康（市場時段）
+                    if 9 <= now_twn.hour < 14:
+                        if (last_health_run_utc is None or
+                                (now_utc - last_health_run_utc).seconds >= 1800):
+                            asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
+                            last_health_run_utc = now_utc
+
+                # 每 2 小時系統健康（非市場時段）
+                if not (9 <= now_twn.hour < 14):
+                    if (last_health_off_utc is None or
+                            (now_utc - last_health_off_utc).seconds >= 7200):
                         asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
-                        last_health_run_utc = now_utc
+                        last_health_off_utc = now_utc
 
-            # 每 2 小時系統健康（非市場時段）
-            if not (9 <= now_twn.hour < 14):
-                if (last_health_off_utc is None or
-                        (now_utc - last_health_off_utc).seconds >= 7200):
-                    asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
-                    last_health_off_utc = now_utc
+                if _is_monday_twn(now_twn):
+                    if _should_run_now("07:00", now_twn):
+                        asyncio.create_task(
+                            _run_agent("SystemOptimizationAgent", run_system_optimization))
+                        # 週一 07:00 深度反思（非阻塞）
+                        asyncio.create_task(asyncio.to_thread(_run_reflection_agent))
+                    if _should_run_now("07:30", now_twn):
+                        asyncio.create_task(
+                            _run_agent("StrategyCommitteeAgent", run_strategy_committee))
 
-            if _is_monday_twn(now_twn):
-                if _should_run_now("07:00", now_twn):
-                    asyncio.create_task(
-                        _run_agent("SystemOptimizationAgent", run_system_optimization))
-                    # 週一 07:00 深度反思（非阻塞）
-                    asyncio.create_task(asyncio.to_thread(_run_reflection_agent))
-                if _should_run_now("07:30", now_twn):
+                # ── 事件任務 ──────────────────────────────────────────────────
+                new_reviewed_at = _pm_review_just_completed(last_seen=last_pm_reviewed_at)
+                if new_reviewed_at:
+                    log.info("[EVENT] PM review completed → StrategyCommitteeAgent")
+                    last_pm_reviewed_at = new_reviewed_at
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))
 
-            # ── 事件任務 ──────────────────────────────────────────────────
-            new_reviewed_at = _pm_review_just_completed(last_seen=last_pm_reviewed_at)
-            if new_reviewed_at:
-                log.info("[EVENT] PM review completed → StrategyCommitteeAgent")
-                last_pm_reviewed_at = new_reviewed_at
-                asyncio.create_task(
-                    _run_agent("StrategyCommitteeAgent", run_strategy_committee))
-
-            today_str = now_twn.strftime("%Y-%m-%d")
-            if last_opt_trigger_date != today_str and _watcher_no_fills_3days(conn):
-                log.info("[EVENT] 3-day no fills → SystemOptimizationAgent")
-                last_opt_trigger_date = today_str
-                asyncio.create_task(
-                    _run_agent("SystemOptimizationAgent", run_system_optimization))
+                today_str = now_twn.strftime("%Y-%m-%d")
+                if last_opt_trigger_date != today_str and _watcher_no_fills_3days(conn):
+                    log.info("[EVENT] 3-day no fills → SystemOptimizationAgent")
+                    last_opt_trigger_date = today_str
+                    asyncio.create_task(
+                        _run_agent("SystemOptimizationAgent", run_system_optimization))
 
         except Exception as e:
             log.error("[ORCHESTRATOR] Main loop error: %s", e, exc_info=True)
-        finally:
-            conn.close()
 
         await asyncio.sleep(60)
 
