@@ -108,13 +108,13 @@ def _init_reports_db(path: Path) -> None:
         conn.execute(
             """
             INSERT INTO orders(order_id, decision_id, broker_order_id, ts_submit, symbol, side, qty, price, order_type, tif, status, strategy_version)
-            VALUES ('o1', 'd1', 'b1', '2026-03-07T09:00:00+08:00', '2330', 'buy', 100, 600.0, 'limit', 'ROD', 'filled', 'v1')
+            VALUES ('o1', 'd1', 'b1', '2026-03-12T09:00:00+08:00', '2330', 'buy', 100, 600.0, 'limit', 'ROD', 'filled', 'v1')
             """
         )
         conn.execute(
             """
             INSERT INTO fills(fill_id, order_id, ts_fill, qty, price, fee, tax)
-            VALUES ('f1', 'o1', '2026-03-07T09:01:00+08:00', 100, 600.0, 20.0, 0.0)
+            VALUES ('f1', 'o1', '2026-03-12T09:01:00+08:00', 100, 600.0, 20.0, 0.0)
             """
         )
         conn.execute(
