@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 _DEFAULT_STATE_PATH = Path(__file__).resolve().parents[2] / "config" / "system_state.json"
@@ -20,6 +23,43 @@ def read_system_state(path: str | None = None) -> dict[str, Any]:
         with open(target, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
+        logger.debug("Config file not found: %s, using defaults", target)
+        return {
+            "system_name": "AI-Trader v1.0",
+            "version": "1.0.0",
+            "description": "系統主開關與執行狀態配置 (自動生成)",
+            "trading_enabled": False,
+            "simulation_mode": True,
+            "last_modified": dt.datetime.now().isoformat(),
+            "last_modified_by": "bootstrap",
+            "notes": "此為安全預設值。trading_enabled 必須為 true 且無 .EMERGENCY_STOP",
+        }
+    except json.JSONDecodeError as e:
+        logger.warning("Corrupted config file: %s — %s", target, e)
+        return {
+            "system_name": "AI-Trader v1.0",
+            "version": "1.0.0",
+            "description": "系統主開關與執行狀態配置 (自動生成)",
+            "trading_enabled": False,
+            "simulation_mode": True,
+            "last_modified": dt.datetime.now().isoformat(),
+            "last_modified_by": "bootstrap",
+            "notes": "此為安全預設值。trading_enabled 必須為 true 且無 .EMERGENCY_STOP",
+        }
+    except PermissionError:
+        logger.error("Permission denied reading: %s", target)
+        return {
+            "system_name": "AI-Trader v1.0",
+            "version": "1.0.0",
+            "description": "系統主開關與執行狀態配置 (自動生成)",
+            "trading_enabled": False,
+            "simulation_mode": True,
+            "last_modified": dt.datetime.now().isoformat(),
+            "last_modified_by": "bootstrap",
+            "notes": "此為安全預設值。trading_enabled 必須為 true 且無 .EMERGENCY_STOP",
+        }
+    except Exception as e:
+        logger.warning("Unexpected error reading %s: %s", target, e)
         return {
             "system_name": "AI-Trader v1.0",
             "version": "1.0.0",

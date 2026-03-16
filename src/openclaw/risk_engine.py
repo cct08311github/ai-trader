@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from openclaw.position_sizing import calculate_position_qty
 from openclaw.tw_session_rules import apply_tw_session_risk_adjustments
+
+logger = logging.getLogger(__name__)
 
 _LOCKED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), "../../config/locked_symbols.json")
 
@@ -16,7 +19,17 @@ def _is_symbol_locked(symbol: str) -> bool:
     try:
         with open(_LOCKED_SYMBOLS_PATH, "r") as f:
             return symbol.upper() in {s.upper() for s in json.load(f).get("locked", [])}
-    except Exception:
+    except FileNotFoundError:
+        logger.debug("Config file not found: %s, using defaults", _LOCKED_SYMBOLS_PATH)
+        return False
+    except json.JSONDecodeError as e:
+        logger.warning("Corrupted config file: %s — %s", _LOCKED_SYMBOLS_PATH, e)
+        return False
+    except PermissionError:
+        logger.error("Permission denied reading: %s", _LOCKED_SYMBOLS_PATH)
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
         return False
 
 
@@ -30,7 +43,17 @@ def _get_daily_pm_approval() -> bool:
         with open(_DAILY_PM_PATH, "r") as f:
             state = json.load(f)
         return state.get("date") == date.today().isoformat() and bool(state.get("approved", False))
-    except Exception:
+    except FileNotFoundError:
+        logger.debug("Config file not found: %s, using defaults", _DAILY_PM_PATH)
+        return False
+    except json.JSONDecodeError as e:
+        logger.warning("Corrupted config file: %s — %s", _DAILY_PM_PATH, e)
+        return False
+    except PermissionError:
+        logger.error("Permission denied reading: %s", _DAILY_PM_PATH)
+        return False
+    except Exception as e:
+        logger.warning("Unexpected error reading %s: %s", _DAILY_PM_PATH, e)
         return False
 
 
