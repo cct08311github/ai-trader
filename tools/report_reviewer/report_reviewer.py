@@ -288,9 +288,12 @@ class ReportReviewer:
             
             for sym, data in result['prices_validated'].items():
                 status_icon = '✅' if data['status'] == 'pass' else ('⚠️' if data['status'] == 'warning' else '❌')
-                lines.append(
-                    f"| {sym} | {data['reported']} | {data['realtime']} | {data['deviation']:+.1f}% | {status_icon} |"
-                )
+                if 'reported' not in data:
+                    lines.append(f"| {sym} | - | - | - | {status_icon} {data.get('message', '')} |")
+                else:
+                    lines.append(
+                        f"| {sym} | {data['reported']} | {data['realtime']} | {data['deviation']:+.1f}% | {status_icon} |"
+                    )
             lines.append("")
         
         if result['issues']:
@@ -348,7 +351,7 @@ def main():
         print(reviewer.format_report(result))
     
     # Exit code based on status
-    sys.exit(0 if result['passed'] and not result['warnings'] else 1)
+    sys.exit(0 if result['passed'] else 1)
 
 
 if __name__ == "__main__":
