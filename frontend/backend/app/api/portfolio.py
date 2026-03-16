@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 
 from app.db import get_conn, get_conn_rw
 from app.services.shioaji_service import get_positions, _get_system_simulation_mode
+from app.validators import validate_symbol
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -39,7 +40,7 @@ def list_locked_symbols():
 @router.post("/lock/{symbol}")
 def lock_symbol(symbol: str):
     """Lock a symbol — AI agent cannot sell it."""
-    symbol = symbol.strip().upper()
+    symbol = validate_symbol(symbol)
     locked = _read_locked()
     if symbol not in locked:
         locked.append(symbol)
@@ -50,7 +51,7 @@ def lock_symbol(symbol: str):
 @router.delete("/lock/{symbol}")
 def unlock_symbol(symbol: str):
     """Unlock a symbol — allow AI agent to sell again."""
-    symbol = symbol.strip().upper()
+    symbol = validate_symbol(symbol)
     locked = [s for s in _read_locked() if s != symbol]
     _write_locked(locked)
     return {"status": "ok", "locked": locked}
@@ -734,7 +735,7 @@ def close_position(symbol: str):
     """
     import datetime as _dt
 
-    symbol = symbol.strip().upper()
+    symbol = validate_symbol(symbol)
 
     # ── 0. 交易時段檢查（TWN 09:00-13:40，週一至週五）────────────────────
     if not _is_tw_trading_hours():
