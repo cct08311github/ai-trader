@@ -59,8 +59,14 @@ def _pm_review_just_completed(
         reviewed_at = state.get("reviewed_at")
         if reviewed_at and reviewed_at != last_seen:
             return reviewed_at
-    except Exception:
-        pass
+    except FileNotFoundError:
+        log.debug("Config file not found: %s, using defaults", state_path)
+    except json.JSONDecodeError as e:
+        log.warning("Corrupted config file: %s — %s", state_path, e)
+    except PermissionError:
+        log.error("Permission denied reading: %s", state_path)
+    except Exception as e:
+        log.warning("Unexpected error reading %s: %s", state_path, e)
     return None
 
 

@@ -38,19 +38,23 @@ def get_daily_pm_approval() -> bool:
         with open(_STATE_PATH, "r") as f:
             state = json.load(f)
         return state.get("date") == _today() and bool(state.get("approved", False))
-    except Exception:
+    except FileNotFoundError:
+        _log.debug("Config file not found: %s, using defaults", _STATE_PATH)
+        return False
+    except json.JSONDecodeError as e:
+        _log.warning("Corrupted config file: %s — %s", _STATE_PATH, e)
+        return False
+    except PermissionError:
+        _log.error("Permission denied reading: %s", _STATE_PATH)
+        return False
+    except Exception as e:
+        _log.warning("Unexpected error reading %s: %s", _STATE_PATH, e)
         return False
 
 
 def get_daily_pm_state() -> Dict[str, Any]:
     """Return full state dict for API/UI consumption."""
-    try:
-        with open(_STATE_PATH, "r") as f:
-            state = json.load(f)
-        state["is_today"] = state.get("date") == _today()
-        return state
-    except Exception:
-        return {
+    _default: Dict[str, Any] = {
             "date": None,
             "approved": False,
             "is_today": False,
@@ -60,6 +64,23 @@ def get_daily_pm_state() -> Dict[str, Any]:
             "source": "none",
             "reviewed_at": None,
         }
+    try:
+        with open(_STATE_PATH, "r") as f:
+            state = json.load(f)
+        state["is_today"] = state.get("date") == _today()
+        return state
+    except FileNotFoundError:
+        _log.debug("Config file not found: %s, using defaults", _STATE_PATH)
+        return _default
+    except json.JSONDecodeError as e:
+        _log.warning("Corrupted config file: %s — %s", _STATE_PATH, e)
+        return _default
+    except PermissionError:
+        _log.error("Permission denied reading: %s", _STATE_PATH)
+        return _default
+    except Exception as e:
+        _log.warning("Unexpected error reading %s: %s", _STATE_PATH, e)
+        return _default
 
 
 def _save_state(state: Dict[str, Any]) -> None:
