@@ -105,16 +105,19 @@ def _init_reports_db(path: Path) -> None:
                 "INSERT INTO eod_prices(trade_date, symbol, name, close) VALUES (?, '2330', 'TSMC', ?)",
                 (f"2026-03-{idx:02d}", close),
             )
+        from datetime import datetime, timedelta, timezone
+        now_tz = datetime.now(timezone(timedelta(hours=8)))
+        recent_date = (now_tz - timedelta(days=1)).strftime("%Y-%m-%d")
         conn.execute(
-            """
+            f"""
             INSERT INTO orders(order_id, decision_id, broker_order_id, ts_submit, symbol, side, qty, price, order_type, tif, status, strategy_version)
-            VALUES ('o1', 'd1', 'b1', '2026-03-12T09:00:00+08:00', '2330', 'buy', 100, 600.0, 'limit', 'ROD', 'filled', 'v1')
+            VALUES ('o1', 'd1', 'b1', '{recent_date}T09:00:00+08:00', '2330', 'buy', 100, 600.0, 'limit', 'ROD', 'filled', 'v1')
             """
         )
         conn.execute(
-            """
+            f"""
             INSERT INTO fills(fill_id, order_id, ts_fill, qty, price, fee, tax)
-            VALUES ('f1', 'o1', '2026-03-12T09:01:00+08:00', 100, 600.0, 20.0, 0.0)
+            VALUES ('f1', 'o1', '{recent_date}T09:01:00+08:00', 100, 600.0, 20.0, 0.0)
             """
         )
         conn.execute(
