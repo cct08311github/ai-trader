@@ -11,7 +11,11 @@ from typing import Dict
 # Keys: user-facing / legacy ids that may appear in configs/tests.
 # Values: pinned provider model ids that are safe to call.
 ALLOWED_MODELS: Dict[str, str] = {
-    # Canonical pinned ids
+    # MiniMax (primary strategy LLM)
+    "minimax/MiniMax-M2.5": "MiniMax-M2.5",
+    "MiniMax-M2.5": "MiniMax-M2.5",
+
+    # Google Gemini (kept for backward compat / fallback)
     "google/gemini-1.5-pro-002": "google/gemini-1.5-pro-002",
     "google/gemini-1.5-flash-002": "google/gemini-1.5-flash-002",
     "google/gemini-3.1-pro-001": "google/gemini-3.1-pro-001",

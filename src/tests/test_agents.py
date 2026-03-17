@@ -202,7 +202,7 @@ class TestWriteProposal:
 class TestCallAgentLlm:
     def test_returns_fallback_on_error(self):
         from openclaw.agents.base import call_agent_llm
-        with patch("openclaw.agents.base.gemini_call", side_effect=RuntimeError("no key")):
+        with patch("openclaw.agents.base.minimax_call", side_effect=RuntimeError("no key")):
             result = call_agent_llm("test prompt")
         assert result["action_type"] == "observe"
         assert result["confidence"] == 0.0

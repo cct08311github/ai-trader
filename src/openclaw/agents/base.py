@@ -1,4 +1,4 @@
-"""agents/base.py — 共用 helper：DB 查詢、Gemini 呼叫、trace/proposal 寫入。"""
+"""agents/base.py — 共用 helper：DB 查詢、LLM 呼叫、trace/proposal 寫入。"""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from openclaw.llm_gemini import gemini_call
+from openclaw.llm_minimax import minimax_call
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
 from openclaw.path_utils import get_repo_root
 
@@ -18,8 +18,8 @@ _REPO_ROOT = get_repo_root()
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
 # 預設模型：可透過環境變數覆寫
-DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "gemini-2.5-flash")
-COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "gemini-3.1-pro-preview")
+DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "MiniMax-M2.5")
+COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "MiniMax-M2.5")
 
 
 def open_conn(db_path: str = _DEFAULT_DB) -> sqlite3.Connection:
@@ -40,9 +40,9 @@ def call_agent_llm(
     prompt: str,
     model: str = DEFAULT_MODEL,
 ) -> Dict[str, Any]:
-    """呼叫 Gemini，回傳解析後的 dict。失敗時回傳 fallback dict。"""
+    """呼叫 MiniMax M2.5，回傳解析後的 dict。失敗時回傳 fallback dict。"""
     try:
-        return gemini_call(model, prompt)
+        return minimax_call(model, prompt)
     except Exception as e:
         return {
             "summary": f"LLM 呼叫失敗：{e}",
