@@ -2,7 +2,7 @@ import json
 import sqlite3
 from datetime import date, timedelta
 import pytest
-from openclaw.agents.eod_analysis import run_eod_analysis
+from openclaw.agents.eod_analysis import run_eod_analysis, _validate_position_prices
 
 
 @pytest.fixture
@@ -166,6 +166,85 @@ def test_last_helper_returns_none_when_all_indicators_are_none(mem_db, monkeypat
     assert technical["8888"]["ma5"] is None
     assert technical["8888"]["ma20"] is None
     assert technical["8888"]["ma60"] is None
+
+
+# ── _validate_position_prices 單元測試 ─────────────────────────────────────
+
+def test_validate_all_prices_present(mem_db):
+    """所有持倉有當日收盤價、無異常漲跌 → is_valid=True, 無缺失/異常。"""
+    result = _validate_position_prices(mem_db, ["2330"], "2026-01-28")
+    assert result["is_valid"] is True
+    assert result["missing_symbols"] == []
+    assert result["anomaly_symbols"] == []
+    assert "2330" in result["details"]
+    assert result["details"]["2330"]["close"] == pytest.approx(559.0)
+
+
+def test_validate_missing_symbols(mem_db):
+    """持倉股票無當日 EOD 記錄 → is_valid=False, missing_symbols 包含缺失標的。"""
+    result = _validate_position_prices(mem_db, ["2330", "9999"], "2026-01-28")
+    assert result["is_valid"] is False
+    assert "9999" in result["missing_symbols"]
+    assert "2330" not in result["missing_symbols"]
+
+
+def test_validate_anomaly_detection(mem_db):
+    """單日漲跌幅 >= 15% 應被標記為異常。"""
+    # 插入一筆：收盤 100，漲跌 +20 → prev_close=80 → pct=25% > 15%
+    mem_db.execute(
+        "INSERT INTO eod_prices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-01-28", "TWSE", "7777", "測試異常股",
+         100.0, 20.0, 98.0, 102.0, 97.0,
+         500000.0, 50000000.0, 1000.0, "http://test", "2026-01-28"),
+    )
+    mem_db.commit()
+
+    result = _validate_position_prices(mem_db, ["7777"], "2026-01-28")
+    assert "7777" in result["anomaly_symbols"]
+    assert result["details"]["7777"]["is_anomaly"] is True
+
+
+def test_validate_no_anomaly_for_normal_change(mem_db):
+    """單日漲跌幅 < 15% 不應標記為異常。"""
+    # 插入一筆：收盤 100，漲跌 +5 → prev_close=95 → pct≈5.3%
+    mem_db.execute(
+        "INSERT INTO eod_prices VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("2026-01-28", "TWSE", "6666", "正常漲幅股",
+         100.0, 5.0, 99.0, 101.0, 98.0,
+         500000.0, 50000000.0, 1000.0, "http://test", "2026-01-28"),
+    )
+    mem_db.commit()
+
+    result = _validate_position_prices(mem_db, ["6666"], "2026-01-28")
+    assert "6666" not in result["anomaly_symbols"]
+    assert result["details"]["6666"]["is_anomaly"] is False
+
+
+def test_validate_empty_symbols(mem_db):
+    """傳入空清單應直接回傳 is_valid=True。"""
+    result = _validate_position_prices(mem_db, [], "2026-01-28")
+    assert result["is_valid"] is True
+    assert result["missing_symbols"] == []
+
+
+def test_run_eod_analysis_price_validation_in_result(mem_db, monkeypatch):
+    """run_eod_analysis 成功時，raw 應包含 price_validation 欄位。"""
+    monkeypatch.setattr(
+        "openclaw.agents.eod_analysis.call_agent_llm",
+        lambda p, model=None: {
+            "summary": "ok", "confidence": 0.8, "action_type": "suggest",
+            "proposals": [], "market_outlook": {},
+        },
+    )
+    monkeypatch.setattr("openclaw.agents.eod_analysis.write_trace", lambda *a, **k: None)
+
+    result = run_eod_analysis(trade_date="2026-01-28", conn=mem_db)
+    assert result.success is True
+    assert "price_validation" in result.raw
+    pv = result.raw["price_validation"]
+    assert "is_valid" in pv
+    assert "missing_symbols" in pv
+    assert "anomaly_symbols" in pv
 
 
 def test_run_eod_analysis_closes_own_connection_when_no_conn_passed(tmp_path, monkeypatch):
