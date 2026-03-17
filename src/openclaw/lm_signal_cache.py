@@ -12,7 +12,31 @@ Cache miss 時 caller 應使用 neutral score（0.5）。
 import sqlite3
 import time
 import uuid
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+_TZ_TWN = timezone(timedelta(hours=8))
+# 台股收盤 13:30，ingest 完成後 cache 自然過期
+_MARKET_CLOSE_HOUR = 13
+_MARKET_CLOSE_MINUTE = 30
+# 最低 TTL：確保跨隔夜異常時至少持續 1 小時
+_MIN_TTL_SECONDS = 3600
+
+
+def _ttl_to_market_close() -> int:
+    """計算現在到當日台股收盤（13:30 TWN）的秒數。
+
+    若已過收盤時間，回傳 _MIN_TTL_SECONDS（避免 TTL=0 導致立即過期）。
+    """
+    now = datetime.now(tz=_TZ_TWN)
+    close = now.replace(
+        hour=_MARKET_CLOSE_HOUR,
+        minute=_MARKET_CLOSE_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    remaining = int((close - now).total_seconds())
+    return max(remaining, _MIN_TTL_SECONDS)
 
 
 def write_cache(
@@ -22,17 +46,18 @@ def write_cache(
     source: str,                 # 'strategy_committee' | 'pm_review'
     direction: str,              # 'bull' | 'bear' | 'neutral'
     raw_json: str,
-    ttl_seconds: int = 3600,
+    ttl_seconds: Optional[int] = None,  # None = 動態到當日收盤；明確傳入則使用固定值
     autocommit: bool = True,     # False = 呼叫方自行管理 transaction
 ) -> str:
     """寫入 LLM 快取，回傳 cache_id。"""
+    effective_ttl = ttl_seconds if ttl_seconds is not None else _ttl_to_market_close()
     cache_id = str(uuid.uuid4())
     now = int(time.time())
     conn.execute(
         """INSERT INTO lm_signal_cache
            (cache_id, symbol, score, source, direction, raw_json, created_at, expires_at)
            VALUES (?,?,?,?,?,?,?,?)""",
-        (cache_id, symbol, score, source, direction, raw_json, now, now + ttl_seconds),
+        (cache_id, symbol, score, source, direction, raw_json, now, now + effective_ttl),
     )
     if autocommit:
         conn.commit()
