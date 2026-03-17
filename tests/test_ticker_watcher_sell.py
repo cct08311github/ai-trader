@@ -277,3 +277,64 @@ class TestTrailingStop:
         result = evaluate_exit([100], avg_price=0.0, high_water_mark=100.0)
         assert result.signal == "flat"
         assert "insufficient_data" in result.reason
+
+
+# ---------------------------------------------------------------------------
+# _build_exit_closes tests (Issue #249)
+# ---------------------------------------------------------------------------
+
+import sqlite3
+from datetime import date, timedelta
+
+
+def _make_eod_db(tmp_path, symbol: str = "2330", n_days: int = 20):
+    """建立含 eod_prices 的測試 DB。"""
+    conn = sqlite3.connect(str(tmp_path / "trades.db"))
+    conn.execute("""CREATE TABLE eod_prices (
+        trade_date TEXT, symbol TEXT, open REAL, high REAL, low REAL,
+        close REAL, volume REAL, PRIMARY KEY (trade_date, symbol)
+    )""")
+    base = 500.0
+    for i in range(n_days):
+        d = (date(2026, 2, 1) + timedelta(days=i)).isoformat()
+        conn.execute("INSERT INTO eod_prices VALUES (?,?,?,?,?,?,?)",
+            (d, symbol, base, base + 1, base - 1, base + i * 0.5, 1e6))
+    conn.commit()
+    return conn
+
+
+def test_build_exit_closes_returns_eod_when_history_empty(tmp_path):
+    """price_history 空時，應從 eod_prices 取歷史收盤。"""
+    from openclaw.ticker_watcher import _build_exit_closes
+    conn = _make_eod_db(tmp_path, n_days=20)
+    closes = _build_exit_closes(conn, "2330", {})
+    assert len(closes) == 20
+    assert all(isinstance(c, float) for c in closes)
+
+
+def test_build_exit_closes_appends_intraday_ticks(tmp_path):
+    """price_history 有值時，應 append 至 EOD 歷史後。"""
+    from openclaw.ticker_watcher import _build_exit_closes
+    conn = _make_eod_db(tmp_path, n_days=10)
+    ph = {"2330": [510.0, 511.0, 509.5]}
+    closes = _build_exit_closes(conn, "2330", ph)
+    assert len(closes) == 13       # 10 EOD + 3 intraday
+    assert closes[-1] == 509.5    # 最後一筆是盤中最新價
+
+
+def test_build_exit_closes_intraday_capped_at_20(tmp_path):
+    """盤中 ticks 最多取 20 筆，避免比 EOD 還長。"""
+    from openclaw.ticker_watcher import _build_exit_closes
+    conn = _make_eod_db(tmp_path, n_days=5)
+    ph = {"2330": [500.0 + i for i in range(50)]}  # 50 盤中 ticks
+    closes = _build_exit_closes(conn, "2330", ph)
+    # 5 EOD + 20 intraday（最後 20）
+    assert len(closes) == 25
+
+
+def test_build_exit_closes_unknown_symbol_returns_empty(tmp_path):
+    """未知股票無 EOD 資料且 price_history 無值時，回傳空串列。"""
+    from openclaw.ticker_watcher import _build_exit_closes
+    conn = _make_eod_db(tmp_path, n_days=5)
+    closes = _build_exit_closes(conn, "9999", {})
+    assert closes == []

@@ -459,6 +459,29 @@ def _update_price_history(price_history: Dict[str, List[float]], symbol: str, cl
         del hist[0]
 
 
+def _build_exit_closes(
+    conn: sqlite3.Connection,
+    symbol: str,
+    price_history: Dict[str, List[float]],
+) -> List[float]:
+    """組合 EOD 歷史收盤 + 當日盤中 ticks，供 exit signal 評估使用。
+
+    watcher 重啟後 price_history 為空，仍可從 eod_prices 取得歷史資料，
+    確保 MA/RSI 計算不因重啟而短暫失效。
+    """
+    eod_rows = conn.execute(
+        "SELECT close FROM eod_prices WHERE symbol=? AND close IS NOT NULL "
+        "ORDER BY trade_date DESC LIMIT ?",
+        (symbol, _PRICE_HISTORY_MAX),
+    ).fetchall()
+    eod_closes: List[float] = [r[0] for r in reversed(eod_rows)]
+
+    # 盤中 ticks（最多取最後 20 筆，避免重複疊加過多）
+    intraday: List[float] = price_history.get(symbol, [])[-20:]
+
+    return eod_closes + intraday
+
+
 def _evaluate_cash_mode(
     price_history: Dict[str, List[float]], current_cash_mode: bool
 ) -> tuple[bool, str]:
@@ -784,8 +807,8 @@ def run_watcher() -> None:
                 pass
 
             for _exit_sym, (_exit_qty, _exit_avg) in list(positions.items()):
-                _exit_closes = price_history.get(_exit_sym, [])
-                if len(_exit_closes) < 1:
+                _exit_closes = _build_exit_closes(conn, _exit_sym, price_history)
+                if len(_exit_closes) < 5:
                     continue
                 if _exit_sym in _locked_syms:
                     log.debug("[%s] sell skipped — locked symbol", _exit_sym)
