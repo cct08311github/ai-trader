@@ -407,7 +407,7 @@ def _log_trace(conn: sqlite3.Connection, *, symbol: str, signal: str, snap: dict
     )
     try:
         insert_llm_trace(conn, trace, auto_commit=True)
-    except sqlite3.Error as e:
+    except Exception as e:  # noqa: BLE001 — log utility; must never crash caller
         log.warning("insert_llm_trace failed: %s", e)
 
 
@@ -426,7 +426,7 @@ def _log_screen_trace(conn: sqlite3.Connection, *, universe: List[str], active: 
     )
     try:
         insert_llm_trace(conn, trace, auto_commit=True)
-    except sqlite3.Error as e:
+    except Exception as e:  # noqa: BLE001 — log utility; must never crash caller
         log.warning("_log_screen_trace failed: %s", e)
 
 

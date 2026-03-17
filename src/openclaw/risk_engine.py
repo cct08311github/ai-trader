@@ -26,7 +26,7 @@ def _is_symbol_locked(symbol: str) -> bool:
         logger.warning("Corrupted config file: %s — %s", _LOCKED_SYMBOLS_PATH, e)
         return False
     except OSError as e:
-        logger.warning("Unexpected error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
+        logger.error("OS error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
         return False
 
 
