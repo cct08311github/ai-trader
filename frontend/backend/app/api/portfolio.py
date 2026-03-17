@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, List, Literal, Optional
@@ -22,7 +23,7 @@ def _read_locked() -> list:
     try:
         with open(_LOCKED_PATH, "r") as f:
             return json.load(f).get("locked", [])
-    except Exception:
+    except (OSError, ValueError):
         return []
 
 
@@ -120,7 +121,7 @@ def portfolio_positions(simulation: Optional[bool] = None):
                 for r in rows
             ]
             return {"status": "ok", "source": "db_positions", "simulation": simulation, "positions": positions}
-    except Exception:
+    except sqlite3.Error:
         pass
 
     # ── Fallback: compute net positions from orders+fills ────────────────────
@@ -155,7 +156,7 @@ def portfolio_positions(simulation: Optional[bool] = None):
                 for r in rows
             ]
             return {"status": "ok", "source": "db_fills", "simulation": simulation, "positions": positions}
-    except Exception:
+    except sqlite3.Error:
         pass
 
     return {"status": "ok", "source": "no_data", "simulation": simulation, "positions": []}
@@ -281,7 +282,7 @@ def get_position_detail(symbol: str):
             cap = _json.load(f)
             def_sl = float(cap.get("default_stop_loss_pct", 0.05))
             def_tp = float(cap.get("default_take_profit_pct", 0.10))
-    except Exception:  # pragma: no cover
+    except (OSError, ValueError):  # pragma: no cover
         pass  # pragma: no cover
 
     with get_conn() as conn:
@@ -317,7 +318,7 @@ def get_position_detail(symbol: str):
                 if dec:
                     try:
                         reason = _json.loads(dec["reason_json"] or "{}")
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):
                         reason = {}
                     decision_info = {
                         "decision_id": decision_id,
@@ -338,7 +339,7 @@ def get_position_detail(symbol: str):
                 if rc:
                     try:
                         metrics = _json.loads(rc["metrics_json"] or "{}")
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError):
                         metrics = {}
                     risk_info = {
                         "passed": bool(rc["passed"]),
@@ -375,7 +376,7 @@ def get_position_detail(symbol: str):
             if pp:
                 stop_loss = pp["stop_loss"]
                 take_profit = pp["take_profit"]
-        except Exception:
+        except sqlite3.Error:
             pass
 
         if avg_price:
@@ -403,7 +404,7 @@ def get_position_detail(symbol: str):
                 }
                 for r in rows
             ]
-        except Exception:
+        except sqlite3.Error:
             pass
 
     return {
@@ -442,7 +443,7 @@ def get_portfolio_kpis():
             available_cash = float(cap_data.get("total_capital_twd", 500000.0))
             def_sl = float(cap_data.get("default_stop_loss_pct", 0.05))
             def_tp = float(cap_data.get("default_take_profit_pct", 0.10))
-    except Exception:  # pragma: no cover
+    except (OSError, ValueError):  # pragma: no cover
         available_cash = 500000.0  # pragma: no cover
         def_sl = 0.05  # pragma: no cover
         def_tp = 0.10  # pragma: no cover
@@ -466,7 +467,7 @@ def get_portfolio_kpis():
             try:
                 from openclaw.pnl_engine import get_overall_win_rate as _win_rate
                 overall_win_rate = _win_rate(conn)
-            except Exception:
+            except Exception:  # noqa: BLE001 — dynamic import; can't predict exceptions
                 pass
 
             # Try to get latest cash from position snapshots if available
@@ -476,9 +477,9 @@ def get_portfolio_kpis():
                 ).fetchone()
                 if snapshot_row and snapshot_row["available_cash"] is not None:
                     available_cash = snapshot_row["available_cash"]
-            except Exception:
+            except sqlite3.Error:
                 pass
-    except Exception as e:  # pragma: no cover
+    except sqlite3.Error as e:  # pragma: no cover
         pass  # pragma: no cover  # fallback to defaults
 
     return {
@@ -572,11 +573,11 @@ def get_monthly_summary(month: str = "2026-02"):
                             sell_dt = _dt.datetime.fromisoformat(str(s["timestamp"]).replace("Z", "+00:00"))
                             days = abs((sell_dt - buy_dt).total_seconds()) / 86400
                             holding_days_list.append(days)
-                        except Exception:
+                        except (ValueError, TypeError):
                             pass
                 if holding_days_list:
                     avg_holding_days = sum(holding_days_list) / len(holding_days_list)
-            except Exception:  # pragma: no cover
+            except (sqlite3.Error, ValueError):  # pragma: no cover
                 avg_holding_days = 0.0  # pragma: no cover
 
             return {
@@ -621,7 +622,7 @@ def get_equity_curve(days: int = 60, start_equity: float = 100000.0):
             series = _eq_curve(conn, days=days, start_equity=start_equity)
         if series:
             return {"status": "ok", "data": series, "source": "db"}
-    except Exception:
+    except Exception:  # noqa: BLE001 — dynamic import; can't predict exceptions
         pass
     return {"status": "ok", "data": [], "source": "no_data"}
 
@@ -678,7 +679,7 @@ def get_trade_causal_chain(trade_id: str):
                     }
                     for row in llm_results
                 ]
-            except Exception:
+            except sqlite3.Error:
                 llm_traces = []
 
         decision_id = trade_dict.get('decision_id', f"dec_{trade_id}")
@@ -779,7 +780,7 @@ def close_position(symbol: str):
             ).fetchone()
             if price_row and price_row["current_price"]:
                 sell_price = float(price_row["current_price"])
-        except Exception:
+        except sqlite3.Error:
             pass
 
         if sell_price <= 0:
@@ -919,7 +920,7 @@ def close_position(symbol: str):
                 on_sell_filled(conn, symbol=symbol, qty=f["qty"],
                                sell_price=f["price"], fee=f["fee"], tax=f["tax"])
             sync_positions_table(conn)
-        except Exception:
+        except Exception:  # noqa: BLE001 — dynamic import; can't predict exceptions
             pass  # non-critical
 
     return {
@@ -989,7 +990,7 @@ def get_quote_snapshot(symbol: str):
                     "bid_price": bid1, "ask_price": ask1,
                 },
             }
-    except Exception:
+    except Exception:  # noqa: BLE001 — broker API; can't predict exceptions
         pass
     # Fallback: last EOD close from eod_prices
     try:
@@ -1010,7 +1011,7 @@ def get_quote_snapshot(symbol: str):
                         "trade_date": row["trade_date"],
                     },
                 }
-    except Exception:
+    except sqlite3.Error:
         pass
     return {"status": "ok", "symbol": symbol, "source": "closed", "data": None}
 
@@ -1032,7 +1033,7 @@ async def get_quote_stream(symbol: str, request: Request):
         try:
             api = _get_api(simulation=True)
             quote_service.subscribe(symbol, queue, loop, api)
-        except Exception:
+        except Exception:  # noqa: BLE001 — broker API; can't predict exceptions
             pass  # Market closed or Shioaji unavailable
 
         try:

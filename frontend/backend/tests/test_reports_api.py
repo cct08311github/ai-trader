@@ -323,7 +323,7 @@ def test_reports_context_db_error_returns_500(tmp_path, monkeypatch):
 
     @contextmanager
     def broken_conn():
-        raise RuntimeError("simulated DB failure")
+        raise sqlite3.OperationalError("simulated DB failure")
         yield  # noqa: unreachable
 
     monkeypatch.setattr(db_mod, "get_conn", broken_conn)

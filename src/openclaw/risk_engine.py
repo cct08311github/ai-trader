@@ -25,10 +25,7 @@ def _is_symbol_locked(symbol: str) -> bool:
     except json.JSONDecodeError as e:
         logger.warning("Corrupted config file: %s — %s", _LOCKED_SYMBOLS_PATH, e)
         return False
-    except PermissionError:
-        logger.error("Permission denied reading: %s", _LOCKED_SYMBOLS_PATH)
-        return False
-    except Exception as e:
+    except OSError as e:
         logger.warning("Unexpected error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
         return False
 
@@ -49,10 +46,7 @@ def _get_daily_pm_approval() -> bool:
     except json.JSONDecodeError as e:
         logger.warning("Corrupted config file: %s — %s", _DAILY_PM_PATH, e)
         return False
-    except PermissionError:
-        logger.error("Permission denied reading: %s", _DAILY_PM_PATH)
-        return False
-    except Exception as e:
+    except OSError as e:
         logger.warning("Unexpected error reading %s: %s", _DAILY_PM_PATH, e)
         return False
 
@@ -182,7 +176,7 @@ def _build_candidate(decision: Decision, market: MarketState, portfolio: Portfol
         authority_level = limits.get("authority_level")
         try:
             authority_level = int(authority_level) if authority_level is not None else None
-        except Exception:
+        except (TypeError, ValueError):
             authority_level = None
 
         qty = calculate_position_qty(
@@ -260,7 +254,8 @@ def evaluate_and_build_order(
                 "correlation_guard_reason": limits.get("correlation_guard_reason"),
                 "correlation_guard_scale": limits.get("correlation_guard_scale"),
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — optional plugin; must not crash main pipeline
+            logger.warning("[risk_engine] correlation_guard raised: %s", e)
             base_metrics["correlation_guard_error"] = str(e)
 
 

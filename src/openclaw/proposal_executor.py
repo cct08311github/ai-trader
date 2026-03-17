@@ -220,7 +220,7 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                 conn.commit()
                 n_noted += 1
 
-        except Exception as e:
+        except (json.JSONDecodeError, sqlite3.Error, ValueError, TypeError) as e:
             log.error("Error processing proposal %s: %s", proposal_id, e, exc_info=True)
 
     return intents, n_noted

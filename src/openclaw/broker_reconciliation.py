@@ -199,7 +199,7 @@ def _insert_reconciliation_incident_best_effort(
     for row in rows:
         try:
             payload = json.loads(row[0] or "{}")
-        except Exception:
+        except json.JSONDecodeError:
             continue
         if payload.get("stable_detail") == stable_detail:
             return
