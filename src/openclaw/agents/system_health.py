@@ -4,6 +4,7 @@
 工作：Python 收集 PM2 / DB / 磁碟資料，Gemini 進行健康評估
 """
 from __future__ import annotations
+from openclaw.path_utils import get_repo_root
 
 import subprocess
 import sqlite3
@@ -12,11 +13,12 @@ from pathlib import Path
 from typing import Optional
 
 from openclaw.agents.base import (
+
     AgentResult, DEFAULT_MODEL, call_agent_llm, open_conn,
     to_agent_result, write_trace,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 
 _PROMPT_TEMPLATE = """\
 你是 AI Trader 系統的 SystemHealthAgent（系統健康監控員）。

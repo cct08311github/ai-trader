@@ -4,6 +4,7 @@
 工作：Bull Analyst → Bear Analyst → Risk Arbiter 三次序列 Gemini 呼叫
 """
 from __future__ import annotations
+from openclaw.path_utils import get_repo_root
 
 import sqlite3
 from difflib import SequenceMatcher
@@ -12,11 +13,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from openclaw.agents.base import (
+
     AgentResult, COMMITTEE_MODEL, call_agent_llm, open_conn,
     query_db, to_agent_result, write_proposal, write_trace,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 
 _BULL_PROMPT = """\
 你是 AI Trader 的 Bull Analyst（看多派分析師）。

@@ -12,8 +12,9 @@ from typing import Any, Dict, List, Optional
 
 from openclaw.llm_gemini import gemini_call
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
+from openclaw.path_utils import get_repo_root
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
 # 預設模型：可透過環境變數覆寫

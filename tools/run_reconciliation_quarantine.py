@@ -8,11 +8,12 @@ from pathlib import Path
 import sqlite3
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = get_repo_root()
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "frontend" / "backend"))
 
 from openclaw.position_quarantine import (
+from openclaw.path_utils import get_repo_root
     apply_quarantine_plan,
     build_reconciliation_quarantine_plan,
     clear_quarantine_symbols,

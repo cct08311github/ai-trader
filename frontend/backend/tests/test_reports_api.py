@@ -7,12 +7,13 @@ import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from openclaw.path_utils import get_repo_root
 
 
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_ROOT = get_repo_root()
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
-SRC_ROOT = Path(__file__).resolve().parents[3] / "src"
+SRC_ROOT = get_repo_root() / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 

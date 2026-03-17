@@ -4,6 +4,7 @@
 工作：Python 查近 4 週交易績效 → Gemini 評估訊號閾值是否需調整
 """
 from __future__ import annotations
+from openclaw.path_utils import get_repo_root
 
 import os
 import sqlite3
@@ -12,11 +13,12 @@ from pathlib import Path
 from typing import Optional
 
 from openclaw.agents.base import (
+
     AgentResult, DEFAULT_MODEL, call_agent_llm, open_conn,
     query_db, to_agent_result, write_proposal, write_trace,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 
 # 現有訊號閾值（從環境變數讀取，與 ticker_watcher 一致）
 _BUY_SIGNAL_PCT   = float(os.environ.get("BUY_SIGNAL_PCT",   "0.002"))

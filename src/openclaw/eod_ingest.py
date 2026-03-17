@@ -13,8 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.request import Request, urlopen
+from openclaw.path_utils import get_repo_root
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = get_repo_root()
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
 # TWSE/TPEx certs are missing Subject Key Identifier (RFC 5280 §4.2.1.2),
@@ -252,7 +253,7 @@ def main() -> None:
     conn.execute("PRAGMA busy_timeout = 5000")
 
     if args.apply_migration:
-        repo_root = Path(__file__).resolve().parents[1]
+        repo_root = get_repo_root()
         apply_migration_if_needed(conn, repo_root / "sql" / "migration_v1_2_1_eod_data.sql")
 
     twse_rows = 0

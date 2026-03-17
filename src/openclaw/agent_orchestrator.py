@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from openclaw.path_utils import get_repo_root
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +23,7 @@ logging.basicConfig(
 )
 log = logging.getLogger("agent_orchestrator")
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = get_repo_root()
 _STATE_PATH = str(_REPO_ROOT / "config" / "daily_pm_state.json")
 _TZ_TWN = timezone(timedelta(hours=8))
 DB_PATH: str = os.environ.get("DB_PATH", str(_REPO_ROOT / "data" / "sqlite" / "trades.db"))

@@ -8,12 +8,13 @@ from pathlib import Path
 import sqlite3
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = get_repo_root()
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "frontend" / "backend"))
 
 from openclaw.incident_resolution import list_open_incident_clusters, resolve_open_incidents
 from openclaw.operator_remediation import list_operator_remediations
+from openclaw.path_utils import get_repo_root
 
 
 def main() -> int:

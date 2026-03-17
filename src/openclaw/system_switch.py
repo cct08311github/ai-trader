@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from openclaw.path_utils import get_repo_root
 
 
 DEFAULT_CONTROL_STATUS_URL = "http://127.0.0.1:8000/api/control/status"
@@ -58,7 +59,7 @@ def check_system_switch(
 
     # Check emergency stop file
     _root_override = os.environ.get("_OPENCLAW_PROJECT_ROOT")
-    project_root = Path(_root_override) if _root_override else Path(__file__).resolve().parents[2]
+    project_root = Path(_root_override) if _root_override else get_repo_root()
     emergency_stop_file = project_root / ".EMERGENCY_STOP"
     if emergency_stop_file.exists():
         try:

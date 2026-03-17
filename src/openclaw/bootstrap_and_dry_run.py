@@ -11,6 +11,7 @@ from pathlib import Path
 from openclaw.decision_pipeline import run_news_sentiment_with_guard, run_pm_debate
 from openclaw.memory_store import EpisodicRecord, SemanticRule, insert_episodic_memory, upsert_semantic_rule
 from openclaw.reflection_loop import insert_reflection_run, validate_reflection_output
+from openclaw.path_utils import get_repo_root
 
 
 def _apply_sql_file(conn: sqlite3.Connection, path: Path) -> None:
@@ -203,7 +204,7 @@ def main() -> None:
     parser.add_argument("--reset", action="store_true", help="Remove db file before bootstrap")
     args = parser.parse_args()
 
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = get_repo_root()
 
     # NOTE: support SQLite in-memory db for CI / quick validation
     if args.db == ':memory:':
