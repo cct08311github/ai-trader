@@ -21,12 +21,32 @@ import datetime as dt
 import json
 import logging
 import os
+import signal
 import sqlite3
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Dict, List, Optional
+
+# Graceful shutdown flag — set by SIGTERM/SIGINT handler
+_shutdown_requested: bool = False
+
+
+def _handle_shutdown_signal(signum: int, frame: object) -> None:  # noqa: ARG001
+    global _shutdown_requested
+    _shutdown_requested = True
+    log.info("Shutdown signal %d received — will exit after current scan cycle.", signum)
+
+
+def _interruptible_sleep(seconds: int) -> bool:
+    """Sleep for `seconds`, returning True immediately if shutdown is requested."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if _shutdown_requested:
+            return True
+        time.sleep(min(1, deadline - time.monotonic()))
+    return False
 
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
 
@@ -558,6 +578,10 @@ def _check_live_mode_safety(
 
 # ── 主迴圈 ────────────────────────────────────────────────────────────────────
 def run_watcher() -> None:
+    # Register graceful shutdown handlers — flag is checked at each loop boundary
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+
     from openclaw.risk_engine import (
         Decision, MarketState, PortfolioState, Position, SystemState,
         evaluate_and_build_order, default_limits,
@@ -630,7 +654,7 @@ def run_watcher() -> None:
     log.info("Ticker watcher started | manual_watchlist=%d stocks | INTERVAL=%ds | DB=%s",
              len(manual_watchlist), POLL_INTERVAL_SEC, DB_PATH)
 
-    while True:  # pragma: no cover
+    while not _shutdown_requested:  # pragma: no cover
         if not _is_market_open():
             now_twn = dt.datetime.now(tz=_TZ_TWN)
             log.info("Market closed (%s TWN). Next check in 60s.", now_twn.strftime("%H:%M %a"))
@@ -645,7 +669,7 @@ def run_watcher() -> None:
                 _conn.close()
             except Exception as _tge:
                 log.debug("[tg_approver] off-hours error: %s", _tge)
-            time.sleep(60)
+            _interruptible_sleep(60)
             continue
 
         today = dt.datetime.now(tz=_TZ_TWN).date()
@@ -885,7 +909,7 @@ def run_watcher() -> None:
                         position_avg_price=avg_price,
                         high_water_mark=high_water_marks.get(symbol),
                     )
-                    signal = _agg_signal.action
+                    sig = _agg_signal.action
                     # 將 aggregator 結果記入 trace metadata
                     _agg_meta = {
                         "regime": _agg_signal.regime,
@@ -897,7 +921,7 @@ def run_watcher() -> None:
                     log.warning("[%s] signal_aggregator 失敗 (%s), fallback to signal_generator",
                                 symbol, _agg_err)
                     from openclaw.signal_generator import compute_signal as _sg_compute
-                    signal = _sg_compute(
+                    sig = _sg_compute(
                         conn, symbol=symbol,
                         position_avg_price=avg_price,
                         high_water_mark=high_water_marks.get(symbol),
@@ -905,8 +929,8 @@ def run_watcher() -> None:
                 decision_id = str(uuid.uuid4())
 
                 # ── Mock 防護：mock 資料禁止開新倉（buy） ────────────────
-                if data_is_mock and signal == "buy":
-                    _log_trace(conn, symbol=symbol, signal=signal, snap=snap,
+                if data_is_mock and sig == "buy":
+                    _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
                                approved=False, reject_code="RISK_MOCK_DATA_FORBIDDEN",
                                decision_id=decision_id, extra_meta=_agg_meta)
                     log.info("[%s] signal=buy BLOCKED — mock data mode", symbol)
@@ -917,8 +941,8 @@ def run_watcher() -> None:
                     ts_ms=scan_ms,
                     symbol=symbol,
                     strategy_id=STRATEGY_ID,
-                    signal_side=signal,
-                    signal_score=0.7 if signal != "flat" else 0.0,
+                    signal_side=sig,
+                    signal_score=0.7 if sig != "flat" else 0.0,
                 )
                 market = MarketState(
                     best_bid=snap["bid"],
@@ -942,13 +966,13 @@ def run_watcher() -> None:
 
                 result = evaluate_and_build_order(decision, market, portfolio, limits, system)
 
-                _log_trace(conn, symbol=symbol, signal=signal, snap=snap,
+                _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
                            approved=result.approved, reject_code=result.reject_code,
                            order=result.order, decision_id=decision_id,
                            extra_meta=_agg_meta)
 
                 log.info("[%s] signal=%-4s close=%.1f → %s",
-                         symbol, signal, snap["close"],
+                         symbol, sig, snap["close"],
                          "APPROVED" if result.approved else f"REJECTED({result.reject_code})")
 
                 if not result.approved or result.order is None:
@@ -956,7 +980,7 @@ def run_watcher() -> None:
                     try:
                         conn.execute("BEGIN IMMEDIATE")
                         _persist_decision(conn, decision_id=decision_id, symbol=symbol,
-                                          signal=signal, now_iso=_utc_now_iso())
+                                          signal=sig, now_iso=_utc_now_iso())
                         _persist_risk_check(conn, decision_id=decision_id, passed=False,
                                             reject_code=result.reject_code, metrics=result.metrics)
                         conn.commit()
@@ -972,7 +996,7 @@ def run_watcher() -> None:
                 try:
                     conn.execute("BEGIN IMMEDIATE")
                     _persist_decision(conn, decision_id=decision_id, symbol=symbol,
-                                      signal=signal, now_iso=_utc_now_iso())
+                                      signal=sig, now_iso=_utc_now_iso())
                     _persist_risk_check(conn, decision_id=decision_id, passed=True,
                                         reject_code=None, metrics=result.metrics)
                     conn.commit()
@@ -1148,7 +1172,9 @@ def run_watcher() -> None:
                 pass
 
         log.info("=== Scan done. Sleeping %ds ===", POLL_INTERVAL_SEC)
-        time.sleep(POLL_INTERVAL_SEC)
+        _interruptible_sleep(POLL_INTERVAL_SEC)
+
+    log.info("Graceful shutdown complete.")
 
 
 if __name__ == "__main__":  # pragma: no cover
