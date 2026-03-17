@@ -322,6 +322,27 @@ def main() -> None:
                 file=__import__("sys").stderr,
             )
 
+        # 盤後自動優化（僅在價格資料成功寫入時執行）
+        optimizer_adjustments: list = []
+        if status == "success":
+            try:
+                from openclaw.strategy_optimizer import (
+                    StrategyMetricsEngine, OptimizationGateway,
+                )
+                conn.row_factory = __import__("sqlite3").Row
+                metrics = StrategyMetricsEngine(conn).compute()
+                optimizer_adjustments = OptimizationGateway(conn).on_eod(metrics)
+                if optimizer_adjustments:
+                    print(
+                        f"[eod_ingest] optimizer adjustments: {optimizer_adjustments}",
+                        file=__import__("sys").stderr,
+                    )
+            except Exception as opt_exc:
+                print(
+                    f"[eod_ingest] optimizer skipped: {opt_exc}",
+                    file=__import__("sys").stderr,
+                )
+
         try:
             print(
                 json.dumps(
@@ -333,6 +354,7 @@ def main() -> None:
                         "institution_flows": inst_rows,
                         "margin_data": margin_rows,
                         "institution_error": inst_error,
+                        "optimizer_adjustments": optimizer_adjustments,
                         "error": error_text,
                     },
                     ensure_ascii=True,

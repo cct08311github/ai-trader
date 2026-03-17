@@ -111,9 +111,39 @@ class StrategyMetricsEngine:
         return trades
 
 
+def _ensure_optimizer_schema(conn: sqlite3.Connection) -> None:
+    """確保 param_bounds 存在並初始化預設護欄（冪等）。"""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS param_bounds (
+            param_key           TEXT PRIMARY KEY,
+            min_val             REAL NOT NULL,
+            max_val             REAL NOT NULL,
+            weekly_max_delta    REAL NOT NULL,
+            last_auto_change_ts INTEGER,
+            frozen_until_ts     INTEGER
+        )
+    """)
+    # 確保 trailing_pct 有護欄定義
+    conn.execute("""
+        INSERT OR IGNORE INTO param_bounds
+            (param_key, min_val, max_val, weekly_max_delta)
+        VALUES ('trailing_pct', 0.02, 0.15, 0.02)
+    """)
+    # 確保 trailing_pct 有初始值（若不存在）
+    import uuid
+    conn.execute("""
+        INSERT INTO risk_limits
+            (limit_id, scope, rule_name, rule_value, enabled, updated_at)
+        SELECT ?, 'global', 'trailing_pct', 0.05, 1, datetime('now')
+        WHERE NOT EXISTS (SELECT 1 FROM risk_limits WHERE rule_name='trailing_pct')
+    """, (uuid.uuid4().hex[:16],))
+    conn.commit()
+
+
 class OptimizationGateway:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
+        _ensure_optimizer_schema(conn)
 
     def on_eod(self, metrics: MetricsReport) -> list[dict]:
         """根據 EOD 統計結果執行安全調整。
@@ -163,11 +193,11 @@ class OptimizationGateway:
 
         # 讀取現值
         current = self.conn.execute(
-            "SELECT value FROM risk_limits WHERE name=?", (param_key,)
+            "SELECT rule_value FROM risk_limits WHERE rule_name=?", (param_key,)
         ).fetchone()
         if current is None:
             return None
-        old_val = current["value"]
+        old_val = current["rule_value"]
 
         # 本週累積 delta 檢查（確保 7 日內累積調整量不超過 weekly_max_delta）
         one_week_ago = now - 7 * 86400
@@ -197,7 +227,7 @@ class OptimizationGateway:
 
         # 執行調整
         self.conn.execute(
-            "UPDATE risk_limits SET value=?, updated_at=? WHERE name=?",
+            "UPDATE risk_limits SET rule_value=?, updated_at=? WHERE rule_name=?",
             (new_val, now, param_key)
         )
         # 寫入 optimization_log
@@ -244,10 +274,10 @@ class ReflectionAgent:
         """執行週期反思，回傳 proposals list（空 list = 無建議）。"""
         try:
             context = self._build_context()
-            response = self._call_gemini(context)
+            response = self._call_llm(context)
             return self._parse_proposals(response)
         except Exception as e:
-            log.warning("[ReflectionAgent] Gemini 反思失敗，跳過：%s", e)
+            log.warning("[ReflectionAgent] LLM 反思失敗，跳過：%s", e)
             return []
 
     def _build_context(self) -> str:
@@ -285,9 +315,10 @@ class ReflectionAgent:
 proposals 中每項格式：{{"param_key": "...", "action": "increase|decrease|review", "reason": "..."}}
 """
 
-    def _call_gemini(self, prompt: str) -> str:
-        from openclaw.llm_gemini import call_gemini  # type: ignore
-        return call_gemini(prompt)
+    def _call_llm(self, prompt: str) -> str:
+        from openclaw.llm_minimax import minimax_call
+        result = minimax_call("MiniMax-M2.5", prompt)
+        return result.get("_raw_response", "")
 
     def _parse_proposals(self, response: str) -> list[dict]:
         import json
@@ -295,5 +326,5 @@ proposals 中每項格式：{{"param_key": "...", "action": "increase|decrease|r
             data = json.loads(response)
             return data.get("proposals", [])
         except (json.JSONDecodeError, AttributeError):
-            log.warning("[ReflectionAgent] 無法解析 Gemini 回應")
+            log.warning("[ReflectionAgent] 無法解析 LLM 回應")
             return []

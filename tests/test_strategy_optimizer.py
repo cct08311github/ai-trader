@@ -1,5 +1,6 @@
 # tests/test_strategy_optimizer.py
-import sqlite3, time, pytest
+import sqlite3, time, uuid, pytest
+
 
 @pytest.fixture
 def opt_db(tmp_path):
@@ -28,8 +29,9 @@ def opt_db(tmp_path):
             last_auto_change_ts INTEGER, frozen_until_ts INTEGER
         );
         CREATE TABLE risk_limits (
-            name TEXT PRIMARY KEY, value REAL NOT NULL,
-            updated_at INTEGER
+            limit_id TEXT PRIMARY KEY, scope TEXT, symbol TEXT,
+            strategy_id TEXT, rule_name TEXT, rule_value REAL,
+            enabled INTEGER DEFAULT 1, updated_at TEXT
         );
     """)
     conn.commit()
@@ -38,7 +40,6 @@ def opt_db(tmp_path):
 
 def _insert_matched_trade(conn, symbol, buy_price, sell_price, qty=1000, days_ago=5):
     """插入一筆完整的買賣配對（模擬已平倉交易）"""
-    import uuid
     from datetime import datetime, timedelta
     ts_buy  = (datetime.now() - timedelta(days=days_ago+1)).isoformat()
     ts_sell = (datetime.now() - timedelta(days=days_ago)).isoformat()
@@ -61,6 +62,16 @@ def _insert_matched_trade(conn, symbol, buy_price, sell_price, qty=1000, days_ag
     tax  = sell_price * qty * 0.003
     conn.execute("INSERT INTO fills VALUES (?,?,?,?,?,?,?)",
         (fill_sell_id, sell_id, ts_sell, qty, sell_price, fee, tax))
+    conn.commit()
+
+
+def _insert_trailing_pct(conn, value=0.05):
+    """插入 trailing_pct risk_limit（使用正確的 production schema）"""
+    conn.execute(
+        "INSERT OR IGNORE INTO risk_limits (limit_id, scope, rule_name, rule_value, enabled, updated_at) "
+        "VALUES (?, 'global', 'trailing_pct', ?, 1, datetime('now'))",
+        (uuid.uuid4().hex[:16], value),
+    )
     conn.commit()
 
 
@@ -105,13 +116,11 @@ class TestOptimizationGateway:
 
     def test_param_bounds_respected(self, opt_db):
         """調整不超出 param_bounds 定義的 weekly_max_delta"""
-        # 插入 param_bounds
         opt_db.execute(
             "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
             ("trailing_pct", 0.03, 0.10, 0.005, None, None)
         )
-        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (int(time.time()),))
-        opt_db.commit()
+        _insert_trailing_pct(opt_db, 0.05)
 
         # 30 筆全是虧損 → 應嘗試調整 trailing_pct
         for i in range(30):
@@ -133,8 +142,7 @@ class TestOptimizationGateway:
             "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
             ("trailing_pct", 0.03, 0.10, 0.005, None, None)
         )
-        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (int(time.time()),))
-        opt_db.commit()
+        _insert_trailing_pct(opt_db, 0.05)
         for i in range(30):
             _insert_matched_trade(opt_db, "2330", 100, 95)
 
@@ -152,8 +160,7 @@ class TestOptimizationGateway:
             "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
             ("trailing_pct", 0.03, 0.10, 0.005, None, future)  # frozen
         )
-        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (int(time.time()),))
-        opt_db.commit()
+        _insert_trailing_pct(opt_db, 0.05)
         for i in range(30):
             _insert_matched_trade(opt_db, "2330", 100, 95)
 
@@ -171,7 +178,7 @@ class TestOptimizationGateway:
             "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
             ("trailing_pct", 0.03, 0.10, 0.005, None, None)
         )
-        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (now,))
+        _insert_trailing_pct(opt_db, 0.05)
         # 插入一筆本週已發生的自動調整，delta=0.005（達到 weekly_max_delta）
         opt_db.execute(
             """INSERT INTO optimization_log
@@ -197,8 +204,7 @@ class TestOptimizationGateway:
             "INSERT INTO param_bounds VALUES (?,?,?,?,?,?)",
             ("trailing_pct", 0.03, 0.10, 0.005, None, None)
         )
-        opt_db.execute("INSERT INTO risk_limits VALUES ('trailing_pct', 0.05, ?)", (now,))
-        opt_db.commit()
+        _insert_trailing_pct(opt_db, 0.05)
         for i in range(30):
             _insert_matched_trade(opt_db, "2330", 100, 95)
 
@@ -215,12 +221,13 @@ class TestOptimizationGateway:
 
 class TestReflectionAgent:
     def test_reflect_returns_list(self, opt_db, monkeypatch):
-        """reflect_weekly 回傳 list（即使 Gemini 未設定也不崩潰）"""
-        # mock llm_gemini
+        """reflect_weekly 回傳 list（即使 LLM 未設定也不崩潰）"""
         import sys, types
-        fake_gemini = types.ModuleType("openclaw.llm_gemini")
-        fake_gemini.call_gemini = lambda *a, **kw: '{"direction":"neutral","rationale":"test","proposals":[]}'
-        sys.modules["openclaw.llm_gemini"] = fake_gemini
+        fake_minimax = types.ModuleType("openclaw.llm_minimax")
+        fake_minimax.minimax_call = lambda model, prompt: {
+            "_raw_response": '{"direction":"neutral","rationale":"test","proposals":[]}',
+        }
+        sys.modules["openclaw.llm_minimax"] = fake_minimax
 
         from openclaw.strategy_optimizer import ReflectionAgent
         agent = ReflectionAgent(opt_db)
@@ -228,12 +235,12 @@ class TestReflectionAgent:
         assert isinstance(result, list)
 
     def test_reflect_no_crash_on_llm_error(self, opt_db, monkeypatch):
-        """Gemini 拋出例外時 reflect_weekly 回傳空 list 不崩潰"""
+        """LLM 拋出例外時 reflect_weekly 回傳空 list 不崩潰"""
         import sys, types
-        fake_gemini = types.ModuleType("openclaw.llm_gemini")
-        def bad_call(*a, **kw): raise RuntimeError("Gemini timeout")
-        fake_gemini.call_gemini = bad_call
-        sys.modules["openclaw.llm_gemini"] = fake_gemini
+        fake_minimax = types.ModuleType("openclaw.llm_minimax")
+        def bad_call(model, prompt): raise RuntimeError("MiniMax timeout")
+        fake_minimax.minimax_call = bad_call
+        sys.modules["openclaw.llm_minimax"] = fake_minimax
 
         from openclaw.strategy_optimizer import ReflectionAgent
         result = ReflectionAgent(opt_db).reflect_weekly()
