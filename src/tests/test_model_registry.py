@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from openclaw.decision_pipeline_v4 import run_pm_debate
+from openclaw.path_utils import get_repo_root
 from openclaw.model_registry import (
     ALLOWED_MODELS,
     UnauthorizedModelError,
@@ -74,7 +75,8 @@ def test_resolve_pinned_all_allowed_models_resolvable():
 def test_pipeline_blocks_unauthorized_model():
     conn = sqlite3.connect(":memory:")
     sql = (
-        Path(__file__).resolve().parents[1]
+        get_repo_root()
+        / "src"
         / "sql"
         / "migration_v1_2_0_observability_and_drawdown.sql"
     ).read_text(encoding="utf-8")

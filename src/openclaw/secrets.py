@@ -4,6 +4,7 @@ import os
 import subprocess
 from pathlib import Path
 from typing import Optional
+from openclaw.path_utils import get_repo_root
 
 try:  # optional dependency
     import keyring  # type: ignore
@@ -13,7 +14,7 @@ except Exception:  # pragma: no cover
 
 def _project_root() -> Path:
     # .../src/openclaw/secrets.py -> parents[0]=openclaw, [1]=src, [2]=project root
-    return Path(__file__).resolve().parents[2]
+    return get_repo_root()
 
 
 def _parse_dotenv_value(raw: str) -> str:

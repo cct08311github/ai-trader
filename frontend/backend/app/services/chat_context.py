@@ -9,8 +9,9 @@ import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from openclaw.path_utils import get_repo_root
 
-_CAPITAL_JSON = Path(__file__).resolve().parents[4] / "config" / "capital.json"
+_CAPITAL_JSON = get_repo_root() / "config" / "capital.json"
 
 
 def _read_nav() -> float:

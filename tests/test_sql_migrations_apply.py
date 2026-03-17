@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from openclaw.path_utils import get_repo_root
 
 
 def _apply_sql(conn: sqlite3.Connection, path: Path) -> None:
@@ -9,7 +10,7 @@ def _apply_sql(conn: sqlite3.Connection, path: Path) -> None:
 
 
 def test_sql_migrations_apply_in_order(tmp_path):
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = get_repo_root()
     sql_dir = repo_root / "src" / "sql"
 
     migration_files = [

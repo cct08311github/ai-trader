@@ -103,9 +103,8 @@ class TestGetPm2Processes:
 class TestLoadAlertThresholds:
     def test_defaults_when_no_config(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "openclaw.ops_health.Path.__file__",
-            str(tmp_path / "fake.py"),
-            raising=False,
+            "openclaw.ops_health.get_repo_root",
+            lambda: tmp_path,
         )
         thresholds = load_alert_thresholds()
         assert thresholds["cpu_percent_warn"] == 80
@@ -117,10 +116,7 @@ class TestLoadAlertThresholds:
         (config_dir / "alert_policy.json").write_text(json.dumps({
             "cpu_percent_warn": 70,
         }))
-        with patch("openclaw.ops_health.Path.resolve") as mock_resolve:
-            mock_path = MagicMock()
-            mock_path.parents.__getitem__ = lambda self, idx: tmp_path
-            mock_resolve.return_value = mock_path
+        with patch("openclaw.ops_health.get_repo_root", return_value=tmp_path):
             thresholds = load_alert_thresholds()
         assert thresholds["cpu_percent_warn"] == 70
         assert thresholds["cpu_percent_critical"] == 95  # unchanged default

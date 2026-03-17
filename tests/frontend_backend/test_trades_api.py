@@ -15,6 +15,7 @@ except ImportError:
     pytest.skip("pydantic-settings not installed", allow_module_level=True)
 
 from fastapi.testclient import TestClient
+from openclaw.path_utils import get_repo_root
 
 _TEST_TOKEN = "test-bearer-token"
 _AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}
@@ -80,7 +81,7 @@ def _make_db(tmp_path: Path) -> Path:
 def client(tmp_path: Path):
     db_path = _make_db(tmp_path)
 
-    backend_root = Path(__file__).resolve().parents[2] / "frontend" / "backend"
+    backend_root = get_repo_root() / "frontend" / "backend"
     sys.path.insert(0, str(backend_root))
 
     os.environ["DB_PATH"] = str(db_path)

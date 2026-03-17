@@ -13,12 +13,13 @@ from pathlib import Path
 from openclaw.decision_pipeline_v4 import run_news_sentiment_with_guard, run_pm_debate
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
 from openclaw.model_registry import resolve_pinned_model_id
+from openclaw.path_utils import get_repo_root
 
 
 def test_smoke_llm_traces_and_tool_format():
     conn = sqlite3.connect(":memory:")
     migration = (
-        Path(__file__).resolve().parents[1]
+        get_repo_root()
         / "src"
         / "sql"
         / "migration_v1_2_0_observability_and_drawdown.sql"

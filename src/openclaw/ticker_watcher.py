@@ -37,7 +37,8 @@ STRATEGY_VERSION: str = "watcher_v1"
 SIM_NAV: float = 2_000_000.0   # 模擬資金 200 萬 TWD
 SIM_CASH: float = 1_800_000.0
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from openclaw.path_utils import get_repo_root
+_REPO_ROOT = get_repo_root()
 _WATCHLIST_CFG = _REPO_ROOT / "config" / "watchlist.json"
 _FALLBACK_UNIVERSE: List[str] = ["2330", "2317", "2454"]
 _PRICE_HISTORY_MAX: int = 60    # 每支股票保留最近 N 筆收盤價，供 regime 分類
@@ -45,6 +46,7 @@ _CASH_MODE_MIN_PRICES: int = 20  # 至少需要此筆數才能評估 market regi
 
 # 信號閾值（可透過環境變數覆寫）
 import os as _os
+from openclaw.path_utils import get_repo_root
 _BUY_SIGNAL_PCT:           float = float(_os.environ.get("BUY_SIGNAL_PCT",    "0.002"))  # close < ref*(1-0.2%)
 _TAKE_PROFIT_PCT:          float = float(_os.environ.get("TAKE_PROFIT_PCT",   "0.02"))   # +2% 止盈
 _STOP_LOSS_PCT:            float = float(_os.environ.get("STOP_LOSS_PCT",     "0.03"))   # -3% 止損

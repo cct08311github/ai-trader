@@ -18,6 +18,7 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
+from openclaw.path_utils import get_repo_root
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def _get_db_path() -> str:
 
     Layout: src/openclaw/db_utils.py → parents[2] = repo root
     """
-    root = Path(__file__).resolve().parents[2]
+    root = get_repo_root()
     return str(root / "data" / "sqlite" / "trades.db")
 
 

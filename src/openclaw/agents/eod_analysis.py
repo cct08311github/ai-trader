@@ -19,11 +19,12 @@ from openclaw.agents.base import (
     AgentResult, DEFAULT_MODEL, call_agent_llm, open_conn,
     query_db, write_trace,
 )
+from openclaw.path_utils import get_repo_root
 from openclaw.technical_indicators import (
     calc_ma, calc_rsi, calc_macd, find_support_resistance,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 
 _PROMPT_TEMPLATE = """\
 你是 AI Trader 系統的 EODAnalysisAgent（盤後分析師）。

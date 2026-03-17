@@ -4,6 +4,7 @@
 工作：Python 查持倉/損益 → Gemini 分析健康度 → 再平衡建議
 """
 from __future__ import annotations
+from openclaw.path_utils import get_repo_root
 
 import sqlite3
 from datetime import datetime, timezone
@@ -11,11 +12,12 @@ from pathlib import Path
 from typing import Optional
 
 from openclaw.agents.base import (
+
     AgentResult, DEFAULT_MODEL, call_agent_llm, open_conn,
     query_db, to_agent_result, write_proposal, write_trace,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+_REPO_ROOT = get_repo_root()
 
 _PROMPT_TEMPLATE = """\
 你是 AI Trader 系統的 PortfolioReviewAgent（Portfolio 審查員）。

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+from openclaw.path_utils import get_repo_root
 from openclaw.bootstrap_and_dry_run import (
     _apply_sql_file,
     _mock_llm_call,
@@ -527,7 +528,7 @@ def test_main_normal_db_path(monkeypatch, tmp_path, capsys):
     _patch_main_deps(monkeypatch, db_arg=db_path, reset=False)
 
     # Patch repo_root so SQL files are found
-    project_root = Path(__file__).parents[3]
+    project_root = get_repo_root()
 
     # Patch _apply_sql_file to avoid reading real files from unexpected paths
     apply_calls = []

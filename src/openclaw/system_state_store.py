@@ -9,8 +9,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-
-_DEFAULT_STATE_PATH = Path(__file__).resolve().parents[2] / "config" / "system_state.json"
+from openclaw.path_utils import get_config_path
+_DEFAULT_STATE_PATH = get_config_path("system_state.json")
 
 
 def default_system_state_path() -> str:

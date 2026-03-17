@@ -14,12 +14,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from openclaw.path_utils import get_repo_root
 
 # ---------------------------------------------------------------------------
 # Backend path setup (mirrors frontend_backend conftest pattern)
 # ---------------------------------------------------------------------------
 
-BACKEND_PATH = Path(__file__).resolve().parents[1] / "frontend" / "backend"
+BACKEND_PATH = get_repo_root() / "frontend" / "backend"
 
 _TEST_TOKEN = "test-bearer-token"
 _AUTH_HEADERS = {"Authorization": f"Bearer {_TEST_TOKEN}"}

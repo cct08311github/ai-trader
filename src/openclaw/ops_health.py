@@ -11,6 +11,7 @@ from typing import Any
 
 from openclaw.system_state_store import system_state_path_from_env
 from openclaw.position_quarantine import get_quarantine_status
+from openclaw.path_utils import get_repo_root
 
 _log = logging.getLogger("ops_health")
 
@@ -92,7 +93,7 @@ def _sum_actionable_reconciliation_mismatches(conn: sqlite3.Connection, since_ms
 
 def load_alert_thresholds() -> dict[str, Any]:
     """Load alert thresholds from config/alert_policy.json, falling back to defaults."""
-    config_path = Path(__file__).resolve().parents[2] / "config" / "alert_policy.json"
+    config_path = get_repo_root() / "config" / "alert_policy.json"
     thresholds = dict(_DEFAULT_THRESHOLDS)
     try:
         with open(config_path, "r", encoding="utf-8") as f:
