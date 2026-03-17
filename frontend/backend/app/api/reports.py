@@ -214,6 +214,55 @@ def _get_institution_summary(
     return result
 
 
+def _get_committee_outlook(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
+    """Latest strategy_committee proposal within the last 24 hours.
+
+    Extracts bull_thesis / bear_thesis / arbiter_stance from committee_context
+    stored in proposal_json. Returns None gracefully if no data or any error.
+    """
+    try:
+        cutoff_ms = int(
+            (datetime.now(timezone.utc) - timedelta(hours=24)).timestamp() * 1000
+        )
+        row = conn.execute(
+            """SELECT proposal_id, proposal_json, confidence, created_at
+               FROM strategy_proposals
+               WHERE generated_by = 'strategy_committee'
+                 AND created_at >= ?
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            (cutoff_ms,),
+        ).fetchone()
+        if not row:
+            return None
+
+        proposal_json_raw = row["proposal_json"]
+        if not proposal_json_raw:
+            return None
+
+        try:
+            pj = json.loads(proposal_json_raw) if isinstance(proposal_json_raw, str) else proposal_json_raw
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        ctx = pj.get("committee_context", {}) if isinstance(pj, dict) else {}
+        bull = ctx.get("bull", {}) if isinstance(ctx, dict) else {}
+        bear = ctx.get("bear", {}) if isinstance(ctx, dict) else {}
+        arbiter = ctx.get("arbiter", {}) if isinstance(ctx, dict) else {}
+
+        return {
+            "proposal_id": row["proposal_id"],
+            "created_at": row["created_at"],
+            "bull_thesis": bull.get("thesis") if isinstance(bull, dict) else None,
+            "bear_thesis": bear.get("thesis") if isinstance(bear, dict) else None,
+            "arbiter_stance": arbiter.get("stance") if isinstance(arbiter, dict) else None,
+            "arbiter_summary": arbiter.get("summary") if isinstance(arbiter, dict) else None,
+            "confidence": float(row["confidence"]) if row["confidence"] is not None else None,
+        }
+    except sqlite3.Error:
+        return None
+
+
 def _get_latest_eod_analysis(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
     """Latest EOD analysis report."""
     try:
@@ -271,7 +320,10 @@ def get_report_context(
     # 7. Latest EOD analysis
     eod_analysis = _get_latest_eod_analysis(conn)
 
-    # 8. System state
+    # 8. Committee outlook (last 24h, morning/evening only)
+    committee_outlook = _get_committee_outlook(conn) if type in ("morning", "evening") else None
+
+    # 10. System state
     system_state = None
     try:
         state_path = os.path.join(
@@ -300,6 +352,7 @@ def get_report_context(
         "institution_chips": chips,
         "recent_trades": recent_trades,
         "eod_analysis": eod_analysis,
+        "committee_outlook": committee_outlook,
         "system_state": {
             "simulation_mode": system_state.get("simulation_mode", True) if system_state else True,
             "trading_enabled": system_state.get("trading_enabled", False) if system_state else False,

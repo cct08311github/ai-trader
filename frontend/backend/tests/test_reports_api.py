@@ -93,6 +93,23 @@ def _init_reports_db(path: Path) -> None:
                 technical TEXT,
                 strategy TEXT
             );
+
+            CREATE TABLE strategy_proposals (
+                proposal_id TEXT PRIMARY KEY,
+                generated_by TEXT,
+                target_rule TEXT,
+                rule_category TEXT,
+                current_value TEXT,
+                proposed_value TEXT,
+                supporting_evidence TEXT,
+                confidence REAL,
+                requires_human_approval INTEGER,
+                status TEXT,
+                expires_at INTEGER,
+                proposal_json TEXT,
+                created_at INTEGER,
+                decided_at INTEGER
+            );
             """
         )
         conn.execute(
@@ -297,6 +314,98 @@ def test_reports_context_no_chips_tables(tmp_path, monkeypatch):
     assert payload["institution_chips"] == {}
     assert payload["eod_analysis"] is None
     assert payload["simulated_positions"]["positions"][0]["symbol"] == "2330"
+
+
+def test_reports_context_includes_committee_outlook(tmp_path, monkeypatch):
+    """committee_outlook is populated when a strategy_committee proposal exists within 24h."""
+    import time
+
+    with _make_client(tmp_path, monkeypatch) as client:
+        import app.db as db
+
+        now_ms = int(time.time() * 1000)
+        proposal_json = json.dumps({
+            "generated_by": "strategy_committee",
+            "committee_context": {
+                "bull": {"thesis": "技術面強勢，TSMC 突破前高", "confidence": 0.75},
+                "bear": {"thesis": "外資持續賣超，需謹慎", "confidence": 0.60},
+                "arbiter": {
+                    "summary": "整體偏多，建議持倉觀望",
+                    "stance": "constructive",
+                },
+            },
+        })
+        with db.get_conn_rw() as conn:
+            conn.execute(
+                """INSERT INTO strategy_proposals
+                   (proposal_id, generated_by, target_rule, rule_category,
+                    proposed_value, supporting_evidence, confidence,
+                    requires_human_approval, status, proposal_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "p-test-001", "strategy_committee", "STRATEGY_DIRECTION", "strategy",
+                    "constructive", "bull evidence", 0.72,
+                    1, "pending", proposal_json, now_ms,
+                ),
+            )
+
+        r = client.get("/api/reports/context?type=morning", headers=_AUTH)
+
+    assert r.status_code == 200
+    payload = r.json()
+    outlook = payload.get("committee_outlook")
+    assert outlook is not None
+    assert outlook["proposal_id"] == "p-test-001"
+    assert outlook["bull_thesis"] == "技術面強勢，TSMC 突破前高"
+    assert outlook["bear_thesis"] == "外資持續賣超，需謹慎"
+    assert outlook["arbiter_stance"] == "constructive"
+    assert outlook["arbiter_summary"] == "整體偏多，建議持倉觀望"
+    assert outlook["confidence"] == 0.72
+
+
+def test_reports_context_committee_outlook_null_when_no_data(tmp_path, monkeypatch):
+    """committee_outlook is null when no strategy_committee proposal exists within 24h."""
+    with _make_client(tmp_path, monkeypatch) as client:
+        r = client.get("/api/reports/context?type=morning", headers=_AUTH)
+
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload.get("committee_outlook") is None
+
+
+def test_reports_context_committee_outlook_null_for_weekly(tmp_path, monkeypatch):
+    """committee_outlook is not included (null) for weekly report type."""
+    import time
+
+    with _make_client(tmp_path, monkeypatch) as client:
+        import app.db as db
+
+        now_ms = int(time.time() * 1000)
+        proposal_json = json.dumps({
+            "committee_context": {
+                "bull": {"thesis": "bull", "confidence": 0.7},
+                "bear": {"thesis": "bear", "confidence": 0.6},
+                "arbiter": {"summary": "neutral", "stance": "neutral"},
+            }
+        })
+        with db.get_conn_rw() as conn:
+            conn.execute(
+                """INSERT INTO strategy_proposals
+                   (proposal_id, generated_by, target_rule, rule_category,
+                    proposed_value, supporting_evidence, confidence,
+                    requires_human_approval, status, proposal_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    "p-weekly-001", "strategy_committee", "STRATEGY_DIRECTION", "strategy",
+                    "neutral", "evidence", 0.65, 1, "pending", proposal_json, now_ms,
+                ),
+            )
+
+        r = client.get("/api/reports/context?type=weekly", headers=_AUTH)
+
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload.get("committee_outlook") is None
 
 
 def test_reports_context_db_error_returns_500(tmp_path, monkeypatch):
