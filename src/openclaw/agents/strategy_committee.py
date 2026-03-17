@@ -8,7 +8,7 @@ from openclaw.path_utils import get_repo_root
 
 import sqlite3
 from difflib import SequenceMatcher
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -101,6 +101,50 @@ _ARBITER_PROMPT = """\
 ```
     """
 
+_BAROMETER_SYMBOLS = ["0050"]  # 大盤基準指標，不依賴成交量排名強制包含
+_TW_UTC_OFFSET = timedelta(hours=8)
+
+
+def _build_barometer_trend(conn: sqlite3.Connection, latest_trade_date: str) -> str:
+    """取得市場基準指標（0050）近 5 日趨勢，提供 LLM 正確的多日方向判斷。
+
+    單日漲跌無法反映趨勢；5 日趨勢可區分「短暫回調」vs「趨勢轉弱」。
+    """
+    rows = conn.execute(
+        """
+        SELECT trade_date, close, change
+        FROM eod_prices
+        WHERE symbol = '0050'
+          AND trade_date <= ?
+        ORDER BY trade_date DESC
+        LIMIT 5
+        """,
+        (latest_trade_date,),
+    ).fetchall()
+
+    if not rows or len(rows) < 2:
+        return ""
+
+    # rows[0] = 最新日，rows[-1] = 5日前
+    latest_close = rows[0][1]
+    oldest_close = rows[-1][1]
+    five_day_chg = round(latest_close - oldest_close, 2)
+    five_day_pct = round(five_day_chg / oldest_close * 100, 2) if oldest_close else 0.0
+    trend_label = "上漲" if five_day_chg > 0 else ("下跌" if five_day_chg < 0 else "持平")
+
+    daily_summary = " → ".join(
+        f"{r[0]}({'+' if r[2] >= 0 else ''}{r[2]})" for r in reversed(rows)
+    )
+
+    return (
+        f"\n【大盤基準 0050 近5日趨勢（{rows[-1][0]} → {rows[0][0]}）】\n"
+        f"  每日漲跌：{daily_summary}\n"
+        f"  5日累積：{'+' if five_day_chg >= 0 else ''}{five_day_chg} 元 "
+        f"({'+' if five_day_pct >= 0 else ''}{five_day_pct}%)，趨勢：{trend_label}\n"
+        f"  ⚠️ 判斷大盤方向請以5日趨勢為主，單日漲跌僅為參考"
+    )
+
+
 _DEDUP_LOOKBACK_HOURS = 12
 _DEDUP_VALUE_SIMILARITY_THRESHOLD = 0.74
 _DEDUP_COMBINED_SIMILARITY_THRESHOLD = 0.7
@@ -170,9 +214,13 @@ def _build_market_context(conn: sqlite3.Connection) -> tuple[str, str]:
                 "is_high_volume_1.5x": is_high_volume,
                 "vol_ratio": vol_ratio
             })
+
+        # 市場基準指標：0050 近 5 日趨勢（強制包含，不依賴成交量排名）
+        market_barometers = _build_barometer_trend(conn, latest_trade_date)
     else:
         latest_prices = []
         price_with_vol_info = []
+        market_barometers = ""
 
     recent_decisions = query_db(
         conn,
@@ -204,8 +252,9 @@ def _build_market_context(conn: sqlite3.Connection) -> tuple[str, str]:
             "建議必須針對實際持有的標的，勿提及持倉中未有的股票。"
         )
 
-    # 數據新鮮度：明確標示資料日期與今日差距
-    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    # 數據新鮮度：使用台灣時區（UTC+8），避免凌晨 UTC 日期比台灣早一天
+    tw_today = datetime.now(timezone.utc) + timedelta(hours=8)
+    today_str = tw_today.strftime("%Y-%m-%d")
     if latest_trade_date:
         try:
             data_date = date.fromisoformat(latest_trade_date)
@@ -224,7 +273,8 @@ def _build_market_context(conn: sqlite3.Connection) -> tuple[str, str]:
     market_data = (
         f"{position_summary}\n"
         f"近期損益：{recent_pnl}\n"
-        f"{freshness_note}\n"
+        f"{freshness_note}"
+        f"{market_barometers}\n"
         f"{volume_definition}\n"
         f"價量樣本（含帶量標記）：{price_with_vol_info}\n"
         f"近期決策樣本（注意：信號產生時間點可能與 EOD 收盤價不同）：{recent_decisions}"
