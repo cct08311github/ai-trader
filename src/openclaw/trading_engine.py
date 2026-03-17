@@ -170,6 +170,7 @@ def tick(conn: sqlite3.Connection, symbol: str) -> None:
                 (symbol,),
             )
             conn.execute("COMMIT")
-        except Exception:
+        except Exception:  # noqa: BLE001 — rollback guard; must catch all to ensure atomicity
+            log.exception("[trading_engine] transaction failed for %s; rolling back", symbol)
             conn.execute("ROLLBACK")
             raise

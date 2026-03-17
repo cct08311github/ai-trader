@@ -239,7 +239,7 @@ def _load_manual_watchlist() -> List[str]:
         if not result:
             raise ValueError("manual_watchlist is empty")
         return result
-    except Exception as e:
+    except (OSError, ValueError) as e:
         log.warning("watchlist.json read failed (%s) — using fallback %s", e, _FALLBACK_UNIVERSE)
         return list(_FALLBACK_UNIVERSE)
 
@@ -264,7 +264,7 @@ def _get_snapshot(api, symbol: str) -> dict:
                 vol   = int(getattr(s, "volume", 1000) or 1000)
                 if close > 0:
                     return {"close": close, "bid": bid, "ask": ask, "reference": ref, "volume": vol}
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
             log.warning("Shioaji snapshot [%s]: %s — using mock", symbol, e)
 
     # Mock: small random walk around base price
@@ -427,7 +427,7 @@ def _log_trace(conn: sqlite3.Connection, *, symbol: str, signal: str, snap: dict
     )
     try:
         insert_llm_trace(conn, trace, auto_commit=True)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — log utility; must never crash caller
         log.warning("insert_llm_trace failed: %s", e)
 
 
@@ -446,7 +446,7 @@ def _log_screen_trace(conn: sqlite3.Connection, *, universe: List[str], active: 
     )
     try:
         insert_llm_trace(conn, trace, auto_commit=True)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 — log utility; must never crash caller
         log.warning("_log_screen_trace failed: %s", e)
 
 
@@ -618,10 +618,10 @@ def run_watcher() -> None:
             try:
                 api.fetch_contracts()
                 log.info("Shioaji contracts fetched (simulation=True)")
-            except Exception as fe:
+            except Exception as fe:  # noqa: BLE001 — broker API; can't predict exceptions
                 log.warning("fetch_contracts failed (%s) — snapshots may use fallback", fe)
             log.info("Shioaji connected (simulation=%s) — using real market data", simulation)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
             log.warning("Shioaji not available — mock data mode: %s", e)
 
     # 內存持倉追蹤：symbol → (qty, avg_price)（watcher 重啟後清空，從 DB sync）
@@ -643,7 +643,7 @@ def run_watcher() -> None:
         _conn_init.close()
         if positions:
             log.info("Restored %d positions from DB: %s", len(positions), list(positions.keys()))
-    except Exception as _e:
+    except sqlite3.Error as _e:
         log.warning("Could not restore positions from DB: %s", _e)
 
     # 每日重新篩選 watchlist
@@ -667,7 +667,7 @@ def run_watcher() -> None:
                 if n_cb > 0:
                     log.info("[tg_approver] Off-hours: processed %d callbacks", n_cb)
                 _conn.close()
-            except Exception as _tge:
+            except Exception as _tge:  # noqa: BLE001 — dynamic import + Telegram API
                 log.debug("[tg_approver] off-hours error: %s", _tge)
             _interruptible_sleep(60)
             continue
@@ -685,7 +685,7 @@ def run_watcher() -> None:
                     sys_candidates = load_system_candidates(_conn_sc)
                 finally:
                     _conn_sc.close()
-            except Exception as _sc_e:
+            except Exception as _sc_e:  # noqa: BLE001 — dynamic import; can't predict exceptions
                 log.warning("[SCREEN] load_system_candidates failed: %s", _sc_e)
             active_watchlist = list(dict.fromkeys(manual_watchlist + sys_candidates))
             log.info("[SCREEN] New day %s — manual=%d + system=%d → active=%d: %s",
@@ -711,7 +711,7 @@ def run_watcher() -> None:
                 limits = load_limits(conn, LimitQuery(strategy_id=STRATEGY_ID))
                 if not limits:
                     limits = default_limits()
-            except Exception as e:
+            except sqlite3.Error as e:
                 log.warning("load_limits failed (%s) — using defaults", e)
                 limits = default_limits()
 
@@ -733,7 +733,7 @@ def run_watcher() -> None:
                     n_tg = notify_pending_proposals(conn)
                     if n_tg > 0:
                         log.info("[tg_approver] Sent %d proposal notifications (PM not approved)", n_tg)
-                except Exception as _tge:
+                except Exception as _tge:  # noqa: BLE001 — dynamic import + Telegram API
                     log.debug("[tg_approver] error: %s", _tge)
                 conn.close()
                 time.sleep(POLL_INTERVAL_SEC)
@@ -780,7 +780,7 @@ def run_watcher() -> None:
             try:
                 from openclaw.risk_engine import _is_symbol_locked
                 _locked_syms = {s for s in positions if _is_symbol_locked(s)}
-            except Exception:
+            except (ImportError, OSError, ValueError):
                 pass
 
             for _exit_sym, (_exit_qty, _exit_avg) in list(positions.items()):
@@ -866,16 +866,16 @@ def run_watcher() -> None:
                                 sell_tax=float(_fill_row[1]),
                                 trade_date=_trade_date,
                             )
-                        except Exception as _pnl_err:
+                        except (sqlite3.Error, ValueError, ArithmeticError) as _pnl_err:
                             log.warning("[%s] pnl_engine error: %s", _exit_sym, _pnl_err)
                         positions.pop(_exit_sym, None)
                         high_water_marks.pop(_exit_sym, None)
                         log.info("[%s] SELL executed: reason=%s", _exit_sym, _exit_sig.reason)
-                except Exception as _sell_err:
+                except Exception as _sell_err:  # noqa: BLE001 — Shioaji broker API; can't predict exceptions
                     log.error("[%s] sell execution error: %s", _exit_sym, _sell_err, exc_info=True)
                     try:
                         conn.execute("ROLLBACK")
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — rollback guard; must not raise
                         pass
 
             for symbol in active_watchlist:
@@ -898,7 +898,7 @@ def run_watcher() -> None:
                 try:
                     from openclaw.trading_engine import tick as _te_tick
                     _te_tick(conn, symbol)
-                except Exception as _te_err:
+                except Exception as _te_err:  # noqa: BLE001 — dynamic import; can't predict exceptions
                     log.warning("[%s] trading_engine.tick 失敗：%s", symbol, _te_err)
 
                 _agg_meta: dict = {}
@@ -917,7 +917,7 @@ def run_watcher() -> None:
                         "weights": _agg_signal.weights_used,
                         "reasons": _agg_signal.reasons,
                     }
-                except Exception as _agg_err:
+                except Exception as _agg_err:  # noqa: BLE001 — dynamic import; can't predict exceptions
                     log.warning("[%s] signal_aggregator 失敗 (%s), fallback to signal_generator",
                                 symbol, _agg_err)
                     from openclaw.signal_generator import compute_signal as _sg_compute
@@ -984,11 +984,11 @@ def run_watcher() -> None:
                         _persist_risk_check(conn, decision_id=decision_id, passed=False,
                                             reject_code=result.reject_code, metrics=result.metrics)
                         conn.commit()
-                    except Exception as e:
+                    except sqlite3.Error as e:
                         log.debug("persist rejected decision failed: %s", e)
                         try:
                             conn.execute("ROLLBACK")
-                        except Exception:
+                        except Exception:  # noqa: BLE001 — rollback guard; must not raise
                             pass
                     continue
 
@@ -1044,7 +1044,7 @@ def run_watcher() -> None:
                                     trade_date=trade_date,
                                 )
                                 log.info("[%s] realized_pnl=%.2f written to daily_pnl_summary", symbol, pnl)
-                            except Exception as pnl_err:
+                            except (sqlite3.Error, ValueError, ArithmeticError) as pnl_err:
                                 log.warning("[%s] pnl_engine error: %s", symbol, pnl_err)
                             positions.pop(symbol, None)
                             log.info("[%s] position closed — removed from in-memory map", symbol)
@@ -1052,13 +1052,13 @@ def run_watcher() -> None:
                         # Sync positions table after every fill
                         try:
                             sync_positions_table(conn)
-                        except Exception as sync_err:
+                        except sqlite3.Error as sync_err:
                             log.warning("sync_positions_table error: %s", sync_err)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 — Shioaji broker API; can't predict exceptions
                     log.error("[%s] order execution error: %s", symbol, e, exc_info=True)
                     try:
                         conn.execute("ROLLBACK")
-                    except Exception:
+                    except Exception:  # noqa: BLE001 — rollback guard; must not raise
                         pass
 
             # ── 每輪掃盤後：執行 approved proposals + 集中度守衛 ─────────────
@@ -1099,7 +1099,7 @@ def run_watcher() -> None:
                                     execution_key=intent.execution_key,
                                     order_id=_oid,
                                 )
-                            except Exception as mark_err:
+                            except sqlite3.Error as mark_err:
                                 log.critical("[proposals] BROKER EXECUTED sell %s %d shares but "
                                              "failed to mark proposal %s as executed — "
                                              "RISK OF DUPLICATE EXECUTION: %s",
@@ -1116,7 +1116,7 @@ def run_watcher() -> None:
                                 order_id=_oid,
                             )
                             log.warning("[proposals] Broker rejected rebalance sell %s → marked failed", intent.symbol)
-                    except Exception as intent_err:
+                    except Exception as intent_err:  # noqa: BLE001 — per-intent guard; Shioaji may raise anything
                         mark_intent_failed(
                             conn,
                             intent.proposal_id,
@@ -1127,11 +1127,11 @@ def run_watcher() -> None:
                                   intent.symbol, intent_err, exc_info=True)
                         try:
                             conn.execute("ROLLBACK")
-                        except Exception as rb_err:
+                        except Exception as rb_err:  # noqa: BLE001 — rollback guard; must not raise
                             log.error("[proposals] ROLLBACK failed — DB state may be inconsistent: %s", rb_err)
                 if sell_intents or n_noted:
                     log.info("[proposals] Processed %d sell intents, %d noted", len(sell_intents), n_noted)
-            except Exception as pe:
+            except Exception as pe:  # noqa: BLE001 — dynamic import + multi-step pipeline
                 log.error("[proposals] executor error: %s", pe, exc_info=True)
 
             try:
@@ -1139,7 +1139,7 @@ def run_watcher() -> None:
                 c_proposals = check_concentration(conn)
                 if c_proposals:
                     log.info("[concentration] Generated %d concentration proposals", len(c_proposals))
-            except Exception as ce:
+            except Exception as ce:  # noqa: BLE001 — dynamic import; can't predict exceptions
                 log.error("[concentration] guard error: %s", ce, exc_info=True)
 
             # ── Gemini 自動審查 pending proposals → 核准/拒絕 + Telegram 通知 ──
@@ -1148,7 +1148,7 @@ def run_watcher() -> None:
                 n_reviewed = auto_review_pending_proposals(conn)
                 if n_reviewed > 0:
                     log.info("[reviewer] Auto-reviewed %d pending proposals", n_reviewed)
-            except Exception as rv:
+            except Exception as rv:  # noqa: BLE001 — dynamic import + Gemini API
                 log.error("[reviewer] proposal reviewer error: %s", rv, exc_info=True)
 
             # ── Telegram 提案通知 + 老闆 inline 核准 ──────────────────────────
@@ -1160,15 +1160,15 @@ def run_watcher() -> None:
                 n_cb = poll_approval_callbacks(conn)
                 if n_cb > 0:
                     log.info("[tg_approver] Processed %d approval callbacks", n_cb)
-            except Exception as _ta:
+            except Exception as _ta:  # noqa: BLE001 — dynamic import + Telegram API
                 log.warning("[tg_approver] error: %s", _ta)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — outer scan cycle guard; must catch all
             log.error("Scan cycle error: %s", e, exc_info=True)
         finally:
             try:
                 conn.close()
-            except Exception:
+            except sqlite3.Error:
                 pass
 
         log.info("=== Scan done. Sleeping %ds ===", POLL_INTERVAL_SEC)

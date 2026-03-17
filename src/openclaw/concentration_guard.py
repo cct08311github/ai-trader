@@ -56,7 +56,7 @@ def check_concentration(
                 "SELECT DISTINCT symbol FROM orders WHERE side='sell' AND status='submitted'"
             ).fetchall()
         }
-    except Exception as e:
+    except sqlite3.Error as e:
         log.error("Dedup query failed, proceeding WITHOUT dedup — "
                   "duplicate proposals may be generated: %s", e)
         pending_symbols = set()

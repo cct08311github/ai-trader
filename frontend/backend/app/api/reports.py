@@ -36,7 +36,7 @@ def conn_dep():
             yield conn
     except HTTPException:
         raise
-    except Exception as e:
+    except (sqlite3.Error, OSError) as e:
         raise HTTPException(status_code=500, detail=f"DB error: {e}")
 
 
@@ -46,7 +46,7 @@ def _read_portfolio_json() -> List[Dict[str, Any]]:
         with open(_PORTFOLIO_JSON, "r") as f:
             data = json.load(f)
         return data.get("holdings", [])
-    except Exception:
+    except (OSError, ValueError):
         return []
 
 
@@ -98,7 +98,7 @@ def _get_sim_positions(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
             }
             for r in rows
         ]
-    except Exception:
+    except sqlite3.Error:
         return []
 
 
@@ -119,7 +119,7 @@ def _get_recent_trades(conn: sqlite3.Connection, days: int = 7) -> List[Dict[str
             (cutoff,),
         ).fetchall()
         return [dict(r) for r in rows]
-    except Exception:
+    except sqlite3.Error:
         return []
 
 
@@ -169,7 +169,7 @@ def _get_technical_indicators(
                 "macd_signal": _last_valid(signal_line),
                 "macd_histogram": _last_valid(histogram),
             }
-        except Exception:
+        except (sqlite3.Error, ValueError, IndexError, TypeError):
             continue
     return result
 
@@ -209,7 +209,7 @@ def _get_institution_summary(
                 "short_balance": r["short_balance"],
             }
         result["_trade_date"] = latest_date
-    except Exception:
+    except sqlite3.Error:
         pass
     return result
 
@@ -231,7 +231,7 @@ def _get_latest_eod_analysis(conn: sqlite3.Connection) -> Optional[Dict[str, Any
                 except (json.JSONDecodeError, TypeError):
                     pass
         return d
-    except Exception:
+    except sqlite3.Error:
         return None
 
 
@@ -279,7 +279,7 @@ def get_report_context(
         )
         with open(state_path) as f:
             system_state = json.load(f)
-    except Exception:
+    except (OSError, ValueError):
         pass
 
     return {
