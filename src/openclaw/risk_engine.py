@@ -36,10 +36,12 @@ _DAILY_PM_PATH = os.path.join(os.path.dirname(__file__), "../../config/daily_pm_
 def _get_daily_pm_approval() -> bool:
     """Check today's PM approval. Fails safe: returns False (blocked) on error."""
     try:
-        from datetime import date
+        from datetime import datetime, timezone, timedelta
+        _tz_twn = timezone(timedelta(hours=8))
+        today = datetime.now(tz=_tz_twn).strftime("%Y-%m-%d")
         with open(_DAILY_PM_PATH, "r") as f:
             state = json.load(f)
-        return state.get("date") == date.today().isoformat() and bool(state.get("approved", False))
+        return state.get("date") == today and bool(state.get("approved", False))
     except FileNotFoundError:
         logger.debug("Config file not found: %s, using defaults", _DAILY_PM_PATH)
         return False

@@ -9,7 +9,7 @@ import json
 import logging
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -202,7 +202,8 @@ def run_eod_analysis(
 ) -> AgentResult:
     _db_path = db_path or str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
     _conn = conn or open_conn(_db_path)
-    _date = trade_date or datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+    _TZ_TWN = timezone(timedelta(hours=8))
+    _date = trade_date or datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
 
     try:
         _ensure_table(_conn)

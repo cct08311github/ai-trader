@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import tempfile
-from datetime import date
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
@@ -33,9 +33,11 @@ def _patch_state_path(monkeypatch, path: str):
 # _today()
 # ---------------------------------------------------------------------------
 
-def test_today_returns_iso_string():
-    result = dpr._today()
-    assert result == date.today().isoformat()
+def test_today_returns_twn_date():
+    """_today() must return the Taiwan (UTC+8) date, not the server's local/UTC date."""
+    _TZ_TWN = timezone(timedelta(hours=8))
+    expected = datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+    assert dpr._today() == expected
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +45,7 @@ def test_today_returns_iso_string():
 # ---------------------------------------------------------------------------
 
 def test_get_daily_pm_approval_true_when_today_and_approved(tmp_path, monkeypatch):
-    state = {"date": date.today().isoformat(), "approved": True}
+    state = {"date": dpr._today(), "approved": True}
     _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
     assert dpr.get_daily_pm_approval() is True
 
@@ -55,7 +57,7 @@ def test_get_daily_pm_approval_false_when_old_date(tmp_path, monkeypatch):
 
 
 def test_get_daily_pm_approval_false_when_not_approved(tmp_path, monkeypatch):
-    state = {"date": date.today().isoformat(), "approved": False}
+    state = {"date": dpr._today(), "approved": False}
     _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
     assert dpr.get_daily_pm_approval() is False
 
@@ -77,7 +79,7 @@ def test_get_daily_pm_approval_false_on_invalid_json(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_get_daily_pm_state_returns_full_dict_with_is_today(tmp_path, monkeypatch):
-    today = date.today().isoformat()
+    today = dpr._today()
     state = {"date": today, "approved": True, "confidence": 0.8}
     _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
     result = dpr.get_daily_pm_state()
@@ -233,7 +235,7 @@ def test_run_daily_pm_review_bearish_action(tmp_path, monkeypatch):
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat(), "recent_trades": [], "recent_pnl": []}
+    context = {"date": dpr._today(), "recent_trades": [], "recent_pnl": []}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state["approved"] is False
     assert state["source"] == "llm"
@@ -258,7 +260,7 @@ def test_run_daily_pm_review_bullish_action(tmp_path, monkeypatch):
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat(), "recent_trades": [], "recent_pnl": []}
+    context = {"date": dpr._today(), "recent_trades": [], "recent_pnl": []}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state["approved"] is True
     assert state["source"] == "llm"
@@ -283,7 +285,7 @@ def test_run_daily_pm_review_neutral_high_confidence_approved(tmp_path, monkeypa
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat(), "recent_trades": [], "recent_pnl": []}
+    context = {"date": dpr._today(), "recent_trades": [], "recent_pnl": []}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state["approved"] is True
     assert state["source"] == "llm"
@@ -308,7 +310,7 @@ def test_run_daily_pm_review_neutral_low_confidence_rejected(tmp_path, monkeypat
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat(), "recent_trades": [], "recent_pnl": []}
+    context = {"date": dpr._today(), "recent_trades": [], "recent_pnl": []}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state["approved"] is False
     assert state["source"] == "llm"
@@ -336,7 +338,7 @@ def test_run_daily_pm_review_includes_trace_fields(tmp_path, monkeypatch):
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat()}
+    context = {"date": dpr._today()}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state.get("_prompt") == "test-prompt"
     assert state.get("_raw_response") == "raw"
@@ -367,7 +369,7 @@ def test_run_daily_pm_review_adjudication_used_as_reason(tmp_path, monkeypatch):
     def mock_llm(model, prompt):
         return llm_response
 
-    context = {"date": date.today().isoformat()}
+    context = {"date": dpr._today()}
     state = dpr.run_daily_pm_review(context=context, llm_call=mock_llm)
     assert state["reason"] == "PM 最終裁決"
 

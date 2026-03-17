@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Optional
 
 _log = logging.getLogger("daily_pm_review")
@@ -28,8 +28,12 @@ _BULLISH_KW = {"買", "加碼", "buy", "long", "積極", "正向", "樂觀", "�
 _BEARISH_KW = {"觀望", "減碼", "賣", "sell", "short", "保守", "停止", "暫停", "等待", "避險"}
 
 
+_TZ_TWN = timezone(timedelta(hours=8))
+
+
 def _today() -> str:
-    return date.today().isoformat()
+    """Return today's date in Taiwan timezone (UTC+8) as ISO string."""
+    return datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
 
 
 def get_daily_pm_approval() -> bool:
