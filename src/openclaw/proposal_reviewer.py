@@ -1,4 +1,4 @@
-"""proposal_reviewer.py — Gemini 自動審查 pending 策略提案
+"""proposal_reviewer.py — LLM 自動審查 pending 策略提案（MiniMax M2.5）
 
 掃描 strategy_proposals 中 status='pending' 的提案，
 呼叫 Gemini 做快速審查，輸出 approve / reject + 理由，
@@ -17,7 +17,7 @@ import time
 
 log = logging.getLogger(__name__)
 
-_MODEL = "gemini-2.0-flash"
+_MODEL = "MiniMax-M2.5"
 
 _REVIEW_PROMPT_TMPL = """你是一位台股 Portfolio Manager，請快速審查以下減倉提案。
 
@@ -66,33 +66,15 @@ def _build_position_summary(conn: sqlite3.Connection) -> str:
 
 def _gemini_review(symbol: str, weight: float, reduce_pct: float,
                    evidence: str, position_summary: str) -> dict:
-    """呼叫 Gemini 審查提案，回傳 {decision, confidence, reason}。"""
-    import re, os
-    from google import genai
+    """呼叫 MiniMax M2.5 審查提案，回傳 {decision, confidence, reason}。"""
+    from openclaw.llm_minimax import minimax_call
 
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("GEMINI_API_KEY 未設定")
-
-    client = genai.Client(api_key=api_key)
     prompt = _REVIEW_PROMPT_TMPL.format(
         symbol=symbol, weight=weight, reduce_pct=reduce_pct,
         evidence=evidence, position_summary=position_summary,
     )
-    resp = client.models.generate_content(
-        model=_MODEL,
-        contents=prompt,
-        config=genai.types.GenerateContentConfig(
-            response_mime_type="application/json",
-        ),
-    )
-    text = resp.text.strip()
-
-    # 嘗試解析 JSON（容錯 markdown code fence）
-    m = re.search(r"\{[\s\S]*\}", text)
-    if m:
-        return json.loads(m.group(0))
-    return json.loads(text)
+    result = minimax_call(_MODEL, prompt)
+    return {k: v for k, v in result.items() if not k.startswith("_")}
 
 
 def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
