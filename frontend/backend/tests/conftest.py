@@ -7,10 +7,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from openclaw.path_utils import get_repo_root
 
 # Ensure `import app.*` works no matter where pytest rootdir is.
-BACKEND_ROOT = get_repo_root()
+# Use __file__ to locate frontend/backend/ directly — get_repo_root() returns
+# the repo root, not frontend/backend/, so `import app` would fail in CI where
+# pytest does not automatically add cwd to sys.path.
+BACKEND_ROOT = Path(__file__).resolve().parent.parent  # .../frontend/backend/
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
