@@ -85,6 +85,65 @@ def _ensure_table(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+_ANOMALY_THRESHOLD = 0.15  # 15% 單日漲跌幅視為異常
+
+
+def _validate_position_prices(
+    conn: sqlite3.Connection,
+    symbols: list,
+    trade_date: str,
+) -> dict:
+    """驗證持倉股票是否有當日 EOD 價格，並偵測異常漲跌幅。
+
+    Returns:
+        {
+            "missing_symbols": [...],     # 當日無收盤價的持倉
+            "anomaly_symbols": [...],     # 漲跌幅超過閾值的持倉
+            "is_valid": bool,             # 所有持倉均有當日價格
+            "details": {symbol: {...}},   # 每檔詳細資訊
+        }
+    """
+    if not symbols:
+        return {"missing_symbols": [], "anomaly_symbols": [], "is_valid": True, "details": {}}
+
+    placeholders = ",".join("?" for _ in symbols)
+    rows = conn.execute(
+        f"SELECT symbol, close, change FROM eod_prices "
+        f"WHERE trade_date=? AND symbol IN ({placeholders})",
+        [trade_date] + list(symbols),
+    ).fetchall()
+
+    found = {r[0]: {"close": r[1], "change": r[2]} for r in rows}
+    missing = [s for s in symbols if s not in found]
+    anomalies = []
+    details = {}
+
+    for sym, data in found.items():
+        close = data["close"]
+        change = data["change"]
+        is_anomaly = False
+        if close and change is not None:
+            pct = abs(change / (close - change)) if (close - change) != 0 else 0.0
+            is_anomaly = pct >= _ANOMALY_THRESHOLD
+            if is_anomaly:
+                anomalies.append(sym)
+        details[sym] = {
+            "close": close,
+            "change": change,
+            "is_anomaly": is_anomaly,
+        }
+
+    for sym in missing:
+        details[sym] = {"close": None, "change": None, "is_anomaly": False}
+
+    return {
+        "missing_symbols": missing,
+        "anomaly_symbols": anomalies,
+        "is_valid": len(missing) == 0,
+        "details": details,
+    }
+
+
 def _calc_symbol_indicators(
     conn: sqlite3.Connection,
     symbol: str,
@@ -246,13 +305,41 @@ def run_eod_analysis(
             if indicators:
                 technical[sym] = indicators
 
+        # 3.5 審查關卡：驗證持倉股票是否有當日 EOD 價格
+        price_validation = _validate_position_prices(_conn, pos_symbols, _date)
+        if price_validation["missing_symbols"]:
+            log.warning(
+                "[eod_analysis] 持倉缺少當日收盤價 (trade_date=%s): %s",
+                _date,
+                price_validation["missing_symbols"],
+            )
+        if price_validation["anomaly_symbols"]:
+            log.warning(
+                "[eod_analysis] 持倉異常漲跌幅 >=%.0f%% (trade_date=%s): %s",
+                _ANOMALY_THRESHOLD * 100,
+                _date,
+                price_validation["anomaly_symbols"],
+            )
+
         # 4. 組 Prompt
+        validation_note = ""
+        if price_validation["missing_symbols"]:
+            validation_note += (
+                f"\n⚠️ 注意：以下持倉在 {_date} 無 EOD 收盤價，技術指標可能使用前日數據：{price_validation['missing_symbols']}\n"
+            )
+        if price_validation["anomaly_symbols"]:
+            validation_note += (
+                f"\n⚠️ 注意：以下持倉漲跌幅超過 {int(_ANOMALY_THRESHOLD * 100)}%，請確認資料正確性：{price_validation['anomaly_symbols']}\n"
+            )
+
         prompt = _PROMPT_TEMPLATE.format(
             trade_date=_date,
             market_overview=json.dumps(top_movers, ensure_ascii=False, indent=2),
             institution_data=json.dumps(institution_data, ensure_ascii=False, indent=2) or "（無三大法人資料）",
             technical_summary=json.dumps(technical, ensure_ascii=False, indent=2),
         )
+        if validation_note:
+            prompt = validation_note + prompt
 
         # 5. 呼叫 Gemini
         result_dict = call_agent_llm(prompt, model=DEFAULT_MODEL)
@@ -301,7 +388,7 @@ def run_eod_analysis(
             confidence=float(result_dict.get("confidence", 0.7)),
             action_type=str(result_dict.get("action_type", "suggest")),
             proposals=result_dict.get("proposals", []),
-            raw=result_dict,
+            raw={**result_dict, "price_validation": price_validation},
         )
     finally:
         if conn is None:
