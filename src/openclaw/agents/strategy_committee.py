@@ -162,6 +162,7 @@ def _build_market_context(conn: sqlite3.Connection) -> str:
     recent_decisions = query_db(
         conn,
         "SELECT ts, symbol, signal_side, signal_score FROM decisions "
+        "WHERE ts >= datetime('now', '-7 days') "
         "ORDER BY ts DESC LIMIT 8"
     )
 
