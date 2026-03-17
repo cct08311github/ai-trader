@@ -1,5 +1,6 @@
 """Tests for ticker_watcher graceful shutdown (Issue #237)."""
 import signal
+import sqlite3
 import time
 import types
 import unittest.mock as mock
@@ -84,7 +85,7 @@ def test_loop_exits_when_shutdown_requested(monkeypatch):
         "openclaw.risk_store": mock.MagicMock(),
         "openclaw.daily_pm_review": mock.MagicMock(),
     }):
-        with mock.patch("openclaw.ticker_watcher._open_conn", side_effect=Exception("no db")):
+        with mock.patch("openclaw.ticker_watcher._open_conn", side_effect=sqlite3.OperationalError("no db")):
             with mock.patch("openclaw.ticker_watcher._load_manual_watchlist", return_value=[]):
                 tw.run_watcher()
 
