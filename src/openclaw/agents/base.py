@@ -39,10 +39,11 @@ def query_db(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> List[Dic
 def call_agent_llm(
     prompt: str,
     model: str = DEFAULT_MODEL,
+    temperature: float = 0.2,
 ) -> Dict[str, Any]:
     """呼叫 MiniMax M2.5，回傳解析後的 dict。失敗時回傳 fallback dict。"""
     try:
-        return minimax_call(model, prompt)
+        return minimax_call(model, prompt, temperature=temperature)
     except Exception as e:
         return {
             "summary": f"LLM 呼叫失敗：{e}",

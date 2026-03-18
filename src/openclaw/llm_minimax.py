@@ -47,12 +47,13 @@ def _extract_json(text: str) -> Dict[str, Any]:
     raise ValueError(f"Cannot parse JSON from MiniMax response: {text[:300]}")
 
 
-def minimax_call(model: str, prompt: str) -> Dict[str, Any]:
+def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str, Any]:
     """呼叫 MiniMax M2.5，回傳解析後的 JSON dict。
 
     Args:
         model: MiniMax 模型 ID，e.g. "MiniMax-M2.5"。
         prompt: 完整 prompt 字串。
+        temperature: 生成溫度，預設 0.2（策略審查用低溫度確保確定性）。
 
     Returns:
         解析後的 dict，包含 '_raw_response', '_prompt', '_latency_ms', '_model'。
@@ -74,7 +75,7 @@ def minimax_call(model: str, prompt: str) -> Dict[str, Any]:
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
-        "temperature": 0.7,
+        "temperature": temperature,
     }
 
     t0 = time.time()

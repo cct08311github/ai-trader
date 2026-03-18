@@ -7,6 +7,7 @@ setup(
     package_dir={"": "src"},
     install_requires=[
         "shioaji>=1.0",
+        "requests>=2.28.0",
     ],
     python_requires=">=3.10",
 )
