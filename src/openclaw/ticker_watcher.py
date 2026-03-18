@@ -699,6 +699,14 @@ def run_watcher() -> None:
 
         # 每日重新載入手動清單 + 系統候選 → 合併 active watchlist
         if last_screen_date != today:
+            # 每日重新登入 Shioaji，防止 session token 24h 過期 (fixes #272)
+            if api is not None and sj_key and sj_secret:
+                try:
+                    api.login(api_key=sj_key, secret_key=sj_secret)
+                    log.info("[reconnect] Shioaji session refreshed for new trading day")
+                except Exception as _recon_e:  # noqa: BLE001 — broker API; can't predict exceptions
+                    log.warning("[reconnect] Shioaji re-login failed: %s — continuing with existing session", _recon_e)
+
             manual_watchlist = _load_manual_watchlist()
             sys_candidates: List[str] = []
             try:
