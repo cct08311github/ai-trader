@@ -17,5 +17,7 @@ google-genai>=1.0
 # Anthropic Claude (for chat feature — optional, falls back to Gemini)
 anthropic>=0.84
 
+requests>=2.28
+
 # Optional: install separately for live/simulation broker mode
 # pip install shioaji>=1.0
