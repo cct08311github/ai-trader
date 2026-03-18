@@ -93,6 +93,7 @@ class PortfolioState:
     unrealized_pnl: float
     positions: Dict[str, Position] = field(default_factory=dict)
     consecutive_losses: int = 0
+    same_day_fill_symbols: set = field(default_factory=set)
 
     def position_value(self, symbol: str) -> float:
         pos = self.positions.get(symbol)
@@ -233,6 +234,15 @@ def evaluate_and_build_order(
     if decision.signal_side == "sell" and _is_symbol_locked(decision.symbol):
         return EvaluationResult(False, "RISK_SYMBOL_LOCKED", metrics=base_metrics)
 
+    # WASH SALE PREVENTION — blocks buy re-entry on same day if symbol already filled today.
+    # Bypass with limits["wash_sale_prevention_enabled"] = 0.
+    if (
+        decision.signal_side == "buy"
+        and int(limits.get("wash_sale_prevention_enabled", 1))
+        and decision.symbol in portfolio.same_day_fill_symbols
+    ):
+        return EvaluationResult(False, "RISK_WASH_SALE", metrics=base_metrics)
+
     # DAILY PM APPROVAL — blocks all trading if today's review not approved.
     # Bypass with limits["pm_review_required"] = 0 (e.g. simulation / backtest).
     if int(limits.get("pm_review_required", 1)) and not _get_daily_pm_approval():
@@ -352,4 +362,5 @@ def default_limits() -> Dict[str, float]:
         "allow_auto_reduce_qty": 1,
         "position_sizing_method": "fixed_fractional",
         "sentinel_policy_path": "config/sentinel_policy_v1.json",
+        "wash_sale_prevention_enabled": 1,
     }
