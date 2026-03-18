@@ -17,6 +17,7 @@ from openclaw.agents.base import (
     AgentResult, COMMITTEE_MODEL, call_agent_llm, open_conn,
     query_db, to_agent_result, write_proposal, write_trace,
 )
+from openclaw.github_issue_client import open_strategy_proposal_issue
 
 _REPO_ROOT = get_repo_root()
 
@@ -456,7 +457,7 @@ def run_strategy_committee(
                     },
                 },
             }
-            write_proposal(
+            proposal_id = write_proposal(
                 _conn,
                 generated_by="strategy_committee",
                 target_rule=target_rule,
@@ -469,6 +470,25 @@ def run_strategy_committee(
                 proposal_payload=proposal_payload,
             )
             persisted_proposals.append(p)
+
+            # 非阻斷地開 GitHub Issue（失敗不影響主流程）
+            issue_url = open_strategy_proposal_issue(
+                proposal={
+                    "target_rule": target_rule,
+                    "proposed_value": proposed_value,
+                    "supporting_evidence": supporting_evidence,
+                    "confidence": float(p.get("confidence", 0.5)),
+                },
+                committee_context=proposal_payload.get("committee_context", {}),
+                proposal_id=proposal_id,
+            )
+            if issue_url:
+                write_trace(
+                    _conn,
+                    agent="strategy_committee",
+                    prompt="[GitHub Issue] 策略提案已開設 Issue",
+                    result={"issue_url": issue_url, "proposal_id": proposal_id},
+                )
 
         if duplicate_alerts:
             result.raw["duplicate_alerts"] = duplicate_alerts
