@@ -13,6 +13,7 @@ from openclaw.signal_logic import SignalParams, evaluate_entry, evaluate_exit
 _TZ_TWN = timezone(timedelta(hours=8))
 # 盤後收盤基準：14:30 TWN（台股 13:30 收盤，ingest 約 14:00–14:30 完成）
 _EOD_COMPLETE_HOUR = 14
+_EOD_COMPLETE_MINUTE = 30
 
 _TAKE_PROFIT_PCT:          float = float(os.environ.get("TAKE_PROFIT_PCT",   "0.02"))
 _STOP_LOSS_PCT:            float = float(os.environ.get("STOP_LOSS_PCT",     "0.03"))
@@ -36,7 +37,7 @@ def _fetch_candles(
     """
     if max_date is None:
         twn = datetime.now(tz=_TZ_TWN)
-        if twn.hour >= _EOD_COMPLETE_HOUR:
+        if (twn.hour, twn.minute) >= (_EOD_COMPLETE_HOUR, _EOD_COMPLETE_MINUTE):
             max_date = twn.strftime("%Y-%m-%d")
         else:
             max_date = (twn - timedelta(days=1)).strftime("%Y-%m-%d")
