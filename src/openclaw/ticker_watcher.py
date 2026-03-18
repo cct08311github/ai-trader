@@ -32,6 +32,9 @@ from typing import Dict, List, Optional
 # Graceful shutdown flag — set by SIGTERM/SIGINT handler
 _shutdown_requested: bool = False
 
+# EOD 清理旗標：記錄最後一次執行取消未成交訂單的日期，確保每日只執行一次
+_eod_cleanup_done_date: Optional[dt.date] = None
+
 
 def _handle_shutdown_signal(signum: int, frame: object) -> None:  # noqa: ARG001
     global _shutdown_requested
@@ -597,6 +600,41 @@ def _check_live_mode_safety(
     if not trading_enabled:
         return False, "trading_enabled is False"
     return True, "OK"
+
+
+# ── EOD 盤後清理：取消當日未成交的 pending/submitted 訂單 ─────────────────────
+def _cancel_stale_pending_orders(conn: sqlite3.Connection, broker) -> int:
+    """收盤前取消所有今日未成交的 pending/submitted 訂單。
+
+    台股收盤後（13:30+）呼叫，避免未成交限價單在隔日以過期價格成交。
+    使用 date(ts_submit, '+8 hours') 將 UTC ISO 時間戳轉換為台北日期比對。
+
+    Returns: number of orders cancelled
+    """
+    today_str = dt.datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+    rows = conn.execute(
+        """SELECT order_id, broker_order_id, symbol
+           FROM orders
+           WHERE status IN ('pending', 'submitted')
+             AND date(ts_submit, '+8 hours') = ?""",
+        (today_str,),
+    ).fetchall()
+
+    cancelled = 0
+    for row in rows:
+        order_id, broker_order_id, symbol = row[0], row[1], row[2]
+        try:
+            broker.cancel_order(broker_order_id or order_id)
+            conn.execute(
+                "UPDATE orders SET status='cancelled' WHERE order_id=?",
+                (order_id,),
+            )
+            conn.commit()
+            log.info("[EOD] Cancelled stale order %s (%s)", order_id[:8], symbol)
+            cancelled += 1
+        except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
+            log.warning("[EOD] Failed to cancel order %s: %s", order_id[:8], e)
+    return cancelled
 
 
 # ── 主迴圈 ────────────────────────────────────────────────────────────────────
@@ -1185,6 +1223,19 @@ def run_watcher() -> None:
                     log.info("[tg_approver] Processed %d approval callbacks", n_cb)
             except Exception as _ta:  # noqa: BLE001 — dynamic import + Telegram API
                 log.warning("[tg_approver] error: %s", _ta)
+
+            # ── EOD 盤後清理：收盤後取消未成交訂單（每日只執行一次）────────
+            global _eod_cleanup_done_date
+            now_twn = dt.datetime.now(tz=_TZ_TWN)
+            if now_twn.hour > 13 or (now_twn.hour == 13 and now_twn.minute >= 30):
+                if _eod_cleanup_done_date != today:
+                    try:
+                        n = _cancel_stale_pending_orders(conn, broker)
+                        if n > 0:
+                            log.info("[EOD] Cancelled %d stale orders", n)
+                        _eod_cleanup_done_date = today
+                    except Exception as _eod_e:  # noqa: BLE001 — cleanup guard; must not crash scan loop
+                        log.warning("[EOD] cleanup failed: %s", _eod_e)
 
         except Exception as e:  # noqa: BLE001 — outer scan cycle guard; must catch all
             log.error("Scan cycle error: %s", e, exc_info=True)
