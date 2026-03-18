@@ -905,6 +905,10 @@ def run_watcher() -> None:
 
             # 一次性取得所有行情，並更新價格歷史
             snaps: Dict[str, dict] = {sym: _get_snapshot(api, sym) for sym in active_watchlist}
+            # 黑天鵝熔斷：無論 0050 是否在 watchlist，都取其即時快照供熔斷判斷
+            _BELLWETHER = "0050"
+            if _BELLWETHER not in snaps:
+                snaps[_BELLWETHER] = _get_snapshot(api, _BELLWETHER)
             for sym, s in snaps.items():
                 _update_price_history(price_history, sym, s["close"])
 
@@ -1067,6 +1071,7 @@ def run_watcher() -> None:
                         conn, symbol, snap,
                         position_avg_price=avg_price,
                         high_water_mark=high_water_marks.get(symbol),
+                        market_snap=snaps.get(_BELLWETHER),
                     )
                     sig = _agg_signal.action
                     # 將 aggregator 結果記入 trace metadata

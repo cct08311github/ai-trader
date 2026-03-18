@@ -20,6 +20,11 @@ REGIME_WEIGHTS: dict[str, dict[str, float]] = {
     "range": {"technical": 0.40, "llm": 0.20, "risk_adj": 0.40},
 }
 
+# 黑天鵝即時熔斷：市場指數（0050）單日跌幅超過此門檻時強制切入 bear regime
+_BLACK_SWAN_DROP_THRESHOLD: float = float(
+    __import__("os").environ.get("BLACK_SWAN_DROP_THRESHOLD", "-0.03")
+)
+
 SIGNAL_TO_SCORE: dict[str, float] = {"buy": 0.8, "flat": 0.5, "sell": 0.2}
 
 _LIMIT_UP_THRESHOLD   = 0.095   # 漲幅 >= 9.5% 視為漲停
@@ -59,6 +64,7 @@ def aggregate(
     snap: dict,
     position_avg_price: Optional[float],
     high_water_mark: Optional[float],
+    market_snap: Optional[dict] = None,
 ) -> AggregatedSignal:
     """
     計算 Regime-based 加權信號。
@@ -72,6 +78,20 @@ def aggregate(
 
     # 1. Market regime
     regime, vol_mult = _get_regime(conn, symbol)
+
+    # 黑天鵝即時熔斷：市場指數單日跌幅超過門檻時強制切入 bear regime
+    if market_snap is not None:
+        _close = market_snap.get("close", 0.0)
+        _ref   = market_snap.get("reference", _close) or _close
+        if _ref > 0:
+            _market_drop = (_close - _ref) / _ref
+            if _market_drop <= _BLACK_SWAN_DROP_THRESHOLD:
+                regime = "bear"
+                reasons.append(
+                    f"BLACK_SWAN_OVERRIDE:market_drop={_market_drop:.2%}"
+                    f"<={_BLACK_SWAN_DROP_THRESHOLD:.2%}"
+                )
+
     weights = REGIME_WEIGHTS.get(regime, REGIME_WEIGHTS["range"])
     reasons.append(f"regime={regime}")
 
