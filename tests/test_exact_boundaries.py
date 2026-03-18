@@ -97,6 +97,12 @@ def _patch_helpers(monkeypatch):
     """Suppress file-based helpers so all tests run in isolation."""
     monkeypatch.setattr("openclaw.risk_engine._is_symbol_locked", lambda s: False)
     monkeypatch.setattr("openclaw.risk_engine._get_daily_pm_approval", lambda: True)
+    # Suppress TW session multipliers: boundary tests verify exact numeric limits;
+    # running during Taiwan PREOPEN/AFTERHOURS would silently alter limits and flip results.
+    monkeypatch.setattr(
+        "openclaw.risk_engine.apply_tw_session_risk_adjustments",
+        lambda limits, *, now_ms, sentinel_policy_path="config/sentinel_policy_v1.json": dict(limits),
+    )
 
 
 # ---------------------------------------------------------------------------

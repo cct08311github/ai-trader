@@ -630,6 +630,14 @@ def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
             break
         time.sleep(0.5)
 
+    # 處理超時後部分成交的狀況（loop 結束但未到 terminal）
+    if final_status == "submitted" and last_filled_qty > 0:
+        final_status = "partially_filled"
+        conn.execute("UPDATE orders SET status='partially_filled' WHERE order_id=?", (order_id,))
+        conn.commit()
+        log.warning("[%s] order_id=%s timed out with partial fill %d/%d — marked partially_filled",
+                    symbol, order_id, last_filled_qty, qty)
+
     log.info("[%s] order_id=%s status=%s filled=%d/%d price=%.1f",
              symbol, order_id, final_status, last_filled_qty, qty, price)
     return (final_status == "filled"), order_id
