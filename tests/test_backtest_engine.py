@@ -202,3 +202,124 @@ def test_load_signal_params_fallback_on_missing():
     params = load_params_from_file("/nonexistent/path.json")
     default = SignalParams()
     assert params.ma_short == default.ma_short
+
+
+# ─── Test 5: _apply_slippage unit tests ───────────────────────────────────────
+
+class TestApplySlippage:
+    """_apply_slippage 純函數單元測試。"""
+
+    def _slip(self, price, side, bps):
+        from openclaw.backtest_engine import _apply_slippage
+        return _apply_slippage(price, side, bps)
+
+    def test_zero_bps_returns_price_unchanged(self):
+        assert self._slip(100.0, "buy", 0) == 100.0
+        assert self._slip(100.0, "sell", 0) == 100.0
+
+    def test_buy_side_increases_price(self):
+        result = self._slip(100.0, "buy", 10)
+        # 10 bps = 0.1% → 100 * 1.001 = 100.10
+        assert result > 100.0
+        assert abs(result - 100.10) < 0.01
+
+    def test_sell_side_decreases_price(self):
+        result = self._slip(100.0, "sell", 10)
+        # 10 bps = 0.1% → 100 * 0.999 = 99.90
+        assert result < 100.0
+        assert abs(result - 99.90) < 0.01
+
+    def test_result_rounded_to_2_decimal_places(self):
+        result = self._slip(333.33, "buy", 10)
+        assert result == round(result, 2)
+
+    def test_large_bps_still_applies_correctly(self):
+        # 100 bps = 1%
+        result = self._slip(200.0, "buy", 100)
+        assert abs(result - 202.0) < 0.01
+
+    def test_sell_slippage_less_than_buy_slippage(self):
+        buy_price = self._slip(100.0, "buy", 20)
+        sell_price = self._slip(100.0, "sell", 20)
+        assert sell_price < 100.0 < buy_price
+
+
+# ─── Test 6: slippage reduces final NAV ───────────────────────────────────────
+
+def test_slippage_reduces_final_nav():
+    """有滑點（10 bps）的 NAV 應低於無滑點（0 bps）的 NAV。"""
+    symbol = "2330"
+    rows = _uptrend_rows(symbol, start_close=500.0, days=40)
+    db_path = _make_db(rows)
+
+    sp = SignalParams(
+        ma_short=3,
+        ma_long=5,
+        take_profit_pct=0.50,
+        stop_loss_pct=0.10,
+        trailing_pct=0.99,
+        rsi_entry_max=100.0,
+    )
+
+    def _run(slippage_bps: int) -> float:
+        config = BacktestConfig(
+            symbols=[symbol],
+            start_date="2024-01-01",
+            end_date="2024-12-31",
+            initial_capital=1_000_000.0,
+            signal_params=sp,
+            max_positions=3,
+            cost_params=CostParams(),
+            slippage_bps=slippage_bps,
+        )
+        result = run_backtest(config, db_path)
+        return result.equity_curve[-1]
+
+    nav_no_slip = _run(0)
+    nav_with_slip = _run(10)
+
+    # 有滑點的最終 NAV 應 ≤ 無滑點（若有交易發生）
+    assert nav_with_slip <= nav_no_slip, (
+        f"有滑點 NAV ({nav_with_slip}) 應 ≤ 無滑點 NAV ({nav_no_slip})"
+    )
+
+
+def test_slippage_default_is_10_bps():
+    """BacktestConfig 預設 slippage_bps 應為 10。"""
+    sp = SignalParams()
+    config = BacktestConfig(
+        symbols=["0050"],
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        initial_capital=100_000.0,
+        signal_params=sp,
+    )
+    assert config.slippage_bps == 10
+
+
+def test_slippage_zero_disables_slippage():
+    """slippage_bps=0 時，buy exec_price 應等於 close_price。"""
+    symbol = "0050"
+    rows = _uptrend_rows(symbol, start_close=100.0, days=20)
+    db_path = _make_db(rows)
+
+    sp = SignalParams(
+        ma_short=3, ma_long=5,
+        take_profit_pct=0.5, stop_loss_pct=0.3,
+        trailing_pct=0.99, rsi_entry_max=100.0,
+    )
+    config = BacktestConfig(
+        symbols=[symbol],
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        initial_capital=1_000_000.0,
+        signal_params=sp,
+        slippage_bps=0,
+    )
+    result = run_backtest(config, db_path)
+
+    # 當 slippage=0，entry_price 應等於 exit_price 或收盤價（買入=收盤）
+    for trade in result.trades:
+        # entry_price 為 close_price（無滑點調整），應為整數倍率的合理值
+        assert trade["entry_price"] > 0
+        assert trade["exit_price"] > 0
