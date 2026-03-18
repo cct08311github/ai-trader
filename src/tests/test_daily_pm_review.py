@@ -183,6 +183,56 @@ def test_build_daily_context_with_trades_data():
     assert ctx["recent_trades"][0]["symbol"] == "2330.TW"
     assert len(ctx["recent_pnl"]) == 1
     assert len(ctx["open_positions"]) == 1
+    # 有持倉時 portfolio_status 應標注部位數
+    assert "1" in ctx["portfolio_status"]
+    conn.close()
+
+
+def test_build_daily_context_empty_portfolio_status():
+    """空倉且無成交時 portfolio_status 明確說明從未建倉。"""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    # 建最基本的 schema，但不插資料
+    conn.executescript("""
+        CREATE TABLE orders (order_id TEXT PRIMARY KEY, decision_id TEXT, broker_order_id TEXT,
+            ts_submit TEXT, symbol TEXT, side TEXT, qty INTEGER, price REAL,
+            order_type TEXT, tif TEXT, status TEXT, strategy_version TEXT, settlement_date TEXT);
+        CREATE TABLE fills (fill_id TEXT PRIMARY KEY, order_id TEXT, ts_fill TEXT,
+            qty INTEGER, price REAL, fee REAL, tax REAL);
+        CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+            current_price REAL, unrealized_pnl REAL, high_water_mark REAL);
+    """)
+    ctx = dpr.build_daily_context(conn=conn)
+    assert ctx["open_positions"] == []
+    assert ctx["recent_trades"] == []
+    assert "空倉" in ctx["portfolio_status"]
+    assert "從未" in ctx["portfolio_status"]
+    conn.close()
+
+
+def test_build_daily_context_empty_positions_with_history():
+    """有歷史成交但目前空倉時，portfolio_status 說明這是歷史紀錄而非近期出場。"""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE orders (order_id TEXT PRIMARY KEY, decision_id TEXT, broker_order_id TEXT,
+            ts_submit TEXT, symbol TEXT, side TEXT, qty INTEGER, price REAL,
+            order_type TEXT, tif TEXT, status TEXT, strategy_version TEXT, settlement_date TEXT);
+        CREATE TABLE fills (fill_id TEXT PRIMARY KEY, order_id TEXT, ts_fill TEXT,
+            qty INTEGER, price REAL, fee REAL, tax REAL);
+        CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity INTEGER, avg_price REAL,
+            current_price REAL, unrealized_pnl REAL, high_water_mark REAL);
+    """)
+    conn.execute(
+        "INSERT INTO orders VALUES ('o1','d1','b1','2025-01-01T10:00:00','2330','sell',1000,600.0,'limit','IOC','filled','v1',NULL)"
+    )
+    conn.execute("INSERT INTO fills VALUES ('f1','o1','2025-01-01T10:00:01',1000,600.0,9.0,18.0)")
+    conn.commit()
+    ctx = dpr.build_daily_context(conn=conn)
+    assert ctx["open_positions"] == []
+    assert len(ctx["recent_trades"]) == 1
+    assert "空倉" in ctx["portfolio_status"]
+    assert "歷史" in ctx["portfolio_status"]
     conn.close()
 
 
