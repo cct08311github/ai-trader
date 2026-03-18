@@ -159,6 +159,8 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         # Sprint 2
         "ALTER TABLE positions ADD COLUMN state TEXT DEFAULT 'HOLDING'",
         "ALTER TABLE positions ADD COLUMN entry_trading_day TEXT",
+        # Issue #284: execution quality comparison
+        "ALTER TABLE orders ADD COLUMN account_mode TEXT NOT NULL DEFAULT 'simulation'",
     ]
     for sql in migrations:
         try:
@@ -418,16 +420,17 @@ def _persist_risk_check(conn: sqlite3.Connection, *, decision_id: str, passed: b
 def _persist_order(conn: sqlite3.Connection, *, order_id: str, decision_id: str,
                     broker_order_id: str, symbol: str, side: str, qty: int,
                     price: float, status: str = "submitted",
-                    settlement_date: Optional[str] = None) -> None:
+                    settlement_date: Optional[str] = None,
+                    account_mode: str = "simulation") -> None:
     conn.execute(
         """INSERT INTO orders
            (order_id, decision_id, broker_order_id, ts_submit,
             symbol, side, qty, price, order_type, tif, status, strategy_version,
-            settlement_date)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            settlement_date, account_mode)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (order_id, decision_id, broker_order_id, _utc_now_iso(),
          symbol, side, qty, price, "limit", "IOC", status, STRATEGY_VERSION,
-         settlement_date),
+         settlement_date, account_mode),
     )
 
 
@@ -577,7 +580,8 @@ def _evaluate_cash_mode(
 # ── 模擬下單執行 ──────────────────────────────────────────────────────────────
 def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
                         symbol: str, side: str, qty: int, price: float,
-                        candidate, guard_limits: dict | None = None) -> tuple[bool, str]:
+                        candidate, guard_limits: dict | None = None,
+                        account_mode: str = "simulation") -> tuple[bool, str]:
     """提交模擬單，poll 成交，寫入 orders/fills/order_events。"""
     from openclaw.pre_trade_guard import evaluate_pre_trade_guard
 
@@ -586,7 +590,7 @@ def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
     if not guard_result.approved:
         _persist_order(conn, order_id=order_id, decision_id=decision_id,
                        broker_order_id="", symbol=symbol, side=side, qty=qty,
-                       price=price, status="rejected")
+                       price=price, status="rejected", account_mode=account_mode)
         _insert_order_event(conn, order_id=order_id, event_type="rejected",
                             from_status=None, to_status="rejected",
                             source="pre_trade_guard",
@@ -607,14 +611,14 @@ def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
         _persist_order(conn, order_id=order_id, decision_id=decision_id,
                        broker_order_id=submission.broker_order_id or "",
                        symbol=symbol, side=side, qty=qty, price=price, status="rejected",
-                       settlement_date=settlement_date)
+                       settlement_date=settlement_date, account_mode=account_mode)
         log.warning("[%s] broker rejected: %s", symbol, submission.reason)
         return False, order_id
 
     _persist_order(conn, order_id=order_id, decision_id=decision_id,
                    broker_order_id=submission.broker_order_id,
                    symbol=symbol, side=side, qty=qty, price=price, status="submitted",
-                   settlement_date=settlement_date)
+                   settlement_date=settlement_date, account_mode=account_mode)
     _insert_order_event(conn, order_id=order_id, event_type="submitted",
                         from_status=None, to_status="submitted",
                         source="watcher", reason_code=None,
@@ -1007,6 +1011,7 @@ def run_watcher() -> None:
                         price=_exit_result.order.price,
                         candidate=_exit_result.order,
                         guard_limits=limits,
+                        account_mode="live" if not simulation else "simulation",
                     )
                     conn.commit()
                     if _ok:
@@ -1171,6 +1176,7 @@ def run_watcher() -> None:
                         price=result.order.price,
                         candidate=result.order,
                         guard_limits=limits,
+                        account_mode="live" if not simulation else "simulation",
                     )
                     conn.commit()
 
@@ -1249,6 +1255,7 @@ def run_watcher() -> None:
                             side="sell", qty=intent.qty,
                             price=intent.price, candidate=candidate,
                             guard_limits=limits,
+                            account_mode="live" if not simulation else "simulation",
                         )
                         conn.commit()
                         if ok:
