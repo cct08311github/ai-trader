@@ -162,16 +162,29 @@ def _apply_level_caps(
     entry_price: float,
     nav: float,
     level_limits: Optional[PositionLevelLimits],
+    avg_daily_volume_twd: float | None = None,
+    max_adv_pct: float = 0.10,
 ) -> int:
     if qty <= 0:
         return 0
     if entry_price <= 0 or nav <= 0:
         return 0
     if level_limits is None:
+        # Still apply ADV cap even without level limits.
+        if avg_daily_volume_twd and avg_daily_volume_twd > 0 and max_adv_pct > 0:
+            adv_notional = avg_daily_volume_twd * max(0.0, max_adv_pct)
+            adv_qty = int(adv_notional / entry_price)
+            qty = max(0, min(qty, adv_qty))
         return qty
 
-    # Notional cap.
+    # Notional cap from sentinel level limits.
     max_notional = nav * max(0.0, level_limits.max_position_notional_pct_nav)
+
+    # ADV cap: position value ≤ max_adv_pct × average_daily_volume (in TWD).
+    if avg_daily_volume_twd and avg_daily_volume_twd > 0 and max_adv_pct > 0:
+        adv_notional = avg_daily_volume_twd * max(0.0, max_adv_pct)
+        max_notional = min(max_notional, adv_notional)
+
     if max_notional <= 0:
         return 0
 
@@ -179,7 +192,13 @@ def _apply_level_caps(
     return max(0, min(int(qty), capped_qty))
 
 
-def atr_risk_qty(inp: ATRPositionSizingInput, *, level_limits: Optional[PositionLevelLimits] = None) -> int:
+def atr_risk_qty(
+    inp: ATRPositionSizingInput,
+    *,
+    level_limits: Optional[PositionLevelLimits] = None,
+    avg_daily_volume_twd: float | None = None,
+    max_adv_pct: float = 0.10,
+) -> int:
     if inp.nav <= 0 or inp.entry_price <= 0 or inp.atr <= 0:
         return 0
 
@@ -202,8 +221,47 @@ def atr_risk_qty(inp: ATRPositionSizingInput, *, level_limits: Optional[Position
     if inp.confidence < inp.confidence_threshold:
         qty = int(qty * inp.low_confidence_scale)
 
-    qty = _apply_level_caps(qty=qty, entry_price=inp.entry_price, nav=inp.nav, level_limits=level_limits)
+    qty = _apply_level_caps(
+        qty=qty,
+        entry_price=inp.entry_price,
+        nav=inp.nav,
+        level_limits=level_limits,
+        avg_daily_volume_twd=avg_daily_volume_twd,
+        max_adv_pct=max_adv_pct,
+    )
     return max(0, int(qty))
+
+
+def fetch_avg_daily_volume_twd(
+    conn: "sqlite3.Connection",
+    symbol: str,
+    days: int = 20,
+) -> float | None:
+    """Compute average daily turnover (TWD) for *symbol* over the last *days* trading days.
+
+    Returns ``None`` when there is insufficient data or the table does not exist.
+    ADV_TWD = avg(volume * close) over the lookback window.
+    """
+    try:
+        rows = conn.execute(
+            """
+            SELECT volume, close
+            FROM eod_prices
+            WHERE symbol = ?
+              AND volume > 0
+              AND close > 0
+            ORDER BY trade_date DESC
+            LIMIT ?
+            """,
+            (symbol, days),
+        ).fetchall()
+    except Exception:
+        return None
+
+    if not rows:
+        return None
+    total = sum(float(r[0]) * float(r[1]) for r in rows)
+    return total / len(rows)
 
 
 def calculate_position_qty(
@@ -221,6 +279,8 @@ def calculate_position_qty(
     method: str = "fixed_fractional",
     authority_level: int | None = None,
     sentinel_policy_path: str = "config/sentinel_policy_v1.json",
+    avg_daily_volume_twd: float | None = None,
+    max_adv_pct: float = 0.10,
 ) -> int:
     """Unified sizing entrypoint.
 
@@ -252,6 +312,8 @@ def calculate_position_qty(
                 volatility_multiplier=volatility_multiplier,
             ),
             level_limits=level_limits,
+            avg_daily_volume_twd=avg_daily_volume_twd,
+            max_adv_pct=max_adv_pct,
         )
 
     # Fallback: fixed-fractional using stop price.
@@ -270,5 +332,12 @@ def calculate_position_qty(
         )
     )
 
-    qty = _apply_level_caps(qty=qty, entry_price=entry_price, nav=nav, level_limits=level_limits)
+    qty = _apply_level_caps(
+        qty=qty,
+        entry_price=entry_price,
+        nav=nav,
+        level_limits=level_limits,
+        avg_daily_volume_twd=avg_daily_volume_twd,
+        max_adv_pct=max_adv_pct,
+    )
     return max(0, int(qty))
