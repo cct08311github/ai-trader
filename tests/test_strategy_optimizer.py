@@ -219,6 +219,123 @@ class TestOptimizationGateway:
         assert row["last_auto_change_ts"] >= now
 
 
+class TestWalkForwardValidator:
+    """WalkForwardValidator 單元測試 [Issue #281]"""
+
+    def _insert_trades(self, conn, n_wins, n_losses, days_ago=5):
+        """在 days_ago 天前插入 n_wins 筆獲利 + n_losses 筆虧損交易。"""
+        from datetime import datetime, timedelta
+        for i in range(n_wins):
+            _insert_matched_trade(conn, "2330", 100, 110, days_ago=days_ago)
+        for i in range(n_losses):
+            _insert_matched_trade(conn, "2454", 100, 90, days_ago=days_ago)
+
+    def test_bypass_when_validation_sample_insufficient(self, opt_db):
+        """驗證期交易筆數 < _WF_MIN_VALID_TRADES → bypass（保守通過）。"""
+        from openclaw.strategy_optimizer import (
+            WalkForwardValidator, MetricsReport, _WF_MIN_VALID_TRADES
+        )
+        # 驗證期（最近 20 天）只有 1 筆交易
+        _insert_matched_trade(opt_db, "2330", 100, 90, days_ago=5)
+
+        vld = WalkForwardValidator(opt_db)
+        train_metrics = MetricsReport(sample_n=30, confidence=1.0,
+                                      win_rate=0.2, profit_factor=0.5)
+        passed, reason = vld.validate("low_win_rate", train_metrics)
+        assert passed is True
+        assert "bypass" in reason
+
+    def test_passes_when_validation_confirms_low_win_rate(self, opt_db):
+        """驗證期也是低勝率 → 通過（確認問題真實）。"""
+        from openclaw.strategy_optimizer import WalkForwardValidator, MetricsReport
+        # 插入足夠筆數的全虧損交易（在驗證期內）
+        for _ in range(10):
+            _insert_matched_trade(opt_db, "2330", 100, 90, days_ago=5)
+
+        vld = WalkForwardValidator(opt_db)
+        train_metrics = MetricsReport(sample_n=30, confidence=1.0,
+                                      win_rate=0.2, profit_factor=0.5)
+        passed, reason = vld.validate("low_win_rate", train_metrics)
+        assert passed is True
+        assert "confirmed" in reason
+
+    def test_rejects_when_validation_shows_good_win_rate(self, opt_db):
+        """驗證期勝率恢復（>= 0.35）→ 拒絕調整（避免過度擬合）。"""
+        from openclaw.strategy_optimizer import WalkForwardValidator, MetricsReport
+        # 插入驗證期全是獲利交易（win_rate = 1.0）
+        for _ in range(10):
+            _insert_matched_trade(opt_db, "2330", 100, 120, days_ago=5)
+
+        vld = WalkForwardValidator(opt_db)
+        train_metrics = MetricsReport(sample_n=30, confidence=1.0,
+                                      win_rate=0.2, profit_factor=0.5)
+        passed, reason = vld.validate("low_win_rate", train_metrics)
+        assert passed is False
+        assert "rejected" in reason
+
+    def test_unknown_condition_bypasses(self, opt_db):
+        """未知條件 → bypass（保守通過）。"""
+        from openclaw.strategy_optimizer import WalkForwardValidator, MetricsReport
+        for _ in range(5):
+            _insert_matched_trade(opt_db, "2330", 100, 90, days_ago=5)
+
+        vld = WalkForwardValidator(opt_db)
+        train_metrics = MetricsReport(sample_n=30, confidence=1.0,
+                                      win_rate=0.2, profit_factor=0.5)
+        passed, reason = vld.validate("unknown_condition", train_metrics)
+        assert passed is True
+        assert "bypass" in reason
+
+
+class TestOptimizationGatewayWalkForward:
+    """OptimizationGateway walk-forward 整合測試 [Issue #281]"""
+
+    def _setup_gateway(self, opt_db):
+        opt_db.execute(
+            "INSERT OR REPLACE INTO param_bounds VALUES (?,?,?,?,?,?)",
+            ("trailing_pct", 0.03, 0.10, 0.02, None, None)
+        )
+        _insert_trailing_pct(opt_db, 0.05)
+        opt_db.commit()
+
+    def test_adjustment_blocked_when_validation_recovers(self, opt_db):
+        """訓練期低勝率但驗證期已恢復 → 調整被 walk-forward 拒絕。"""
+        self._setup_gateway(opt_db)
+
+        # 60+ 天前插入 30 筆虧損（訓練期）
+        for _ in range(30):
+            _insert_matched_trade(opt_db, "2330", 100, 90, days_ago=50)
+
+        # 最近 20 天（驗證期）插入 10 筆全部獲利
+        for _ in range(10):
+            _insert_matched_trade(opt_db, "0050", 100, 120, days_ago=5)
+
+        from openclaw.strategy_optimizer import OptimizationGateway, StrategyMetricsEngine
+        # 訓練期 metrics（用 60 天窗口）
+        metrics = StrategyMetricsEngine(opt_db).compute(window_days=60)
+        adjustments = OptimizationGateway(opt_db).on_eod(metrics)
+
+        trailing_adjs = [a for a in adjustments if a["param_key"] == "trailing_pct"]
+        # 驗證期勝率恢復，不應發生調整
+        assert trailing_adjs == []
+
+    def test_adjustment_proceeds_when_validation_confirms(self, opt_db):
+        """訓練期與驗證期都是低勝率 → walk-forward 通過，調整生效。"""
+        self._setup_gateway(opt_db)
+
+        # 訓練期 + 驗證期都是虧損
+        for _ in range(30):
+            _insert_matched_trade(opt_db, "2330", 100, 90, days_ago=5)
+
+        from openclaw.strategy_optimizer import OptimizationGateway, StrategyMetricsEngine
+        metrics = StrategyMetricsEngine(opt_db).compute()
+        adjustments = OptimizationGateway(opt_db).on_eod(metrics)
+
+        trailing_adjs = [a for a in adjustments if a["param_key"] == "trailing_pct"]
+        assert len(trailing_adjs) == 1
+        assert trailing_adjs[0]["new_value"] > trailing_adjs[0]["old_value"]
+
+
 class TestReflectionAgent:
     def test_reflect_returns_list(self, opt_db, monkeypatch):
         """reflect_weekly 回傳 list（即使 LLM 未設定也不崩潰）"""
