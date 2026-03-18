@@ -59,7 +59,7 @@ def _tg_request(token: str, method: str, params: dict) -> Optional[dict]:
         with urllib.request.urlopen(req, timeout=_POLL_TIMEOUT + 5) as resp:
             return json.loads(resp.read().decode())
     except Exception as e:  # noqa: BLE001
-        log.debug("tg_kill_switch: API 呼叫失敗 %s/%s: %s", method, params.get("method"), e)
+        log.debug("tg_kill_switch: API 呼叫失敗 %s: %s", method, e)
         return None
 
 
