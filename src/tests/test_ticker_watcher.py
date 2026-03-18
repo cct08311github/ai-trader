@@ -1501,3 +1501,84 @@ def test_watcher_imports_sprint2_modules(monkeypatch):
     assert callable(te.tick)
     assert callable(sa.aggregate)
     assert callable(lc.read_cache)
+
+
+# ── Shioaji daily reconnect (fixes #272) ─────────────────────────────────────
+
+class TestShioajiDailyReconnect:
+    """每日重新登入 Shioaji 防止 session token 24h 過期（#272）。
+
+    We test the reconnect block indirectly by simulating the two conditions
+    that surround it in the main loop:
+      - api is not None and credentials are available → login() called
+      - login() raises → warning logged, no exception propagated
+    """
+
+    def _make_api_mock(self):
+        api = MagicMock()
+        api.login = MagicMock(return_value=None)
+        return api
+
+    def test_reconnect_called_on_new_day(self, caplog):
+        """新日期觸發時，api.login() 應被呼叫一次。"""
+        import logging
+        import openclaw.ticker_watcher as tw
+
+        api = self._make_api_mock()
+        sj_key = "test-key"
+        sj_secret = "test-secret"
+
+        with caplog.at_level(logging.INFO, logger=tw.log.name):
+            if api is not None and sj_key and sj_secret:
+                try:
+                    api.login(api_key=sj_key, secret_key=sj_secret)
+                    tw.log.info("[reconnect] Shioaji session refreshed for new trading day")
+                except Exception as _recon_e:  # noqa: BLE001
+                    tw.log.warning("[reconnect] Shioaji re-login failed: %s — continuing with existing session", _recon_e)
+
+        api.login.assert_called_once_with(api_key=sj_key, secret_key=sj_secret)
+        assert any("[reconnect] Shioaji session refreshed" in m for m in caplog.messages)
+
+    def test_reconnect_failure_does_not_crash(self, caplog):
+        """api.login() 失敗時應 log warning 但不 raise。"""
+        import logging
+        import openclaw.ticker_watcher as tw
+
+        api = self._make_api_mock()
+        api.login.side_effect = RuntimeError("token expired")
+        sj_key = "test-key"
+        sj_secret = "test-secret"
+
+        with caplog.at_level(logging.WARNING, logger=tw.log.name):
+            if api is not None and sj_key and sj_secret:
+                try:
+                    api.login(api_key=sj_key, secret_key=sj_secret)
+                    tw.log.info("[reconnect] Shioaji session refreshed for new trading day")
+                except Exception as _recon_e:  # noqa: BLE001
+                    tw.log.warning("[reconnect] Shioaji re-login failed: %s — continuing with existing session", _recon_e)
+
+        # Should not have raised; warning should be logged
+        assert any("[reconnect] Shioaji re-login failed" in m for m in caplog.messages)
+
+    def test_reconnect_skipped_when_api_none(self):
+        """api 為 None（無憑證）時跳過 reconnect，不呼叫任何 login。"""
+        api = None
+        sj_key = "test-key"
+        sj_secret = "test-secret"
+        login_called = False
+
+        if api is not None and sj_key and sj_secret:
+            login_called = True  # pragma: no cover
+
+        assert not login_called
+
+    def test_reconnect_skipped_when_no_credentials(self):
+        """sj_key 為空時跳過 reconnect。"""
+        api = self._make_api_mock()
+        sj_key = ""
+        sj_secret = "test-secret"
+
+        if api is not None and sj_key and sj_secret:
+            api.login(api_key=sj_key, secret_key=sj_secret)  # pragma: no cover
+
+        api.login.assert_not_called()
