@@ -1,11 +1,106 @@
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+# ── 台灣股票交易所國定假日（2025–2026）────────────────────────────────────────
+TAIWAN_HOLIDAYS_2024_2026: set[date] = {
+    # 2025 Taiwan public holidays (TSE calendar)
+    date(2025, 1, 1),   # New Year's Day 元旦
+    date(2025, 1, 27),  # Lunar New Year eve 農曆除夕
+    date(2025, 1, 28),  # Lunar New Year Day 1 春節
+    date(2025, 1, 29),  # Lunar New Year Day 2 春節
+    date(2025, 1, 30),  # Lunar New Year Day 3 春節
+    date(2025, 1, 31),  # Lunar New Year Day 4 春節
+    date(2025, 2, 28),  # Peace Memorial Day 和平紀念日
+    date(2025, 4, 3),   # Children's Day 兒童節
+    date(2025, 4, 4),   # Tomb Sweeping Day 清明節
+    date(2025, 5, 1),   # Labor Day 勞動節
+    date(2025, 5, 30),  # Dragon Boat Festival eve 端午節補假
+    date(2025, 5, 31),  # Dragon Boat Festival 端午節
+    date(2025, 10, 6),  # Mid-Autumn Festival 中秋節
+    date(2025, 10, 10), # National Day 國慶日
+    # 2026 Taiwan public holidays (TSE calendar)
+    date(2026, 1, 1),   # New Year's Day 元旦
+    date(2026, 2, 16),  # Lunar New Year Day 1 春節
+    date(2026, 2, 17),  # Lunar New Year Day 2 春節
+    date(2026, 2, 18),  # Lunar New Year Day 3 春節
+    date(2026, 2, 19),  # Lunar New Year Day 4 春節
+    date(2026, 2, 20),  # Lunar New Year Day 5 春節
+    date(2026, 3, 28),  # Tomb Sweeping Day makeup 清明節補假
+    date(2026, 4, 3),   # Children's Day 兒童節
+    date(2026, 4, 4),   # Tomb Sweeping Day 清明節
+    date(2026, 6, 19),  # Dragon Boat Festival 端午節
+    date(2026, 9, 25),  # Mid-Autumn Festival 中秋節
+    date(2026, 10, 9),  # National Day makeup 國慶日補假
+    date(2026, 10, 10), # National Day 國慶日
+}
+
+
+def is_trading_day(d: date) -> bool:
+    """判斷指定日期是否為台股交易日。
+
+    非交易日條件：週六、週日、或在 TAIWAN_HOLIDAYS_2024_2026 中的國定假日。
+
+    Args:
+        d: 要判斷的日期。
+
+    Returns:
+        True 表示為交易日；False 表示非交易日。
+    """
+    if d.weekday() >= 5:  # 5=Saturday, 6=Sunday
+        return False
+    if d in TAIWAN_HOLIDAYS_2024_2026:
+        return False
+    return True
+
+
+def next_trading_day(d: date) -> date:
+    """回傳指定日期之後（不含當天）的下一個交易日。
+
+    Args:
+        d: 起始日期（不含）。
+
+    Returns:
+        下一個交易日。
+    """
+    candidate = d + _dt.timedelta(days=1)
+    while not is_trading_day(candidate):
+        candidate += _dt.timedelta(days=1)
+    return candidate
+
+
+def add_trading_days(d: date, n: int) -> date:
+    """從指定日期向後推進 n 個交易日。
+
+    Args:
+        d: 起始日期（不含在計數內）。
+        n: 要推進的交易日數量，必須為正整數。
+
+    Returns:
+        推進 n 個交易日後的日期。
+    """
+    result = d
+    for _ in range(n):
+        result = next_trading_day(result)
+    return result
+
+
+def get_settlement_date(trade_date: date) -> date:
+    """計算台股 T+2 交割日，正確排除週末與國定假日。
+
+    Args:
+        trade_date: 交易日期。
+
+    Returns:
+        T+2 交割日（date 物件）。
+    """
+    return add_trading_days(trade_date, 2)
 
 
 class SeasonalEffectType(str, Enum):
