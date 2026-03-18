@@ -106,3 +106,70 @@ def test_get_effects_for_date_builtin_festival_match():
     assert SeasonalEffectType.FESTIVAL in types
     names = [e.name for e in eff if e.effect_type == SeasonalEffectType.FESTIVAL]
     assert any("春節" in n for n in names)
+
+
+# ── is_trading_day / get_settlement_date / add_trading_days (Issue #269) ─────
+
+from openclaw.trading_calendar import (
+    TAIWAN_HOLIDAYS_2024_2026,
+    add_trading_days,
+    get_settlement_date,
+    is_trading_day,
+    next_trading_day,
+)
+
+
+class TestIsTradingDay:
+    def test_saturday_is_not_trading_day(self):
+        assert is_trading_day(date(2025, 3, 1)) is False
+
+    def test_sunday_is_not_trading_day(self):
+        assert is_trading_day(date(2025, 3, 2)) is False
+
+    def test_regular_weekday_is_trading_day(self):
+        assert is_trading_day(date(2025, 3, 3)) is True
+
+    def test_new_year_2025_is_not_trading_day(self):
+        assert is_trading_day(date(2025, 1, 1)) is False
+
+    def test_tomb_sweeping_2025(self):
+        assert is_trading_day(date(2025, 4, 3)) is False
+        assert is_trading_day(date(2025, 4, 4)) is False
+
+    def test_national_day_2026(self):
+        assert is_trading_day(date(2026, 10, 9)) is False
+        assert is_trading_day(date(2026, 10, 10)) is False
+
+
+class TestGetSettlementDate:
+    def test_t2_normal_weekday(self):
+        # Mon 2025-03-03 → T+2 = Wed 2025-03-05
+        assert get_settlement_date(date(2025, 3, 3)) == date(2025, 3, 5)
+
+    def test_t2_skips_weekend(self):
+        # Thu 2025-03-06 → skip Sat/Sun → Mon 10
+        assert get_settlement_date(date(2025, 3, 6)) == date(2025, 3, 10)
+
+    def test_t2_skips_holiday_tomb_sweeping_2025(self):
+        # 2025-04-02 (Wed) → skip 04-03 + 04-04 holidays → T+1=04-07, T+2=04-08
+        assert get_settlement_date(date(2025, 4, 2)) == date(2025, 4, 8)
+
+    def test_t2_mid_autumn_2025(self):
+        # 2025-10-03 (Fri) → skip 04 Sat, 05 Sun, 06 Mon (holiday) → T+1=07, T+2=08
+        assert get_settlement_date(date(2025, 10, 3)) == date(2025, 10, 8)
+
+
+class TestAddTradingDays:
+    def test_add_five_skips_weekend(self):
+        # Mon 2025-03-03 +5 → Mon 2025-03-10
+        assert add_trading_days(date(2025, 3, 3), 5) == date(2025, 3, 10)
+
+
+class TestHolidaySet:
+    def test_contains_key_2025_holidays(self):
+        assert date(2025, 1, 1) in TAIWAN_HOLIDAYS_2024_2026
+        assert date(2025, 2, 28) in TAIWAN_HOLIDAYS_2024_2026
+
+    def test_contains_key_2026_holidays(self):
+        assert date(2026, 1, 1) in TAIWAN_HOLIDAYS_2024_2026
+        assert date(2026, 6, 19) in TAIWAN_HOLIDAYS_2024_2026
