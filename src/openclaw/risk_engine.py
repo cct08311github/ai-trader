@@ -196,6 +196,8 @@ def _build_candidate(decision: Decision, market: MarketState, portfolio: Portfol
             method=str(limits.get("position_sizing_method", "fixed_fractional")),
             authority_level=authority_level,
             sentinel_policy_path=str(limits.get("sentinel_policy_path", "config/sentinel_policy_v1.json")),
+            avg_daily_volume_twd=limits.get("avg_daily_volume_twd"),
+            max_adv_pct=float(limits.get("max_adv_pct", 0.10)),
         )
 
     if qty <= 0:
@@ -363,4 +365,6 @@ def default_limits() -> Dict[str, float]:
         "position_sizing_method": "fixed_fractional",
         "sentinel_policy_path": "config/sentinel_policy_v1.json",
         "wash_sale_prevention_enabled": 1,
+        "max_adv_pct": 0.10,
+        "adv_lookback_days": 20,
     }
