@@ -94,9 +94,17 @@ def _empty_portfolio(nav: float = 1_000_000) -> PortfolioState:
 
 @pytest.fixture(autouse=True)
 def _patch_helpers(monkeypatch):
-    """Suppress file-based helpers so all tests run in isolation."""
+    """Suppress file-based helpers so all tests run in isolation.
+
+    apply_tw_session_risk_adjustments is mocked as identity so boundary tests
+    evaluate pure limit values without session-time multipliers shrinking them.
+    """
     monkeypatch.setattr("openclaw.risk_engine._is_symbol_locked", lambda s: False)
     monkeypatch.setattr("openclaw.risk_engine._get_daily_pm_approval", lambda: True)
+    monkeypatch.setattr(
+        "openclaw.risk_engine.apply_tw_session_risk_adjustments",
+        lambda lim, **kw: dict(lim),
+    )
 
 
 # ---------------------------------------------------------------------------
