@@ -18,6 +18,7 @@ from openclaw.signal_aggregator import (
     _SELL_ACTION_THRESHOLD,
     _BUY_SCORE_LIMIT_UP,
     _SELL_SCORE_LIMIT_DOWN,
+    _BLACK_SWAN_DROP_THRESHOLD,
 )
 from openclaw.market_regime import MarketRegimeResult, MarketRegime
 
@@ -276,6 +277,94 @@ def test_high_volatility_lowers_risk_adj(mock_candles, mock_regime, mock_signal)
 
     # risk_adj = max(0.1, min(0.9, 0.5/2.0)) = 0.25
     assert "risk_adj=0.25" in " ".join(result.reasons)
+
+
+# ── Black Swan Circuit Breaker tests (Issue #289) ──
+
+@patch("openclaw.signal_aggregator.compute_signal", return_value="buy")
+@patch("openclaw.signal_aggregator.classify_market_regime")
+@patch("openclaw.signal_aggregator.fetch_candles")
+def test_black_swan_override_bull_to_bear(mock_candles, mock_regime, mock_signal):
+    """市場指數跌超 3%（黑天鵝）→ 強制將 bull regime 覆蓋為 bear。"""
+    mock_candles.return_value = [{"close": 100, "volume": 1000}] * 30
+    mock_regime.return_value = _mock_regime("bull", 1.0)
+
+    conn = _make_db()
+    snap = {"close": 105.0, "reference": 100.0}
+    # 0050 單日跌 4% → 超過 -3% 門檻
+    market_snap = {"close": 96.0, "reference": 100.0}
+
+    result = aggregate(
+        conn, "2330", snap,
+        position_avg_price=None, high_water_mark=None,
+        market_snap=market_snap,
+    )
+
+    assert result.regime == "bear", "黑天鵝熔斷應將 regime 強制切換為 bear"
+    assert result.weights_used == REGIME_WEIGHTS["bear"]
+    assert any("BLACK_SWAN_OVERRIDE" in r for r in result.reasons)
+
+
+@patch("openclaw.signal_aggregator.compute_signal", return_value="buy")
+@patch("openclaw.signal_aggregator.classify_market_regime")
+@patch("openclaw.signal_aggregator.fetch_candles")
+def test_black_swan_not_triggered_below_threshold(mock_candles, mock_regime, mock_signal):
+    """市場指數跌幅低於門檻（-2%）→ 不觸發熔斷，維持 bull regime。"""
+    mock_candles.return_value = [{"close": 100, "volume": 1000}] * 30
+    mock_regime.return_value = _mock_regime("bull", 1.0)
+
+    conn = _make_db()
+    snap = {"close": 105.0, "reference": 100.0}
+    # 0050 僅跌 2% → 未達 -3% 門檻
+    market_snap = {"close": 98.0, "reference": 100.0}
+
+    result = aggregate(
+        conn, "2330", snap,
+        position_avg_price=None, high_water_mark=None,
+        market_snap=market_snap,
+    )
+
+    assert result.regime == "bull", "跌幅 < 門檻時不應觸發熔斷"
+    assert not any("BLACK_SWAN_OVERRIDE" in r for r in result.reasons)
+
+
+@patch("openclaw.signal_aggregator.compute_signal", return_value="buy")
+@patch("openclaw.signal_aggregator.classify_market_regime")
+@patch("openclaw.signal_aggregator.fetch_candles")
+def test_black_swan_no_market_snap_backward_compat(mock_candles, mock_regime, mock_signal):
+    """market_snap=None（預設）→ 熔斷不觸發，向後相容。"""
+    mock_candles.return_value = [{"close": 100, "volume": 1000}] * 30
+    mock_regime.return_value = _mock_regime("bull", 1.0)
+
+    conn = _make_db()
+    snap = {"close": 105.0, "reference": 100.0}
+
+    result = aggregate(conn, "2330", snap, position_avg_price=None, high_water_mark=None)
+
+    assert result.regime == "bull"
+    assert not any("BLACK_SWAN_OVERRIDE" in r for r in result.reasons)
+
+
+@patch("openclaw.signal_aggregator.compute_signal", return_value="buy")
+@patch("openclaw.signal_aggregator.classify_market_regime")
+@patch("openclaw.signal_aggregator.fetch_candles")
+def test_black_swan_market_snap_zero_reference_no_override(mock_candles, mock_regime, mock_signal):
+    """market_snap.reference=0 → 不進行除法，不觸發熔斷。"""
+    mock_candles.return_value = [{"close": 100, "volume": 1000}] * 30
+    mock_regime.return_value = _mock_regime("bull", 1.0)
+
+    conn = _make_db()
+    snap = {"close": 105.0, "reference": 100.0}
+    market_snap = {"close": 0.0, "reference": 0.0}
+
+    result = aggregate(
+        conn, "2330", snap,
+        position_avg_price=None, high_water_mark=None,
+        market_snap=market_snap,
+    )
+
+    assert result.regime == "bull"
+    assert not any("BLACK_SWAN_OVERRIDE" in r for r in result.reasons)
 
 
 @patch("openclaw.signal_aggregator.compute_signal", return_value="flat")
