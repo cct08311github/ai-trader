@@ -668,7 +668,7 @@ def _cancel_stale_pending_orders(conn: sqlite3.Connection, broker) -> int:
     rows = conn.execute(
         """SELECT order_id, broker_order_id, symbol
            FROM orders
-           WHERE status IN ('pending', 'submitted')
+           WHERE status IN ('pending', 'submitted', 'partially_filled')
              AND date(ts_submit, '+8 hours') = ?""",
         (today_str,),
     ).fetchall()
