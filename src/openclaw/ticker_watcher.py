@@ -167,18 +167,13 @@ def _utc_now_iso() -> str:
 
 
 def _t2_settlement_date(trade_date: "dt.date") -> str:
-    """計算台股 T+2 交割日（跳過週六、週日）。
+    """計算台股 T+2 交割日（跳過週末與國定假日）。
 
-    台灣股市無公眾假日邏輯（依 trading calendar），這裡簡化為僅跳過週末。
+    使用 trading_calendar.get_settlement_date() 正確排除台灣國定假日。
     Returns: YYYY-MM-DD 字串
     """
-    d = trade_date
-    added = 0
-    while added < 2:
-        d += dt.timedelta(days=1)
-        if d.weekday() < 5:  # 0=Mon … 4=Fri
-            added += 1
-    return d.strftime("%Y-%m-%d")
+    from openclaw.trading_calendar import get_settlement_date
+    return get_settlement_date(trade_date).strftime("%Y-%m-%d")
 
 
 # ── Logging ──────────────────────────────────────────────────────────────────
