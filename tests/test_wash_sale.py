@@ -173,3 +173,72 @@ class TestWashSaleToggle:
                 _normal_system(),
             )
             assert result.reject_code == "RISK_WASH_SALE", f"Expected RISK_WASH_SALE for {symbol}"
+
+
+# ---------------------------------------------------------------------------
+# Integration: _get_today_buy_filled_symbols populates same_day_fill_symbols
+# ---------------------------------------------------------------------------
+
+class TestGetTodayBuyFilledSymbols:
+    """驗證 ticker_watcher._get_today_buy_filled_symbols 能正確從 DB 回傳今日 buy 成交 symbol。"""
+
+    def _setup_db(self, conn):
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS orders (
+               order_id TEXT PRIMARY KEY, symbol TEXT, side TEXT, status TEXT,
+               ts_submit TEXT, qty INTEGER, price REAL)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS fills (
+               fill_id INTEGER PRIMARY KEY AUTOINCREMENT,
+               order_id TEXT, qty INTEGER, price REAL, fee REAL, tax REAL)"""
+        )
+        conn.commit()
+
+    def test_returns_today_buy_symbols(self):
+        import sqlite3
+        from openclaw.ticker_watcher import _get_today_buy_filled_symbols
+
+        conn = sqlite3.connect(":memory:")
+        self._setup_db(conn)
+        # 今日 buy 訂單 + fill
+        conn.execute("INSERT INTO orders VALUES ('o1','2330','buy','filled',datetime('now','+8 hours'),1000,100.0)")
+        conn.execute("INSERT INTO fills VALUES (NULL,'o1',1000,100.0,0,0)")
+        conn.commit()
+
+        result = _get_today_buy_filled_symbols(conn)
+        assert "2330" in result
+
+    def test_excludes_sell_orders(self):
+        import sqlite3
+        from openclaw.ticker_watcher import _get_today_buy_filled_symbols
+
+        conn = sqlite3.connect(":memory:")
+        self._setup_db(conn)
+        conn.execute("INSERT INTO orders VALUES ('o2','2317','sell','filled',datetime('now','+8 hours'),500,80.0)")
+        conn.execute("INSERT INTO fills VALUES (NULL,'o2',500,80.0,0,0)")
+        conn.commit()
+
+        result = _get_today_buy_filled_symbols(conn)
+        assert "2317" not in result
+
+    def test_excludes_orders_without_fills(self):
+        import sqlite3
+        from openclaw.ticker_watcher import _get_today_buy_filled_symbols
+
+        conn = sqlite3.connect(":memory:")
+        self._setup_db(conn)
+        conn.execute("INSERT INTO orders VALUES ('o3','0050','buy','pending',datetime('now','+8 hours'),1000,50.0)")
+        conn.commit()
+
+        result = _get_today_buy_filled_symbols(conn)
+        assert "0050" not in result
+
+    def test_returns_empty_set_on_db_error(self):
+        import sqlite3
+        from openclaw.ticker_watcher import _get_today_buy_filled_symbols
+
+        conn = sqlite3.connect(":memory:")
+        # 故意不建 orders/fills 表 → OperationalError
+        result = _get_today_buy_filled_symbols(conn)
+        assert result == set()
