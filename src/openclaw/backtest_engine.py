@@ -24,6 +24,26 @@ _LOT_SIZE = 1000
 _CASH_BUFFER = 0.05
 
 
+def _apply_slippage(price: float, side: str, bps: int) -> float:
+    """套用滑點到執行價格。
+
+    買方多付（+bps）、賣方少收（-bps），模擬開盤競價差距與市場衝擊。
+
+    Args:
+        price: 理論成交價（通常為前日收盤）
+        side:  "buy" 或 "sell"
+        bps:   滑點基點（1 bps = 0.01%）；0 = 不套用
+
+    Returns:
+        調整後執行價格，精確至小數點後 2 位。
+    """
+    if bps == 0:
+        return price
+    factor = bps / 10_000
+    multiplier = (1 + factor) if side == "buy" else (1 - factor)
+    return round(price * multiplier, 2)
+
+
 @dataclass
 class BacktestConfig:
     symbols: list[str]
@@ -35,6 +55,7 @@ class BacktestConfig:
     max_single_pct: float = 0.20
     cost_params: CostParams = field(default_factory=CostParams)
     locked_symbols: set[str] = field(default_factory=set)
+    slippage_bps: int = 10  # 滑點基點（預設 10 bps ≈ 0.1%）；0 = 關閉滑點
 
 
 @dataclass
@@ -167,7 +188,8 @@ def run_backtest(config: BacktestConfig, db_path: str) -> BacktestResult:
             )
 
             if result.signal == "sell":
-                symbols_to_sell.append((sym, close_price, result.reason))
+                exec_price = _apply_slippage(close_price, "sell", config.slippage_bps)
+                symbols_to_sell.append((sym, exec_price, result.reason))
 
         # 執行賣出
         for sym, price, reason in symbols_to_sell:
@@ -244,26 +266,27 @@ def run_backtest(config: BacktestConfig, db_path: str) -> BacktestResult:
                     continue
 
                 # 計算可買張數（最多 max_single_pct * nav）
+                buy_exec_price = _apply_slippage(close_price, "buy", config.slippage_bps)
                 max_invest = min(usable_cash, nav * config.max_single_pct)
-                lots = int(max_invest // (close_price * _LOT_SIZE))
+                lots = int(max_invest // (buy_exec_price * _LOT_SIZE))
 
                 if lots >= 1:
                     qty = lots * _LOT_SIZE
-                elif usable_cash >= close_price:
+                elif usable_cash >= buy_exec_price:
                     # odd-lot fallback（零股）
-                    qty = int(usable_cash // close_price)
+                    qty = int(usable_cash // buy_exec_price)
                 else:
                     continue
 
                 if qty <= 0:
                     continue
 
-                total_cost = calc_buy_cost(close_price, qty, config.cost_params)
+                total_cost = calc_buy_cost(buy_exec_price, qty, config.cost_params)
                 if total_cost > usable_cash:
                     # 嘗試縮減 qty
                     if lots >= 2:
                         qty = (lots - 1) * _LOT_SIZE
-                        total_cost = calc_buy_cost(close_price, qty, config.cost_params)
+                        total_cost = calc_buy_cost(buy_exec_price, qty, config.cost_params)
                     if total_cost > usable_cash:
                         continue
 
@@ -272,10 +295,10 @@ def run_backtest(config: BacktestConfig, db_path: str) -> BacktestResult:
 
                 positions[sym] = {
                     "qty": qty,
-                    "avg_price": close_price,
+                    "avg_price": buy_exec_price,
                     "hwm": close_price,
                     "entry_date": date,
-                    "entry_price": close_price,
+                    "entry_price": buy_exec_price,
                 }
                 available_slots -= 1
 
@@ -297,7 +320,7 @@ def run_backtest(config: BacktestConfig, db_path: str) -> BacktestResult:
     for sym, pos in list(positions.items()):
         sym_data = all_data.get(sym, {})
         if last_date in sym_data and sym_data[last_date]["close"]:
-            price = sym_data[last_date]["close"]
+            price = _apply_slippage(sym_data[last_date]["close"], "sell", config.slippage_bps)
         else:
             price = pos["avg_price"]
 
