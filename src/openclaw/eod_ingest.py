@@ -43,8 +43,7 @@ def _make_ssl_ctx(verify: bool = True) -> ssl.SSLContext:
     # Fallback: CERT_NONE — MITM risk accepted for gov sources with broken certs
     _log.warning(
         "[SECURITY] EOD ingest falling back to CERT_NONE for SSL — "
-        "TWSE/TPEx certificate could not be verified. "
-        "Set env var TWSE_SSL_VERIFY=1 to force verification (may fail)."
+        "TWSE/TPEx certificate could not be verified (known broken gov certs, missing SKI)."
     )
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
