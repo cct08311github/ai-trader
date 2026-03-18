@@ -54,8 +54,6 @@ from openclaw.pnl_engine import on_sell_filled, sync_positions_table
 POLL_INTERVAL_SEC: int = 180  # 3 分鐘
 STRATEGY_ID: str = "momentum_watcher"
 STRATEGY_VERSION: str = "watcher_v1"
-SIM_NAV: float = 2_000_000.0   # 模擬資金 200 萬 TWD
-SIM_CASH: float = 1_800_000.0
 
 from openclaw.path_utils import get_repo_root
 _REPO_ROOT = get_repo_root()
@@ -77,6 +75,58 @@ _TRAILING_PROFIT_THRESHOLD: float = 0.50  # 獲利超過 50% 啟用收緊 traili
 # ── DB 連線（直接指向 data/sqlite/trades.db，與前端共用）────────────────────
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 DB_PATH: str = os.environ.get("DB_PATH", _DEFAULT_DB)
+
+_CAPITAL_CFG = _REPO_ROOT / "config" / "capital.json"
+_SIM_NAV_FALLBACK: float = 1_000_000.0
+
+
+def _load_sim_nav() -> float:
+    """讀取 config/capital.json 的 total_capital_twd，缺檔時回傳 fallback 1_000_000。"""
+    try:
+        data = json.loads(_CAPITAL_CFG.read_text(encoding="utf-8"))
+        return float(data["total_capital_twd"])
+    except (OSError, KeyError, ValueError, TypeError) as e:
+        log.warning("_load_sim_nav: capital.json read failed (%s) — using fallback %.0f", e, _SIM_NAV_FALLBACK)
+        return _SIM_NAV_FALLBACK
+
+
+def _get_realized_pnl_today(conn: sqlite3.Connection) -> float:
+    """查詢今日（UTC+8）已實現損益。"""
+    try:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(f.price * f.qty - f.fee - f.tax), 0.0)
+               FROM fills f
+               JOIN orders o ON f.order_id = o.order_id
+               WHERE date(o.ts_submit, '+8 hours') = date('now', '+8 hours')
+                 AND o.side = 'sell'"""
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+    except sqlite3.Error as e:
+        log.warning("_get_realized_pnl_today failed: %s", e)
+        return 0.0
+
+
+def _check_broker_connected(sj_instance) -> bool:
+    """True 只有在 sj_instance 非 None 且 list_accounts() 不拋例外。"""
+    if sj_instance is None:
+        return False
+    try:
+        sj_instance.list_accounts()
+        return True
+    except Exception:  # noqa: BLE001 — broker API; can't predict exceptions
+        return False
+
+
+def _get_orders_last_60s(conn: sqlite3.Connection) -> int:
+    """計算最近 60 秒內的訂單數。"""
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM orders WHERE ts_submit >= datetime('now', '-1 minute')"
+        ).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error as e:
+        log.warning("_get_orders_last_60s failed: %s", e)
+        return 0
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -609,7 +659,7 @@ def run_watcher() -> None:
         Decision, MarketState, PortfolioState, Position, SystemState,
         evaluate_and_build_order, default_limits,
     )
-    from openclaw.broker import SimBrokerAdapter
+    from openclaw.broker import SimBrokerAdapter, ShioajiAdapter
     from openclaw.risk_store import LimitQuery, load_limits
     from openclaw.daily_pm_review import get_daily_pm_approval
 
@@ -626,10 +676,13 @@ def run_watcher() -> None:
             simulation = True
     log.info("=== Ticker Watcher === mode=%s", "SIMULATION" if simulation else "[LIVE MODE]")
 
-    broker = SimBrokerAdapter()
+    # 讀取 NAV from capital.json（啟動時一次性載入）
+    sim_nav = _load_sim_nav()
+    sim_cash = sim_nav * 0.9  # 保留 10% 現金 buffer
 
     # 嘗試連接 Shioaji；無憑證或連線失敗時 fallback mock
     api = None
+    sj_account = None
     sj_key    = os.environ.get("SHIOAJI_API_KEY")
     sj_secret = os.environ.get("SHIOAJI_SECRET_KEY")
     if sj_key and sj_secret:
@@ -637,15 +690,25 @@ def run_watcher() -> None:
             import shioaji as sj  # type: ignore
             api = sj.Shioaji(simulation=simulation)
             api.login(api_key=sj_key, secret_key=sj_secret)
+            accounts = api.list_accounts()
+            sj_account = accounts[0] if accounts else None
             # 確保股票合約資料已載入（shioaji 1.3.x: fetch_contracts() 無 contract_type 參數）
             try:
                 api.fetch_contracts()
-                log.info("Shioaji contracts fetched (simulation=True)")
+                log.info("Shioaji contracts fetched (simulation=%s)", simulation)
             except Exception as fe:  # noqa: BLE001 — broker API; can't predict exceptions
                 log.warning("fetch_contracts failed (%s) — snapshots may use fallback", fe)
             log.info("Shioaji connected (simulation=%s) — using real market data", simulation)
         except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
             log.warning("Shioaji not available — mock data mode: %s", e)
+
+    # Issue #266: 根據 simulation_mode 選擇正確的 broker adapter
+    if not simulation and api is not None and sj_account is not None:
+        broker = ShioajiAdapter(api, sj_account)
+        log.info("Using ShioajiAdapter (live mode)")
+    else:
+        broker = SimBrokerAdapter()
+        log.info("Using SimBrokerAdapter (simulation mode)")
 
     # 內存持倉追蹤：symbol → (qty, avg_price)（watcher 重啟後清空，從 DB sync）
     positions: Dict[str, tuple[int, float]] = {}
@@ -836,16 +899,16 @@ def run_watcher() -> None:
                     feed_delay_ms=50,
                 )
                 _exit_portfolio = PortfolioState(
-                    nav=SIM_NAV, cash=SIM_CASH,
-                    realized_pnl_today=0.0, unrealized_pnl=0.0,
+                    nav=sim_nav, cash=sim_cash,
+                    realized_pnl_today=_get_realized_pnl_today(conn), unrealized_pnl=0.0,
                     positions=all_pos_map,
                 )
                 _exit_system = SystemState(
                     now_ms=scan_ms,
                     trading_locked=False,
-                    broker_connected=True,
+                    broker_connected=_check_broker_connected(api),
                     db_write_p99_ms=20,
-                    orders_last_60s=0,
+                    orders_last_60s=_get_orders_last_60s(conn),
                     reduce_only_mode=cash_mode_state,
                 )
                 _exit_result = evaluate_and_build_order(
@@ -974,16 +1037,16 @@ def run_watcher() -> None:
                     feed_delay_ms=50,
                 )
                 portfolio = PortfolioState(
-                    nav=SIM_NAV, cash=SIM_CASH,
-                    realized_pnl_today=0.0, unrealized_pnl=0.0,
+                    nav=sim_nav, cash=sim_cash,
+                    realized_pnl_today=_get_realized_pnl_today(conn), unrealized_pnl=0.0,
                     positions=all_pos_map,   # ← 包含全部持倉，gross_exposure 正確累計
                 )
                 system = SystemState(
                     now_ms=scan_ms,
                     trading_locked=False,
-                    broker_connected=True,
+                    broker_connected=_check_broker_connected(api),
                     db_write_p99_ms=20,
-                    orders_last_60s=0,
+                    orders_last_60s=_get_orders_last_60s(conn),
                     reduce_only_mode=cash_mode_state,
                 )
 
