@@ -116,6 +116,8 @@ def _build_barometer_trend(conn: sqlite3.Connection, latest_trade_date: str) -> 
         FROM eod_prices
         WHERE symbol = '0050'
           AND trade_date <= ?
+          AND close IS NOT NULL
+          AND change IS NOT NULL
         ORDER BY trade_date DESC
         LIMIT 5
         """,
