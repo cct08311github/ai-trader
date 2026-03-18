@@ -97,6 +97,21 @@ module.exports = {
         DB_PATH: path.join(REPO, "data/sqlite/trades.db"),
         INCIDENT_HYGIENE_OUTPUT_DIR: path.join(REPO, "data/ops/incident_hygiene")
       }
+    },
+    {
+      name: "ai-trader-db-backup",
+      script: path.join(REPO, "bin/run_backup.sh"),
+      cwd: REPO,
+      interpreter: "bash",
+      instances: 1,
+      autorestart: false,
+      watch: false,
+      cron_restart: "0 2 * * *",
+      env: {
+        DB_PATH: path.join(REPO, "data/sqlite/trades.db"),
+        BACKUP_DIR: path.join(REPO, "data/backup"),
+        BACKUP_RETAIN: "30"
+      }
     }
   ]
 };
