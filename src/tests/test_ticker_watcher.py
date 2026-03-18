@@ -997,6 +997,77 @@ class TestExecuteSimOrder:
         assert event["source"] == "pre_trade_guard"
         assert event["reason_code"] == "RISK_HARD_GUARD_MAX_ORDER_NOTIONAL"
 
+    def test_partial_fill_timeout_marks_partially_filled(self):
+        """poll loop 超時後仍有已成交股數 → orders.status 應更新為 partially_filled，回傳 (False, order_id)"""
+        from openclaw.broker import BrokerOrderStatus, BrokerSubmission
+        conn = _make_mem_db()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        mock_broker = MagicMock()
+        mock_broker.submit_order.return_value = BrokerSubmission(
+            broker_order_id="SIM-PARTIAL", status="submitted"
+        )
+        # 每次 poll 都回傳 partially_filled（永遠不到 terminal）
+        mock_broker.poll_order_status.return_value = BrokerOrderStatus(
+            broker_order_id="SIM-PARTIAL",
+            status="partially_filled",
+            filled_qty=50,
+            avg_fill_price=890.0,
+            fee=0.63,
+            tax=0.0,
+        )
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=mock_broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        # 部分成交超時：回傳 False（未完全成交）
+        assert ok is False
+        # orders 表應標記 partially_filled（非 submitted）
+        row = conn.execute("SELECT status FROM orders WHERE order_id=?", (order_id,)).fetchone()
+        assert row["status"] == "partially_filled"
+        # fills 表應有部分成交記錄
+        fill_count = conn.execute("SELECT COUNT(*) FROM fills WHERE order_id=?", (order_id,)).fetchone()[0]
+        assert fill_count > 0
+
+    def test_partial_fill_then_filled_returns_true(self):
+        """broker 先回 partially_filled，再回 filled → 應回傳 (True, order_id)"""
+        from openclaw.broker import BrokerOrderStatus, BrokerSubmission
+        conn = _make_mem_db()
+        candidate = self._make_candidate("buy", 100, 890.0)
+        did = str(uuid.uuid4())
+
+        mock_broker = MagicMock()
+        mock_broker.submit_order.return_value = BrokerSubmission(
+            broker_order_id="SIM-PF2", status="submitted"
+        )
+        # poll 1 → partially_filled；poll 2 → filled
+        mock_broker.poll_order_status.side_effect = [
+            BrokerOrderStatus(
+                broker_order_id="SIM-PF2", status="partially_filled",
+                filled_qty=50, avg_fill_price=890.0, fee=0.63, tax=0.0,
+            ),
+            BrokerOrderStatus(
+                broker_order_id="SIM-PF2", status="filled",
+                filled_qty=100, avg_fill_price=890.0, fee=1.27, tax=0.0,
+            ),
+        ]
+
+        with patch("time.sleep"):
+            ok, order_id = _execute_sim_order(
+                conn, broker=mock_broker, decision_id=did,
+                symbol="2330", side="buy", qty=100, price=890.0, candidate=candidate
+            )
+
+        assert ok is True
+        row = conn.execute("SELECT status FROM orders WHERE order_id=?", (order_id,)).fetchone()
+        assert row["status"] == "filled"
+        fill_count = conn.execute("SELECT COUNT(*) FROM fills WHERE order_id=?", (order_id,)).fetchone()[0]
+        assert fill_count > 0
+
 
 def _make_proposal_flow_db() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
