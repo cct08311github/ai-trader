@@ -146,6 +146,22 @@ def build_daily_context(conn=None) -> Dict[str, Any]:
     except Exception:
         pass
 
+    # 明文標注持倉狀態，防止 LLM 對空列表做出錯誤推論
+    pos_count = len(context["open_positions"])
+    trade_count = len(context["recent_trades"])
+    if pos_count == 0 and trade_count == 0:
+        context["portfolio_status"] = (
+            "空倉且無近期成交紀錄。系統目前從未建立任何部位，"
+            "不存在「已鎖定利潤」或「出場」的歷史交易行為。"
+        )
+    elif pos_count == 0:
+        context["portfolio_status"] = (
+            f"目前空倉（0 個部位）。recent_trades 顯示有 {trade_count} 筆歷史成交，"
+            "但這些是過去的交易紀錄，不代表仍有持倉或近期剛出場。"
+        )
+    else:
+        context["portfolio_status"] = f"目前持有 {pos_count} 個部位。"
+
     return context
 
 
