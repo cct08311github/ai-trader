@@ -387,6 +387,29 @@ def main() -> None:
                     file=__import__("sys").stderr,
                 )
 
+        # ── NAV 快照（daily_nav 表）─────────────────────────────────────
+        nav_snapshot: dict = {}
+        try:
+            from openclaw.daily_snapshot import write_nav_snapshot
+            _capital_path = _REPO_ROOT / "config" / "capital.json"
+            _initial_capital = 1_000_000.0
+            if _capital_path.exists():
+                try:
+                    _initial_capital = float(
+                        json.loads(_capital_path.read_text()).get("total_capital_twd", 1_000_000.0)
+                    )
+                except Exception:
+                    pass
+            conn.row_factory = sqlite3.Row
+            nav_snapshot = write_nav_snapshot(
+                conn, trade_date=args.trade_date, initial_capital=_initial_capital
+            )
+        except Exception as nav_exc:
+            print(
+                f"[eod_ingest] daily_nav snapshot skipped: {nav_exc}",
+                file=__import__("sys").stderr,
+            )
+
         try:
             print(
                 json.dumps(
@@ -399,6 +422,7 @@ def main() -> None:
                         "margin_data": margin_rows,
                         "institution_error": inst_error,
                         "optimizer_adjustments": optimizer_adjustments,
+                        "nav_snapshot": nav_snapshot,
                         "error": error_text,
                     },
                     ensure_ascii=True,
