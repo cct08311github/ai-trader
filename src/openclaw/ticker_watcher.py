@@ -696,6 +696,13 @@ def run_watcher() -> None:
     signal.signal(signal.SIGTERM, _handle_shutdown_signal)
     signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
+    # 啟動 Telegram Kill Switch 背景監聽（需設定 TELEGRAM_BOT_TOKEN）
+    try:
+        from openclaw.tg_kill_switch import start_kill_switch_listener
+        start_kill_switch_listener()
+    except Exception as _ks_e:  # noqa: BLE001 — 選用元件，啟動失敗不中斷 watcher
+        log.warning("tg_kill_switch 啟動失敗（不影響 watcher 運作）: %s", _ks_e)
+
     from openclaw.risk_engine import (
         Decision, MarketState, PortfolioState, Position, SystemState,
         evaluate_and_build_order, default_limits,
