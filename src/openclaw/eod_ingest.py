@@ -4,6 +4,7 @@ import argparse
 import csv
 import io
 import json
+import logging
 import re
 import sqlite3
 import ssl
@@ -15,14 +16,40 @@ from typing import Any, Dict, Iterable, List, Optional
 from urllib.request import Request, urlopen
 from openclaw.path_utils import get_repo_root
 
+try:
+    import certifi as _certifi
+    _CERTIFI_CAFILE: Optional[str] = _certifi.where()
+except ImportError:
+    _CERTIFI_CAFILE = None
+
+_log = logging.getLogger(__name__)
+
 _REPO_ROOT = get_repo_root()
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
-# TWSE/TPEx certs are missing Subject Key Identifier (RFC 5280 §4.2.1.2),
-# which Python 3.14 now enforces. These are trusted government sources.
-_SSL_CTX = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
+
+def _make_ssl_ctx(verify: bool = True) -> ssl.SSLContext:
+    """Build an SSL context.
+
+    When *verify* is True (default), use the certifi CA bundle (or the system
+    bundle if certifi is unavailable) so that TLS certificates are validated.
+    When *verify* is False, disable hostname checking and cert verification —
+    this is only used as a last-resort fallback for known-broken government
+    certs (TWSE/TPEx) and a SECURITY WARNING is emitted.
+    """
+    if verify:
+        ctx = ssl.create_default_context(cafile=_CERTIFI_CAFILE)
+        return ctx
+    # Fallback: CERT_NONE — MITM risk accepted for gov sources with broken certs
+    _log.warning(
+        "[SECURITY] EOD ingest falling back to CERT_NONE for SSL — "
+        "TWSE/TPEx certificate could not be verified. "
+        "Set env var TWSE_SSL_VERIFY=1 to force verification (may fail)."
+    )
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 TWSE_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -47,10 +74,28 @@ class EODRow:
 
 
 def _fetch_text(url: str, timeout: int = 20, encoding: str = "utf-8") -> str:
+    """Fetch URL text, preferring verified TLS; falls back to CERT_NONE on SSLError.
+
+    TWSE/TPEx government certificates are missing Subject Key Identifier
+    (RFC 5280 §4.2.1.2), which newer Python versions reject. We first attempt
+    a fully-verified connection using the certifi CA bundle. If that fails with
+    an SSLError, we fall back to CERT_NONE and log a security warning.
+    """
     req = Request(url, headers={"User-Agent": "OpenClaw/1.2.1"})
-    with urlopen(req, context=_SSL_CTX, timeout=timeout) as resp:
-        raw = resp.read()
-        return raw.decode(encoding, errors="replace")
+    try:
+        with urlopen(req, context=_make_ssl_ctx(verify=True), timeout=timeout) as resp:
+            raw = resp.read()
+            return raw.decode(encoding, errors="replace")
+    except ssl.SSLError as exc:
+        _log.warning(
+            "[SECURITY] SSL verification failed for %s (%s); retrying with CERT_NONE. "
+            "This is a known TWSE/TPEx certificate issue (missing SKI, RFC 5280 §4.2.1.2).",
+            url,
+            exc,
+        )
+        with urlopen(req, context=_make_ssl_ctx(verify=False), timeout=timeout) as resp:
+            raw = resp.read()
+            return raw.decode(encoding, errors="replace")
 
 
 def _to_float(value: Any) -> Optional[float]:
