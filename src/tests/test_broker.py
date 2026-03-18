@@ -357,7 +357,7 @@ def test_shioaji_adapter_poll_order_status_none_if_not_found():
 def test_shioaji_adapter_poll_order_status_success():
     api, trade = _make_mock_api(broker_id="SJ-100", status_str="filled", deal_qty=1000, avg_price=580.0)
     adapter = ShioajiAdapter(api, MagicMock())
-    adapter._trades["SJ-100"] = trade
+    adapter._trades["SJ-100"] = {"trade": trade, "side": "buy"}
     result = adapter.poll_order_status("SJ-100")
     assert result is not None
     assert result.status == "filled"
@@ -371,7 +371,7 @@ def test_shioaji_adapter_poll_order_status_exception():
     api.update_status.side_effect = Exception("network connection reset")
     trade = MagicMock()
     adapter = ShioajiAdapter(api, MagicMock())
-    adapter._trades["SJ-200"] = trade
+    adapter._trades["SJ-200"] = {"trade": trade, "side": "buy"}
     result = adapter.poll_order_status("SJ-200")
     assert result is not None
     assert result.status == "rejected"
@@ -390,7 +390,7 @@ def test_shioaji_adapter_cancel_order_not_found():
 def test_shioaji_adapter_cancel_order_success():
     api, trade = _make_mock_api()
     adapter = ShioajiAdapter(api, MagicMock())
-    adapter._trades["SJ-300"] = trade
+    adapter._trades["SJ-300"] = {"trade": trade, "side": "buy"}
     result = adapter.cancel_order("SJ-300")
     assert result.status == "submitted"
     api.cancel_order.assert_called_once_with(trade)
@@ -401,7 +401,7 @@ def test_shioaji_adapter_cancel_order_exception():
     api.cancel_order.side_effect = Exception("timeout")
     trade = MagicMock()
     adapter = ShioajiAdapter(api, MagicMock())
-    adapter._trades["SJ-400"] = trade
+    adapter._trades["SJ-400"] = {"trade": trade, "side": "buy"}
     result = adapter.cancel_order("SJ-400")
     assert result.status == "rejected"
     assert result.reason_code == "EXEC_NETWORK_TIMEOUT"
@@ -415,7 +415,7 @@ def test_wait_for_terminal_returns_filled_immediately():
     """When first poll returns 'filled', we get it back without looping."""
     api, trade = _make_mock_api(broker_id="SJ-T1", status_str="filled", deal_qty=1000, avg_price=580.0)
     adapter = ShioajiAdapter(api, MagicMock(), poll_interval_sec=0.01, max_poll_seconds=2.0)
-    adapter._trades["SJ-T1"] = trade
+    adapter._trades["SJ-T1"] = {"trade": trade, "side": "buy"}
 
     with patch("openclaw.broker.time.sleep") as mock_sleep:
         result = adapter.wait_for_terminal("SJ-T1")
@@ -437,7 +437,7 @@ def test_wait_for_terminal_returns_cancelled():
 
     api.update_status.return_value = None
     adapter = ShioajiAdapter(api, account, poll_interval_sec=0.01, max_poll_seconds=2.0)
-    adapter._trades["SJ-CANCEL"] = trade
+    adapter._trades["SJ-CANCEL"] = {"trade": trade, "side": "buy"}
 
     with patch("openclaw.broker.time.sleep"):
         result = adapter.wait_for_terminal("SJ-CANCEL")
@@ -459,7 +459,7 @@ def test_wait_for_terminal_times_out_returns_latest():
 
     api.update_status.return_value = None
     adapter = ShioajiAdapter(api, account, poll_interval_sec=0.01, max_poll_seconds=0.0)
-    adapter._trades["SJ-SLOW"] = trade
+    adapter._trades["SJ-SLOW"] = {"trade": trade, "side": "buy"}
 
     # With max_poll_seconds=0, deadline is already in the past
     result = adapter.wait_for_terminal("SJ-SLOW")

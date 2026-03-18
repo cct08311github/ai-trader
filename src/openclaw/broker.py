@@ -207,7 +207,7 @@ class ShioajiAdapter:
                 trade = self.api.place_order(contract, order)
 
                 broker_order_id = getattr(trade.status, "id", "") or f"SHIOAJI-{order_id}"
-                self._trades[broker_order_id] = trade
+                self._trades[broker_order_id] = {"trade": trade, "side": candidate.side}
                 return BrokerSubmission(broker_order_id=broker_order_id, status="submitted")
             except Exception as exc:
                 last_exc = exc
@@ -231,22 +231,33 @@ class ShioajiAdapter:
         Query latest broker status for an order.
         """
         try:
-            trade = self._trades.get(broker_order_id)
-            if trade is None:
+            entry = self._trades.get(broker_order_id)
+            if entry is None:
                 return None
+
+            trade = entry["trade"]
+            side = entry["side"]
 
             self.api.update_status(self.account)
             raw_status = str(getattr(trade.status, "status", "")).lower()
             mapped_status = map_shioaji_exec_status(raw_status)
             filled_qty = int(getattr(trade.status, "deal_quantity", 0) or 0)
             avg_price = float(getattr(trade.status, "avg_price", 0.0) or 0.0)
+
+            # 台股交易成本：手續費 0.1425%（買賣雙向），證交稅 0.3%（sell only）
+            _COMMISSION_RATE = 0.001425
+            _TAX_RATE_SELL = 0.003
+            trade_value = avg_price * filled_qty
+            fee = round(trade_value * _COMMISSION_RATE)
+            tax = round(trade_value * _TAX_RATE_SELL) if side == "sell" else 0
+
             return BrokerOrderStatus(
                 broker_order_id=broker_order_id,
                 status=mapped_status,
                 filled_qty=filled_qty,
                 avg_fill_price=avg_price,
-                fee=0.0,
-                tax=0.0,
+                fee=float(fee),
+                tax=float(tax),
             )
         except Exception as exc:
             reason_code = map_shioaji_error_to_reason_code(getattr(exc, "code", None), str(exc))
@@ -259,14 +270,15 @@ class ShioajiAdapter:
 
     def cancel_order(self, broker_order_id: str) -> BrokerSubmission:
         try:
-            trade = self._trades.get(broker_order_id)
-            if trade is None:
+            entry = self._trades.get(broker_order_id)
+            if entry is None:
                 return BrokerSubmission(
                     broker_order_id=broker_order_id,
                     status="rejected",
                     reason="order not found",
                     reason_code="EXEC_BROKER_UNKNOWN",
                 )
+            trade = entry["trade"]
             self.api.cancel_order(trade)
             return BrokerSubmission(
                 broker_order_id=broker_order_id,

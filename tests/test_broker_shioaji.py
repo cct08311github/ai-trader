@@ -17,11 +17,29 @@ def test_poll_order_status_filled():
     mock_trade.status.status = "Filled"
     mock_trade.status.deal_quantity = 100
     mock_trade.status.avg_price = 600.0
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "buy"}
     result = adapter.poll_order_status("test-oid")
     assert result is not None
     assert result.status == "filled"
     assert result.filled_qty == 100
+    # fee = round(600.0 * 100 * 0.001425) = round(85.5) = 86; tax = 0 (buy)
+    assert result.fee == round(600.0 * 100 * 0.001425)
+    assert result.tax == 0
+
+
+def test_poll_order_status_filled_sell():
+    adapter = _make_adapter()
+    mock_trade = MagicMock()
+    mock_trade.status.status = "Filled"
+    mock_trade.status.deal_quantity = 100
+    mock_trade.status.avg_price = 600.0
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "sell"}
+    result = adapter.poll_order_status("test-oid")
+    assert result is not None
+    assert result.status == "filled"
+    # fee = round(600.0 * 100 * 0.001425); tax = round(600.0 * 100 * 0.003)
+    assert result.fee == round(600.0 * 100 * 0.001425)
+    assert result.tax == round(600.0 * 100 * 0.003)
 
 
 def test_poll_order_status_partial():
@@ -30,7 +48,7 @@ def test_poll_order_status_partial():
     mock_trade.status.status = "Part_Filled"
     mock_trade.status.deal_quantity = 50
     mock_trade.status.avg_price = 600.0
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "buy"}
     result = adapter.poll_order_status("test-oid")
     assert result is not None
     assert result.status == "partially_filled"
@@ -155,7 +173,7 @@ def test_cancel_order_success():
     """Cancel existing order → submitted."""
     adapter = _make_adapter()
     mock_trade = MagicMock()
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "sell"}
     result = adapter.cancel_order("test-oid")
     assert result.status == "submitted"
     adapter.api.cancel_order.assert_called_once_with(mock_trade)
@@ -165,7 +183,7 @@ def test_cancel_order_api_exception():
     """Cancel API throws → rejected with reason_code."""
     adapter = _make_adapter()
     mock_trade = MagicMock()
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "sell"}
     adapter.api.cancel_order.side_effect = Exception("network error")
     result = adapter.cancel_order("test-oid")
     assert result.status == "rejected"
@@ -184,7 +202,7 @@ def test_wait_for_terminal_filled():
     mock_trade.status.status = "Filled"
     mock_trade.status.deal_quantity = 100
     mock_trade.status.avg_price = 600.0
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "buy"}
     with patch("time.sleep"):
         result = adapter.wait_for_terminal("test-oid")
     assert result.status == "filled"
@@ -198,7 +216,7 @@ def test_wait_for_terminal_timeout():
     mock_trade.status.status = "Submitted"
     mock_trade.status.deal_quantity = 0
     mock_trade.status.avg_price = 0.0
-    adapter._trades["test-oid"] = mock_trade
+    adapter._trades["test-oid"] = {"trade": mock_trade, "side": "buy"}
     # With max_poll_seconds=0, the while loop never executes; returns initial "submitted"
     result = adapter.wait_for_terminal("test-oid")
     assert result.broker_order_id == "test-oid"
