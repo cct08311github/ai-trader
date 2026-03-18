@@ -162,6 +162,36 @@ def _open_conn() -> sqlite3.Connection:
     return conn
 
 
+def _get_realtime_portfolio_counters(conn: sqlite3.Connection) -> tuple[float, int]:
+    """當日已實現 PnL + 過去 60 秒下單數（供 PortfolioState 建構用）。"""
+    # realized_pnl_today: 當日所有 sell fills 的淨損益
+    row = conn.execute(
+        """SELECT COALESCE(
+               SUM((f.price - b.avg_buy) * f.qty - f.fee - f.tax), 0
+           ) AS pnl
+           FROM fills f
+           JOIN orders o ON f.order_id = o.order_id
+           LEFT JOIN (
+               SELECT symbol,
+                      SUM(price * qty) / SUM(qty) AS avg_buy
+               FROM orders
+               WHERE side = 'buy'
+                 AND date(ts_submit, '+8 hours') = date('now', '+8 hours')
+               GROUP BY symbol
+           ) b ON o.symbol = b.symbol
+           WHERE o.side = 'sell'
+             AND date(o.ts_submit, '+8 hours') = date('now', '+8 hours')"""
+    ).fetchone()
+    realized_pnl = float(row[0]) if row and row[0] is not None else 0.0
+
+    # orders_last_60s
+    cnt = conn.execute(
+        "SELECT COUNT(*) FROM orders WHERE ts_submit >= datetime('now', '-1 minute')"
+    ).fetchone()[0]
+
+    return realized_pnl, int(cnt)
+
+
 def _utc_now_iso() -> str:
     return dt.datetime.now(tz=dt.timezone.utc).isoformat()
 
@@ -835,9 +865,10 @@ def run_watcher() -> None:
                     volume_1m=_exit_snap["volume"],
                     feed_delay_ms=50,
                 )
+                _realized_pnl, _orders_60s = _get_realtime_portfolio_counters(conn)
                 _exit_portfolio = PortfolioState(
                     nav=SIM_NAV, cash=SIM_CASH,
-                    realized_pnl_today=0.0, unrealized_pnl=0.0,
+                    realized_pnl_today=_realized_pnl, unrealized_pnl=0.0,
                     positions=all_pos_map,
                 )
                 _exit_system = SystemState(
@@ -845,7 +876,7 @@ def run_watcher() -> None:
                     trading_locked=False,
                     broker_connected=True,
                     db_write_p99_ms=20,
-                    orders_last_60s=0,
+                    orders_last_60s=_orders_60s,
                     reduce_only_mode=cash_mode_state,
                 )
                 _exit_result = evaluate_and_build_order(
@@ -973,9 +1004,10 @@ def run_watcher() -> None:
                     volume_1m=snap["volume"],
                     feed_delay_ms=50,
                 )
+                _realized_pnl, _orders_60s = _get_realtime_portfolio_counters(conn)
                 portfolio = PortfolioState(
                     nav=SIM_NAV, cash=SIM_CASH,
-                    realized_pnl_today=0.0, unrealized_pnl=0.0,
+                    realized_pnl_today=_realized_pnl, unrealized_pnl=0.0,
                     positions=all_pos_map,   # ← 包含全部持倉，gross_exposure 正確累計
                 )
                 system = SystemState(
@@ -983,7 +1015,7 @@ def run_watcher() -> None:
                     trading_locked=False,
                     broker_connected=True,
                     db_write_p99_ms=20,
-                    orders_last_60s=0,
+                    orders_last_60s=_orders_60s,
                     reduce_only_mode=cash_mode_state,
                 )
 
