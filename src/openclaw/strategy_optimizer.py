@@ -28,6 +28,11 @@ _CONFIDENCE_THRESHOLD = 0.6  # 低於此值不觸發調整
 _LOW_WIN_RATE_THRESHOLD = 0.35     # 勝率 < 35% → 收緊 trailing_pct
 _TRAILING_PCT_DELTA = 0.005        # 每次調整幅度
 
+# Walk-Forward 驗證窗口設定 [Issue #281]
+_WF_TRAIN_DAYS = 60   # 訓練期（用於計算基準指標）
+_WF_VALID_DAYS = 20   # 驗證期（t-20 至今；驗證期必須確認同一問題）
+_WF_MIN_VALID_TRADES = 3  # 驗證期最少成交筆數（不足則 bypass 驗證）
+
 
 @dataclass
 class MetricsReport:
@@ -140,10 +145,66 @@ def _ensure_optimizer_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+class WalkForwardValidator:
+    """Walk-Forward Out-of-Sample 驗證閘門 [Issue #281]
+
+    在套用自動調整前，確認問題在驗證期（最近 _WF_VALID_DAYS 天）同樣存在。
+    若驗證期訓練不足（< _WF_MIN_VALID_TRADES），則 bypass 驗證（保守通過）。
+
+    驗證邏輯：
+        訓練期 = [t - (_WF_TRAIN_DAYS + _WF_VALID_DAYS),  t - _WF_VALID_DAYS]
+        驗證期 = [t - _WF_VALID_DAYS,  t]
+
+    如果驗證期的指標沒有確認訓練期所觀察到的問題，則拒絕調整以防過度擬合。
+    """
+
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self._metrics_engine = StrategyMetricsEngine(conn)
+
+    def validate(self, condition: str, train_metrics: MetricsReport) -> tuple[bool, str]:
+        """
+        Args:
+            condition: 觸發調整的條件名稱（目前支援 "low_win_rate"）
+            train_metrics: 訓練期指標（由呼叫者提供，避免重複計算）
+
+        Returns:
+            (passed: bool, reason: str)
+        """
+        valid_cutoff = (
+            datetime.now() - timedelta(days=_WF_VALID_DAYS)
+        ).isoformat()
+        valid_metrics = self._metrics_engine.compute(window_days=_WF_VALID_DAYS)
+
+        # 驗證期樣本不足 → bypass（保守通過）
+        if valid_metrics.sample_n < _WF_MIN_VALID_TRADES:
+            return True, (
+                f"bypass: 驗證期交易筆數 {valid_metrics.sample_n} < {_WF_MIN_VALID_TRADES}"
+            )
+
+        if condition == "low_win_rate":
+            # 驗證期也必須確認低勝率問題
+            if valid_metrics.win_rate is None:
+                return True, "bypass: 驗證期 win_rate=None"
+            if valid_metrics.win_rate < _LOW_WIN_RATE_THRESHOLD:
+                return True, (
+                    f"confirmed: 驗證期 win_rate={valid_metrics.win_rate:.1%}"
+                    f" < {_LOW_WIN_RATE_THRESHOLD:.0%}"
+                )
+            return False, (
+                f"rejected: 驗證期 win_rate={valid_metrics.win_rate:.1%}"
+                f" >= {_LOW_WIN_RATE_THRESHOLD:.0%}，問題未在驗證期確認"
+            )
+
+        # 未知條件 → 保守通過
+        return True, f"bypass: 未知條件 {condition!r}"
+
+
 class OptimizationGateway:
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
         _ensure_optimizer_schema(conn)
+        self._validator = WalkForwardValidator(conn)
 
     def on_eod(self, metrics: MetricsReport) -> list[dict]:
         """根據 EOD 統計結果執行安全調整。
@@ -158,14 +219,20 @@ class OptimizationGateway:
 
         # 安全調整 1：低勝率 → 收緊 trailing_pct（讓更早鎖利）
         if metrics.win_rate is not None and metrics.win_rate < _LOW_WIN_RATE_THRESHOLD:
-            adj = self._adjust_param(
-                "trailing_pct",
-                delta=+_TRAILING_PCT_DELTA,   # 收緊（增大 trailing）
-                rationale=f"win_rate={metrics.win_rate:.1%} < {_LOW_WIN_RATE_THRESHOLD:.0%}",
-                metrics=metrics,
-            )
-            if adj:
-                adjustments.append(adj)
+            # Walk-Forward 驗證：確認問題在驗證期同樣存在
+            wf_passed, wf_reason = self._validator.validate("low_win_rate", metrics)
+            log.info("[optimizer] walk-forward validation (low_win_rate): %s", wf_reason)
+            if not wf_passed:
+                log.info("[optimizer] trailing_pct 調整被 walk-forward 驗證拒絕：%s", wf_reason)
+            else:
+                adj = self._adjust_param(
+                    "trailing_pct",
+                    delta=+_TRAILING_PCT_DELTA,   # 收緊（增大 trailing）
+                    rationale=f"win_rate={metrics.win_rate:.1%} < {_LOW_WIN_RATE_THRESHOLD:.0%}; wf={wf_reason}",
+                    metrics=metrics,
+                )
+                if adj:
+                    adjustments.append(adj)
 
         return [a.as_dict() for a in adjustments]
 
