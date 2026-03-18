@@ -392,15 +392,18 @@ def _generate_signal(
 
 # ── DB 寫入 helpers ───────────────────────────────────────────────────────────
 def _persist_decision(conn: sqlite3.Connection, *, decision_id: str, symbol: str,
-                       signal: str, now_iso: str) -> None:
+                       signal: str, now_iso: str,
+                       signal_source: str = "technical") -> None:
     conn.execute(
         """INSERT OR IGNORE INTO decisions
            (decision_id, ts, symbol, strategy_id, strategy_version,
-            signal_side, signal_score, signal_ttl_ms, llm_ref, reason_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            signal_side, signal_score, signal_ttl_ms, llm_ref, reason_json,
+            signal_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (decision_id, now_iso, symbol, STRATEGY_ID, STRATEGY_VERSION,
          signal, 0.7 if signal != "flat" else 0.0, 30000, None,
-         json.dumps({"source": "ticker_watcher"}, ensure_ascii=True)),
+         json.dumps({"source": "ticker_watcher"}, ensure_ascii=True),
+         signal_source),
     )
 
 
@@ -1061,6 +1064,7 @@ def run_watcher() -> None:
                     log.warning("[%s] trading_engine.tick 失敗：%s", symbol, _te_err)
 
                 _agg_meta: dict = {}
+                _dominant_source: str = "technical"
                 try:
                     from openclaw.signal_aggregator import aggregate as _agg
                     _agg_signal = _agg(
@@ -1069,12 +1073,14 @@ def run_watcher() -> None:
                         high_water_mark=high_water_marks.get(symbol),
                     )
                     sig = _agg_signal.action
+                    _dominant_source = _agg_signal.dominant_source
                     # 將 aggregator 結果記入 trace metadata
                     _agg_meta = {
                         "regime": _agg_signal.regime,
                         "score": _agg_signal.score,
                         "weights": _agg_signal.weights_used,
                         "reasons": _agg_signal.reasons,
+                        "dominant_source": _dominant_source,
                     }
                 except Exception as _agg_err:  # noqa: BLE001 — dynamic import; can't predict exceptions
                     log.warning("[%s] signal_aggregator 失敗 (%s), fallback to signal_generator",
@@ -1140,7 +1146,8 @@ def run_watcher() -> None:
                     try:
                         conn.execute("BEGIN IMMEDIATE")
                         _persist_decision(conn, decision_id=decision_id, symbol=symbol,
-                                          signal=sig, now_iso=_utc_now_iso())
+                                          signal=sig, now_iso=_utc_now_iso(),
+                                          signal_source=_dominant_source)
                         _persist_risk_check(conn, decision_id=decision_id, passed=False,
                                             reject_code=result.reject_code, metrics=result.metrics)
                         conn.commit()
@@ -1156,7 +1163,8 @@ def run_watcher() -> None:
                 try:
                     conn.execute("BEGIN IMMEDIATE")
                     _persist_decision(conn, decision_id=decision_id, symbol=symbol,
-                                      signal=sig, now_iso=_utc_now_iso())
+                                      signal=sig, now_iso=_utc_now_iso(),
+                                      signal_source=_dominant_source)
                     _persist_risk_check(conn, decision_id=decision_id, passed=True,
                                         reject_code=None, metrics=result.metrics)
                     conn.commit()

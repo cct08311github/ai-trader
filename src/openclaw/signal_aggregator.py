@@ -38,6 +38,7 @@ class AggregatedSignal:
     weights_used: dict                   # {'technical': float, 'llm': float, 'risk_adj': float}
     reasons: list = field(default_factory=list)
     limit_filtered: bool = False
+    dominant_source: str = "technical"   # 最大加權貢獻的信號來源
 
 
 def _get_regime(conn: sqlite3.Connection, symbol: str) -> tuple[str, float]:
@@ -109,12 +110,15 @@ def aggregate(
         limit_filtered = True
         reasons.append("limit_down:sell_score_floored_to_0.7")
 
-    # 6. 加權融合
-    final_score = (
-        weights["technical"] * tech_score +
-        weights["llm"]       * llm_score  +
-        weights["risk_adj"]  * risk_adj
-    )
+    # 6. 加權融合 + 歸因
+    contributions = {
+        "technical": weights["technical"] * tech_score,
+        "llm":       weights["llm"]       * llm_score,
+        "risk_adj":  weights["risk_adj"]  * risk_adj,
+    }
+    final_score = sum(contributions.values())
+    dominant_source = max(contributions, key=lambda k: contributions[k])
+    reasons.append(f"dominant={dominant_source}({contributions[dominant_source]:.3f})")
 
     if final_score >= _BUY_ACTION_THRESHOLD:
         action = "buy"
@@ -130,4 +134,64 @@ def aggregate(
         weights_used=weights,
         reasons=reasons,
         limit_filtered=limit_filtered,
+        dominant_source=dominant_source,
     )
+
+
+def get_signal_attribution_report(
+    conn: sqlite3.Connection,
+    days: int = 30,
+) -> list[dict]:
+    """信號來源績效歸因報告。
+
+    查詢近 N 日 decisions 表，按 signal_source 分組統計：
+    - 決策次數
+    - 與最終成交的勝率（有對應 filled order 且 pnl > 0）
+    - 平均 signal_score
+
+    Returns:
+        list of dicts: [{"source": str, "count": int, "win_rate": float|None,
+                         "avg_score": float}]
+    """
+    rows = conn.execute(
+        """
+        SELECT
+            COALESCE(d.signal_source, 'unknown') AS source,
+            COUNT(*) AS count,
+            AVG(d.signal_score) AS avg_score,
+            SUM(CASE WHEN f.pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN f.pnl IS NOT NULL THEN 1 ELSE 0 END) AS filled
+        FROM decisions d
+        LEFT JOIN orders o
+            ON o.decision_id = d.decision_id AND o.status = 'filled'
+        LEFT JOIN (
+            SELECT order_id,
+                   SUM((price - ref_price) * qty * CASE side WHEN 'sell' THEN 1 ELSE -1 END) AS pnl
+            FROM (
+                SELECT f2.order_id, f2.price, f2.qty, o2.side,
+                       LAG(f2.price) OVER (PARTITION BY o2.symbol ORDER BY f2.rowid) AS ref_price
+                FROM fills f2
+                JOIN orders o2 ON o2.order_id = f2.order_id
+            )
+            WHERE ref_price IS NOT NULL
+            GROUP BY order_id
+        ) f ON f.order_id = o.order_id
+        WHERE d.ts >= datetime('now', ?)
+        GROUP BY source
+        ORDER BY count DESC
+        """,
+        (f"-{days} days",),
+    ).fetchall()
+
+    result = []
+    for row in rows:
+        filled = row["filled"] or 0
+        wins = row["wins"] or 0
+        result.append({
+            "source": row["source"],
+            "count": row["count"],
+            "avg_score": round(row["avg_score"] or 0.0, 4),
+            "win_rate": round(wins / filled, 4) if filled > 0 else None,
+            "filled_trades": filled,
+        })
+    return result
