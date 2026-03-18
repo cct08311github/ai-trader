@@ -132,6 +132,22 @@ def _get_orders_last_60s(conn: sqlite3.Connection) -> int:
         return 0
 
 
+def _get_today_buy_filled_symbols(conn: sqlite3.Connection) -> set:
+    """返回今日（UTC+8）已有 fills 的 buy 訂單 symbol 集合，用於 wash sale 防護。"""
+    try:
+        rows = conn.execute(
+            """SELECT DISTINCT o.symbol
+               FROM orders o
+               JOIN fills f ON f.order_id = o.order_id
+               WHERE o.side = 'buy'
+                 AND date(o.ts_submit, '+8 hours') = date('now', '+8 hours')"""
+        ).fetchall()
+        return {r[0] for r in rows}
+    except sqlite3.Error as e:
+        log.warning("_get_today_buy_filled_symbols failed: %s", e)
+        return set()
+
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     """執行 schema migration：為舊版 DB 新增缺少的欄位。
 
@@ -958,6 +974,7 @@ def run_watcher() -> None:
                     nav=sim_nav, cash=sim_cash,
                     realized_pnl_today=_get_realized_pnl_today(conn), unrealized_pnl=0.0,
                     positions=all_pos_map,
+                    same_day_fill_symbols=_get_today_buy_filled_symbols(conn),
                 )
                 _exit_system = SystemState(
                     now_ms=scan_ms,
@@ -1096,6 +1113,7 @@ def run_watcher() -> None:
                     nav=sim_nav, cash=sim_cash,
                     realized_pnl_today=_get_realized_pnl_today(conn), unrealized_pnl=0.0,
                     positions=all_pos_map,   # ← 包含全部持倉，gross_exposure 正確累計
+                    same_day_fill_symbols=_get_today_buy_filled_symbols(conn),
                 )
                 system = SystemState(
                     now_ms=scan_ms,
