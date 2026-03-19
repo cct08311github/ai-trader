@@ -46,15 +46,22 @@ US_THRESHOLD      = float(os.environ.get("MONITOR_US_THRESHOLD",      "3.0"))   
 VIX_THRESHOLD     = float(os.environ.get("MONITOR_VIX_THRESHOLD",     "20.0"))  # %
 HOLDING_THRESHOLD = float(os.environ.get("MONITOR_HOLDING_THRESHOLD", "5.0"))   # %
 
+# 事件累積冷卻期（小時）— 同類型事件觸發後，COOLDOWN_HOURS 內不重複觸發 PM Review
+COOLDOWN_HOURS    = float(os.environ.get("MONITOR_COOLDOWN_HOURS",    "6.0"))   # hours
+
+# 重大新聞閾值：關鍵字命中數超過此值才觸發
+NEWS_KEYWORD_THRESHOLD = int(os.environ.get("MONITOR_NEWS_KEYWORD_THRESHOLD", "2"))
+
 # ── 路徑常數 ────────────────────────────────────────────────────────────────
 
 _HERE    = Path(__file__).resolve().parent
 _PROJECT = _HERE.parent
 _ROOT    = Path(os.getenv("OPENCLAW_ROOT_ENV", Path.home() / ".openclaw" / ".env")).parent
 
-_ROOT_ENV  = _ROOT / ".env"
-_PROJ_ENV  = _PROJECT / "frontend" / "backend" / ".env"
-_DB_PATH   = _PROJECT / "data" / "sqlite" / "trades.db"
+_ROOT_ENV    = _ROOT / ".env"
+_PROJ_ENV    = _PROJECT / "frontend" / "backend" / ".env"
+_DB_PATH     = _PROJECT / "data" / "sqlite" / "trades.db"
+_STATE_FILE  = _PROJECT / "config" / "market_monitor_state.json"
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +119,140 @@ def _require_yfinance():
     if yf is None:
         raise RuntimeError("yfinance 未安裝。請執行: pip install yfinance")
     return yf
+
+
+# ── 事件累積冷卻機制 ─────────────────────────────────────────────────────────
+
+def _read_monitor_state() -> dict:
+    """讀取監控狀態檔（不存在時回傳空 dict）。"""
+    try:
+        if _STATE_FILE.exists():
+            return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        log.warning("讀取監控狀態失敗: %s", exc)
+    return {}
+
+
+def _write_monitor_state(state: dict) -> None:
+    """寫入監控狀態檔。"""
+    try:
+        _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        log.warning("寫入監控狀態失敗: %s", exc)
+
+
+def is_in_cooldown() -> bool:
+    """若上次觸發距今不足 COOLDOWN_HOURS，回傳 True（冷卻中）。"""
+    state = _read_monitor_state()
+    last_ts = state.get("last_trigger_ts")
+    if not last_ts:
+        return False
+    try:
+        last_dt = datetime.fromisoformat(last_ts)
+        elapsed = datetime.now(_TZ_TWN) - last_dt
+        return elapsed.total_seconds() < COOLDOWN_HOURS * 3600
+    except Exception:
+        return False
+
+
+def record_trigger() -> None:
+    """記錄本次觸發時間戳（更新冷卻計時器）。"""
+    state = _read_monitor_state()
+    state["last_trigger_ts"] = datetime.now(_TZ_TWN).isoformat()
+    _write_monitor_state(state)
+
+
+def cooldown_remaining_minutes() -> float:
+    """回傳冷卻剩餘分鐘數（0 表示不在冷卻期）。"""
+    state = _read_monitor_state()
+    last_ts = state.get("last_trigger_ts")
+    if not last_ts:
+        return 0.0
+    try:
+        last_dt = datetime.fromisoformat(last_ts)
+        elapsed_sec = (datetime.now(_TZ_TWN) - last_dt).total_seconds()
+        remaining = COOLDOWN_HOURS * 3600 - elapsed_sec
+        return max(0.0, remaining / 60)
+    except Exception:
+        return 0.0
+
+
+# ── 重大新聞監控 ─────────────────────────────────────────────────────────────
+
+# 重大事件關鍵字（Fed 政策、AI 管制、地緣政治）
+_NEWS_KEYWORDS: dict[str, list[str]] = {
+    "FED_POLICY": [
+        "federal reserve", "fed rate", "interest rate", "fomc", "powell",
+        "rate hike", "rate cut", "聯準會", "升息", "降息", "利率決策",
+    ],
+    "AI_REGULATION": [
+        "ai ban", "chip ban", "export control", "nvidia ban", "semiconductor ban",
+        "ai restriction", "晶片禁令", "ai管制", "出口管制", "半導體禁令",
+    ],
+    "GEOPOLITICAL": [
+        "taiwan strait", "china invasion", "war", "military conflict",
+        "sanction", "embargo", "台海", "兩岸", "制裁", "戰爭",
+    ],
+}
+
+# 免費 RSS 來源（不需 API key）
+_RSS_FEEDS: list[tuple[str, str]] = [
+    ("Fed Reserve", "https://www.federalreserve.gov/feeds/press_all.xml"),
+    ("Reuters Business", "https://feeds.reuters.com/reuters/businessNews"),
+    ("CNBC Markets", "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258"),
+]
+
+
+def fetch_news_headlines(max_items: int = 20) -> list[dict[str, str]]:
+    """從免費 RSS feeds 抓取最新財經新聞標題。
+
+    回傳 list of {'source', 'title', 'link'}。網路失敗時靜默回傳空清單。
+    """
+    import xml.etree.ElementTree as ET
+
+    items: list[dict[str, str]] = []
+    for source, url in _RSS_FEEDS:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ai-trader/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                xml_data = resp.read()
+            root = ET.fromstring(xml_data)
+            for item in root.iter("item"):
+                title_el = item.find("title")
+                link_el  = item.find("link")
+                title = (title_el.text or "").strip() if title_el is not None else ""
+                link  = (link_el.text or "").strip() if link_el is not None else ""
+                if title:
+                    items.append({"source": source, "title": title, "link": link})
+                if len(items) >= max_items:
+                    break
+        except Exception as exc:
+            log.debug("RSS 抓取失敗 [%s]: %s", source, exc)
+    return items[:max_items]
+
+
+def check_news_alerts(
+    headlines: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """掃描新聞標題，回傳命中重大關鍵字的警報清單。
+
+    每條警報：{'type': 'NEWS_<CATEGORY>', 'title': ..., 'source': ..., 'keywords': [...]}
+    """
+    alerts: list[dict[str, str]] = []
+    for item in headlines:
+        text = item.get("title", "").lower()
+        for category, keywords in _NEWS_KEYWORDS.items():
+            hits = [kw for kw in keywords if kw.lower() in text]
+            if len(hits) >= NEWS_KEYWORD_THRESHOLD:
+                alerts.append({
+                    "type": f"NEWS_{category}",
+                    "title": item["title"],
+                    "source": item.get("source", ""),
+                    "keywords": hits,
+                })
+                break  # 每條新聞只歸類一次
+    return alerts
 
 
 def _pct_change(symbol: str, label: str) -> float | None:
@@ -219,17 +360,31 @@ def _fmt_pct(pct: float) -> str:
     return f"{icon} {pct:+.2f}%"
 
 
-def build_alert_message(alerts: list[dict[str, Any]], us_data: dict[str, Any]) -> str:
+def build_alert_message(
+    alerts: list[dict[str, Any]],
+    us_data: dict[str, Any],
+    news_alerts: list[dict[str, str]] | None = None,
+) -> str:
     now_str = datetime.now(_TZ_TWN).strftime("%Y-%m-%d %H:%M")
     lines = [f"⚠️ *市場事件警報* [{now_str}]", ""]
 
     for a in alerts:
-        label    = a["label"]
-        pct      = a["change_pct"]
-        thresh   = a["threshold"]
-        atype    = a["type"]
-        type_tag = {"US_MARKET": "🇺🇸 美股大盤", "VIX": "📊 VIX", "HOLDING": "📌 持倉"}[atype]
-        lines.append(f"{type_tag} *{label}* {_fmt_pct(pct)} （閾值 ±{thresh}%）")
+        atype = a["type"]
+        if atype == "NEWS":
+            lines.append(f"📰 *重大新聞* [{a.get('source','')}] {a.get('title','')}")
+        else:
+            label    = a["label"]
+            pct      = a["change_pct"]
+            thresh   = a["threshold"]
+            type_tag = {"US_MARKET": "🇺🇸 美股大盤", "VIX": "📊 VIX", "HOLDING": "📌 持倉"}.get(atype, atype)
+            lines.append(f"{type_tag} *{label}* {_fmt_pct(pct)} （閾值 ±{thresh}%）")
+
+    # 附加重大新聞警報
+    if news_alerts:
+        lines.append("")
+        lines.append("*重大新聞事件*")
+        for na in news_alerts[:3]:  # 最多顯示 3 條
+            lines.append(f"📰 [{na.get('source','')}] {na.get('title','')}")
 
     lines += [
         "",
@@ -299,11 +454,19 @@ def trigger_pm_review() -> bool:
 
 # ── 主程式 ────────────────────────────────────────────────────────────────────
 
-def main(dry_run: bool = False) -> int:
-    log.info("市場事件監控啟動（US_THR=%.1f%%, VIX_THR=%.1f%%, HOLD_THR=%.1f%%）",
-             US_THRESHOLD, VIX_THRESHOLD, HOLDING_THRESHOLD)
+def main(dry_run: bool = False, force: bool = False) -> int:
+    log.info(
+        "市場事件監控啟動（US_THR=%.1f%%, VIX_THR=%.1f%%, HOLD_THR=%.1f%%, COOLDOWN=%.1fh）",
+        US_THRESHOLD, VIX_THRESHOLD, HOLDING_THRESHOLD, COOLDOWN_HOURS,
+    )
 
-    # 1. 抓取美股大盤與 VIX
+    # 1. 冷卻期檢查（緊急模式可略過）
+    if not force and is_in_cooldown():
+        mins = cooldown_remaining_minutes()
+        log.info("⏳ 冷卻期中（剩餘 %.0f 分鐘），跳過本次觸發。使用 --force 可強制執行。", mins)
+        return 3  # exit code 3 = 冷卻期跳過
+
+    # 2. 抓取美股大盤與 VIX
     log.info("抓取美股大盤與 VIX...")
     try:
         us_data = fetch_us_market()
@@ -313,7 +476,7 @@ def main(dry_run: bool = False) -> int:
     log.info("S&P 500: %s, Nasdaq: %s, VIX: %s",
              us_data.get("S&P 500"), us_data.get("Nasdaq"), us_data.get("VIX"))
 
-    # 2. 抓取持倉個股
+    # 3. 抓取持倉個股
     holdings = fetch_holdings()
     log.info("目前持倉: %s", holdings or "(無)")
 
@@ -324,35 +487,47 @@ def main(dry_run: bool = False) -> int:
         for sym, pct in holding_changes.items():
             log.info("  %s: %s", sym, f"{pct:+.2f}%" if pct is not None else "N/A")
 
-    # 3. 判斷是否觸發
+    # 4. 重大新聞掃描
+    log.info("掃描重大新聞...")
+    headlines = fetch_news_headlines()
+    news_alerts = check_news_alerts(headlines)
+    if news_alerts:
+        for na in news_alerts:
+            log.info("📰 新聞事件 [%s] %s (關鍵字: %s)", na["type"], na["title"], na["keywords"])
+
+    # 5. 判斷市場價格事件
     alerts = check_alerts(us_data, holding_changes)
 
-    if not alerts:
+    if not alerts and not news_alerts:
         log.info("✅ 無事件觸發，市場狀況正常")
-        # 輸出摘要供 cron agent 讀取
         print(f"[market-monitor] 正常 | S&P 500: {us_data.get('S&P 500')}% "
               f"| Nasdaq: {us_data.get('Nasdaq')}% | VIX: {us_data.get('VIX')}%")
         return 0
 
-    # 4. 有警報 → 輸出摘要
+    # 6. 有警報 → 輸出摘要
     for a in alerts:
         print(f"[market-monitor] ⚠️  {a['type']} {a['label']}: {a['change_pct']:+.2f}% "
               f"（閾值 ±{a['threshold']}%）")
+    for na in news_alerts:
+        print(f"[market-monitor] 📰 {na['type']} [{na['source']}] {na['title']}")
 
     if dry_run:
         log.info("dry-run 模式：跳過 Telegram 和 PM Review 呼叫")
         return 1
 
-    # 5. 發送 Telegram
-    message = build_alert_message(alerts, us_data)
+    # 7. 發送 Telegram
+    message = build_alert_message(alerts, us_data, news_alerts=news_alerts)
     send_telegram(message)
 
-    # 6. 觸發 PM Review
+    # 8. 觸發 PM Review
     if AUTH_TOKEN:
         log.info("觸發緊急 PM Review...")
         trigger_pm_review()
     else:
         log.warning("AUTH_TOKEN 未設定，跳過 PM Review 觸發")
+
+    # 9. 記錄本次觸發，重置冷卻計時器
+    record_trigger()
 
     return 1  # exit code 1 = 有警報觸發（非錯誤，供 cron 日誌區分）
 
@@ -360,5 +535,7 @@ def main(dry_run: bool = False) -> int:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AI Trader 市場事件監控")
     parser.add_argument("--dry-run", action="store_true", help="只輸出，不發送 Telegram")
+    parser.add_argument("--force", action="store_true",
+                        help="緊急模式：略過冷卻期，強制執行（手動緊急觸發）")
     args = parser.parse_args()
-    sys.exit(main(dry_run=args.dry_run))
+    sys.exit(main(dry_run=args.dry_run, force=args.force))
