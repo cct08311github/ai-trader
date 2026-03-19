@@ -170,6 +170,11 @@ class TestMainIntegration:
         mock_tg.assert_called_once()
         mock_pm.assert_called_once()
 
+    def test_missing_yfinance_returns_2_without_import_exit(self):
+        with patch.object(mon, "yf", None):
+            rc = mon.main(dry_run=True)
+        assert rc == 2
+
 
 # ── send_telegram 網路失敗容錯 ───────────────────────────────────────────────
 
