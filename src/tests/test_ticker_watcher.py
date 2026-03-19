@@ -1441,7 +1441,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330", "2317"])
 
         # Make _is_market_open raise StopIteration on first call to exit while loop
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         with pytest.raises(StopIteration):
             tw.run_watcher()
@@ -1461,7 +1462,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         with pytest.raises(StopIteration):
             tw.run_watcher()
@@ -1479,7 +1481,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: bad_conn)
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         with pytest.raises(StopIteration):
             tw.run_watcher()  # Should not crash despite missing positions table
@@ -1495,7 +1498,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         mock_api = MagicMock()
         mock_sj_module = MagicMock()
@@ -1521,7 +1525,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         mock_api = MagicMock()
         mock_api.fetch_contracts.side_effect = Exception("contract fetch failed")
@@ -1545,7 +1550,8 @@ class TestRunWatcherInit:
         monkeypatch.setattr(tw, "DB_PATH", ":memory:")
         monkeypatch.setattr(tw, "_open_conn", lambda: mem_conn)
         monkeypatch.setattr(tw, "_load_manual_watchlist", lambda: ["2330"])
-        monkeypatch.setattr(tw, "_is_market_open", lambda: (_ for _ in ()).throw(StopIteration))
+        def _raise_stop(): raise StopIteration
+        monkeypatch.setattr(tw, "_is_market_open", _raise_stop)
 
         mock_api = MagicMock()
         mock_api.login.side_effect = Exception("authentication failed")

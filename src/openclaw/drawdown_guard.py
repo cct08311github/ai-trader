@@ -251,13 +251,14 @@ def apply_drawdown_actions(conn: sqlite3.Connection, decision: DrawdownDecision)
         if decision.risk_mode == "deep_suspend":
             detail["consecutive_loss_months"] = decision.consecutive_loss_months
             detail["monthly_losses"] = decision.monthly_losses
+        severity = "warn" if decision.risk_mode == "reduce_only" else "critical"
         conn.execute(
             """
             INSERT INTO incidents(incident_id, ts, severity, source, code, detail_json, resolved)
             VALUES (lower(hex(randomblob(16))), datetime('now'), ?, 'drawdown_guard', ?, ?, 0)
             """,
             (
-                "critical",
+                severity,
                 decision.reason_code,
                 json.dumps(detail, ensure_ascii=True),
             ),
