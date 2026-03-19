@@ -132,45 +132,53 @@ class TestMainIntegration:
     def _mock_us_alert(self):
         return {"S&P 500": -4.5, "Nasdaq": -5.0, "Dow": -3.5, "VIX": 28.0}
 
-    def test_no_alerts_returns_0(self):
+    def test_no_alerts_returns_0(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
         with patch.object(mon, "fetch_us_market", return_value=self._mock_us()), \
              patch.object(mon, "fetch_holdings", return_value=[]), \
-             patch.object(mon, "fetch_holding_changes", return_value={}):
+             patch.object(mon, "fetch_holding_changes", return_value={}), \
+             patch.object(mon, "fetch_news_headlines", return_value=[]):
             rc = mon.main(dry_run=True)
         assert rc == 0
 
-    def test_alerts_returns_1(self):
-        with patch.object(mon, "fetch_us_market", return_value=self._mock_us_alert()), \
-             patch.object(mon, "fetch_holdings", return_value=[]), \
-             patch.object(mon, "fetch_holding_changes", return_value={}):
-            rc = mon.main(dry_run=True)
-        assert rc == 1
-
-    def test_dry_run_skips_telegram(self):
+    def test_alerts_returns_1(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
         with patch.object(mon, "fetch_us_market", return_value=self._mock_us_alert()), \
              patch.object(mon, "fetch_holdings", return_value=[]), \
              patch.object(mon, "fetch_holding_changes", return_value={}), \
+             patch.object(mon, "fetch_news_headlines", return_value=[]):
+            rc = mon.main(dry_run=True)
+        assert rc == 1
+
+    def test_dry_run_skips_telegram(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        with patch.object(mon, "fetch_us_market", return_value=self._mock_us_alert()), \
+             patch.object(mon, "fetch_holdings", return_value=[]), \
+             patch.object(mon, "fetch_holding_changes", return_value={}), \
+             patch.object(mon, "fetch_news_headlines", return_value=[]), \
              patch.object(mon, "send_telegram") as mock_tg, \
              patch.object(mon, "trigger_pm_review") as mock_pm:
             mon.main(dry_run=True)
         mock_tg.assert_not_called()
         mock_pm.assert_not_called()
 
-    def test_alerts_trigger_telegram_and_pm(self):
+    def test_alerts_trigger_telegram_and_pm(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
         with patch.object(mon, "fetch_us_market", return_value=self._mock_us_alert()), \
              patch.object(mon, "fetch_holdings", return_value=[]), \
              patch.object(mon, "fetch_holding_changes", return_value={}), \
+             patch.object(mon, "fetch_news_headlines", return_value=[]), \
              patch.object(mon, "send_telegram", return_value=True) as mock_tg, \
              patch.object(mon, "trigger_pm_review", return_value=True) as mock_pm, \
              patch.dict(os.environ, {"AUTH_TOKEN": "test-token"}):
-            # Reload to pick up AUTH_TOKEN
             mon.AUTH_TOKEN = "test-token"
             rc = mon.main(dry_run=False)
         assert rc == 1
         mock_tg.assert_called_once()
         mock_pm.assert_called_once()
 
-    def test_missing_yfinance_returns_2_without_import_exit(self):
+    def test_missing_yfinance_returns_2_without_import_exit(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
         with patch.object(mon, "yf", None):
             rc = mon.main(dry_run=True)
         assert rc == 2
@@ -194,3 +202,109 @@ class TestSendTelegram:
         finally:
             mon.TELEGRAM_BOT_TOKEN = original
         assert result is False
+
+
+# ── 冷卻期機制 ────────────────────────────────────────────────────────────────
+
+class TestCooldown:
+    """驗證冷卻期讀寫與計算邏輯。"""
+
+    def test_no_state_file_not_in_cooldown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        assert mon.is_in_cooldown() is False
+
+    def test_fresh_trigger_puts_in_cooldown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(mon, "COOLDOWN_HOURS", 6.0)
+        mon.record_trigger()
+        assert mon.is_in_cooldown() is True
+
+    def test_expired_cooldown_not_in_cooldown(self, tmp_path, monkeypatch):
+        from datetime import datetime, timezone, timedelta
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(mon, "COOLDOWN_HOURS", 1.0)
+        # Write a timestamp 2 hours ago
+        old_ts = (datetime.now(timezone(timedelta(hours=8))) - timedelta(hours=2)).isoformat()
+        (tmp_path / "state.json").write_text('{"last_trigger_ts": "' + old_ts + '"}')
+        assert mon.is_in_cooldown() is False
+
+    def test_remaining_minutes_zero_when_no_state(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        assert mon.cooldown_remaining_minutes() == 0.0
+
+    def test_remaining_minutes_positive_in_cooldown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(mon, "COOLDOWN_HOURS", 6.0)
+        mon.record_trigger()
+        assert mon.cooldown_remaining_minutes() > 0.0
+
+    def test_main_returns_3_when_in_cooldown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(mon, "COOLDOWN_HOURS", 6.0)
+        mon.record_trigger()
+        rc = mon.main(dry_run=True, force=False)
+        assert rc == 3
+
+    def test_force_bypasses_cooldown(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(mon, "_STATE_FILE", tmp_path / "state.json")
+        monkeypatch.setattr(mon, "COOLDOWN_HOURS", 6.0)
+        mon.record_trigger()
+        # Even in cooldown, force=True should proceed (and fetch market data)
+        with patch.object(mon, "fetch_us_market", return_value={"S&P 500": 0.5, "Nasdaq": 0.3, "Dow": 0.2, "VIX": 5.0}), \
+             patch.object(mon, "fetch_holdings", return_value=[]), \
+             patch.object(mon, "fetch_news_headlines", return_value=[]):
+            rc = mon.main(dry_run=True, force=True)
+        assert rc != 3  # Not the cooldown-skip code
+
+
+# ── 重大新聞監控 ─────────────────────────────────────────────────────────────
+
+class TestNewsAlerts:
+    """驗證新聞關鍵字掃描邏輯。"""
+
+    def test_no_headlines_no_alerts(self):
+        assert mon.check_news_alerts([]) == []
+
+    def test_fed_keyword_triggers_alert(self):
+        headlines = [{"source": "Reuters", "title": "Federal Reserve raises interest rate by 25bps", "link": ""}]
+        alerts = mon.check_news_alerts(headlines)
+        assert len(alerts) == 1
+        assert alerts[0]["type"] == "NEWS_FED_POLICY"
+
+    def test_ai_ban_triggers_alert(self):
+        headlines = [{"source": "CNBC", "title": "US announces chip ban and semiconductor ban on AI exports", "link": ""}]
+        alerts = mon.check_news_alerts(headlines)
+        assert len(alerts) == 1
+        assert alerts[0]["type"] == "NEWS_AI_REGULATION"
+
+    def test_geopolitical_triggers_alert(self):
+        headlines = [{"source": "Reuters", "title": "China sanction imposed over Taiwan strait tensions", "link": ""}]
+        alerts = mon.check_news_alerts(headlines)
+        assert len(alerts) == 1
+        assert alerts[0]["type"] == "NEWS_GEOPOLITICAL"
+
+    def test_irrelevant_news_no_alert(self):
+        headlines = [{"source": "CNBC", "title": "Stock market opens slightly higher on Tuesday", "link": ""}]
+        assert mon.check_news_alerts(headlines) == []
+
+    def test_single_keyword_below_threshold_no_alert(self, monkeypatch):
+        monkeypatch.setattr(mon, "NEWS_KEYWORD_THRESHOLD", 2)
+        headlines = [{"source": "Reuters", "title": "Federal Reserve meeting scheduled", "link": ""}]
+        # Only "federal reserve" matches, not enough for threshold=2
+        alerts = mon.check_news_alerts(headlines)
+        assert alerts == []
+
+    def test_fetch_news_returns_list_on_network_error(self, monkeypatch):
+        """網路失敗時靜默回傳空清單。"""
+        import urllib.error
+        with patch("urllib.request.urlopen", side_effect=Exception("network error")):
+            result = mon.fetch_news_headlines()
+        assert isinstance(result, list)
+
+    def test_build_alert_message_includes_news(self):
+        alerts = []
+        us_data = {"S&P 500": 0.5, "Nasdaq": 0.3, "VIX": 5.0}
+        news_alerts = [{"type": "NEWS_FED_POLICY", "title": "Fed raises rates", "source": "Reuters", "keywords": ["federal reserve", "interest rate"]}]
+        msg = mon.build_alert_message(alerts, us_data, news_alerts=news_alerts)
+        assert "Fed raises rates" in msg
+        assert "Reuters" in msg
