@@ -23,7 +23,7 @@ import uuid
 
 log = logging.getLogger(__name__)
 
-_MODEL = "MiniMax-M2.5"
+_MODEL = "MiniMax-M2.7"
 
 # 每日 LLM 審查次數上限（可由環境變數覆蓋）
 _LLM_DAILY_LIMIT: int = int(os.environ.get("LLM_DAILY_CALL_LIMIT", "50"))
@@ -99,6 +99,25 @@ def _record_cost_guard_incident(
         log.warning("[proposal_reviewer] cost_guard incident 寫入失敗: %s", e)
 
 
+def _position_weights(conn: sqlite3.Connection) -> dict[str, float]:
+    try:
+        rows = conn.execute(
+            "SELECT symbol, quantity, current_price FROM positions WHERE quantity > 0"
+        ).fetchall()
+    except Exception:
+        return {}
+
+    total_value = sum((r[1] or 0) * (r[2] or 0) for r in rows)
+    if total_value <= 0:
+        return {}
+
+    return {
+        str(r[0]): (((r[1] or 0) * (r[2] or 0)) / total_value)
+        for r in rows
+        if r[0]
+    }
+
+
 def _build_position_summary(conn: sqlite3.Connection) -> str:
     try:
         rows = conn.execute(
@@ -158,6 +177,7 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
 
     from openclaw.tg_notify import send_message
     position_summary = _build_position_summary(conn)
+    live_weights = _position_weights(conn)
     reviewed = 0
 
     for proposal_id, generated_by, target_rule, evidence, proposal_json_str in rows:
@@ -184,10 +204,40 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
 
         try:
             proposal = json.loads(proposal_json_str or "{}")
-            symbol = proposal.get("symbol", "?")
+            if target_rule != "POSITION_REBALANCE":
+                log.info(
+                    "[proposal_reviewer] skip non-rebalance proposal %s (%s/%s)",
+                    proposal_id[:8],
+                    generated_by,
+                    target_rule,
+                )
+                continue
+
+            symbol = str(proposal.get("symbol", "")).strip()
             reduce_pct = float(proposal.get("reduce_pct", 0))
-            weight = float(proposal.get("current_weight",
-                           proposal.get("weight", 0)))
+            weight = float(
+                proposal.get(
+                    "current_weight",
+                    proposal.get("weight", live_weights.get(symbol, 0)),
+                )
+            )
+
+            if not symbol or reduce_pct <= 0 or weight <= 0:
+                conn.execute(
+                    "UPDATE strategy_proposals SET status=?, decided_at=? "
+                    "WHERE proposal_id=?",
+                    ("skipped", int(time.time() * 1000), proposal_id),
+                )
+                conn.commit()
+                log.info(
+                    "[proposal_reviewer] skipped invalid proposal %s "
+                    "(symbol=%r reduce_pct=%.4f weight=%.4f)",
+                    proposal_id[:8],
+                    symbol,
+                    reduce_pct,
+                    weight,
+                )
+                continue
 
             result = _gemini_review(
                 symbol=symbol, weight=weight, reduce_pct=reduce_pct,

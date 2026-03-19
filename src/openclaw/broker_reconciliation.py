@@ -1,12 +1,207 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import uuid
+from dataclasses import dataclass, field
 from typing import Any
 
 from openclaw.audit_store import insert_incident
+
+log = logging.getLogger(__name__)
+
+
+# ──────────────────────────────────────────────
+# Error Budget
+# ──────────────────────────────────────────────
+
+@dataclass
+class ErrorBudgetPolicy:
+    """Tunable thresholds for mismatch severity classification."""
+
+    # Mismatch is "small noise" when total quantity delta <= this many shares.
+    small_diff_shares: int = 100
+    # How many consecutive days of small diffs before we downgrade to INFO.
+    consecutive_days_to_suppress: int = 3
+    # If today's mismatch count exceeds avg * this multiplier → P0.
+    spike_multiplier: float = 3.0
+    # Lookback window (days) for computing the baseline average.
+    baseline_days: int = 7
+
+
+@dataclass
+class ErrorBudgetDecision:
+    """Outcome from evaluate_error_budget()."""
+
+    severity: str          # "info" | "warning" | "critical"
+    suppress_incident: bool
+    reason: str
+    quantity_delta: int    # total shares difference
+    consecutive_small_days: int
+    baseline_avg: float
+    details: dict[str, Any] = field(default_factory=dict)
+
+
+def _compute_quantity_delta(mismatches: dict[str, list[dict[str, Any]]]) -> int:
+    """Sum of |local.qty − broker.qty| across all quantity_mismatch entries."""
+    total = 0
+    for item in mismatches.get("quantity_mismatch", []):
+        local_qty = int((item.get("local") or {}).get("quantity") or 0)
+        broker_qty = int((item.get("broker") or {}).get("quantity") or 0)
+        total += abs(local_qty - broker_qty)
+    # Also count each missing-position as a full-position delta.
+    for item in mismatches.get("missing_local_position", []):
+        total += int((item.get("broker") or {}).get("quantity") or 0)
+    for item in mismatches.get("missing_broker_position", []):
+        total += int((item.get("local") or {}).get("quantity") or 0)
+    return total
+
+
+def _get_daily_mismatch_counts(
+    conn: sqlite3.Connection,
+    *,
+    days: int = 7,
+) -> list[int]:
+    """Return the most recent `days` daily max-mismatch-count values.
+
+    We pick the worst (max) reconciliation run per calendar day so that
+    a noisy day does not look artificially clean.
+    """
+    cutoff_ms = int((time.time() - days * 86400) * 1000)
+    try:
+        rows = conn.execute(
+            """
+            SELECT date(created_at / 1000, 'unixepoch') AS day,
+                   max(mismatch_count) AS daily_max
+              FROM reconciliation_reports
+             WHERE created_at >= ?
+             GROUP BY day
+             ORDER BY day DESC
+            """,
+            (cutoff_ms,),
+        ).fetchall()
+        return [int(r[1]) for r in rows]
+    except sqlite3.Error as exc:
+        log.warning("[reconciliation] Error Budget: cannot query history: %s", exc)
+        return []
+
+
+def _count_consecutive_small_days(
+    conn: sqlite3.Connection,
+    *,
+    small_diff_shares: int,
+    consecutive_days: int,
+) -> int:
+    """Return the number of consecutive *recent* days where max quantity delta was small.
+
+    Reads `summary_json` to extract `quantity_delta` stored per report.
+    Returns 0 if the schema column is unavailable.
+    """
+    try:
+        cutoff_ms = int((time.time() - consecutive_days * 86400) * 1000)
+        rows = conn.execute(
+            """
+            SELECT date(created_at / 1000, 'unixepoch') AS day,
+                   max(mismatch_count) AS daily_max,
+                   summary_json
+              FROM reconciliation_reports
+             WHERE created_at >= ?
+             GROUP BY day
+             ORDER BY day DESC
+            """,
+            (cutoff_ms,),
+        ).fetchall()
+    except sqlite3.Error:
+        return 0
+
+    consecutive = 0
+    for row in rows:
+        mismatch_count = int(row[1])
+        if mismatch_count == 0:
+            # Perfect day — counts as small.
+            consecutive += 1
+            continue
+        # Try to extract per-day quantity delta from any report summary.
+        try:
+            summary = json.loads(row[2] or "{}")
+            qty_delta = int(summary.get("quantity_delta", -1))
+            if qty_delta < 0:
+                # Old row without quantity_delta field — fall back to mismatch count.
+                qty_delta = mismatch_count
+        except (json.JSONDecodeError, TypeError):
+            qty_delta = mismatch_count
+        if qty_delta <= small_diff_shares:
+            consecutive += 1
+        else:
+            break
+    return consecutive
+
+
+def evaluate_error_budget(
+    conn: sqlite3.Connection,
+    mismatches: dict[str, list[dict[str, Any]]],
+    *,
+    policy: ErrorBudgetPolicy | None = None,
+) -> ErrorBudgetDecision:
+    """Classify this reconciliation mismatch using the Error Budget policy.
+
+    Returns an ErrorBudgetDecision with:
+    - severity: "info" | "warning" | "critical"
+    - suppress_incident: True means skip writing to incidents table (just log)
+    """
+    if policy is None:
+        policy = ErrorBudgetPolicy()
+
+    qty_delta = _compute_quantity_delta(mismatches)
+    history = _get_daily_mismatch_counts(conn, days=policy.baseline_days)
+    baseline_avg = sum(history) / len(history) if history else 0.0
+
+    total_mismatches = sum(len(v) for v in mismatches.values())
+
+    # ── Spike detection ───────────────────────────────────────────────────
+    if baseline_avg > 0 and total_mismatches > baseline_avg * policy.spike_multiplier:
+        return ErrorBudgetDecision(
+            severity="critical",
+            suppress_incident=False,
+            reason=f"SPIKE: {total_mismatches} mismatches > {policy.spike_multiplier}x avg ({baseline_avg:.1f})",
+            quantity_delta=qty_delta,
+            consecutive_small_days=0,
+            baseline_avg=baseline_avg,
+            details={"trigger": "spike", "multiplier": policy.spike_multiplier},
+        )
+
+    # ── Small-noise suppression ───────────────────────────────────────────
+    if qty_delta <= policy.small_diff_shares:
+        consecutive = _count_consecutive_small_days(
+            conn,
+            small_diff_shares=policy.small_diff_shares,
+            consecutive_days=policy.consecutive_days_to_suppress,
+        )
+        if consecutive >= policy.consecutive_days_to_suppress:
+            return ErrorBudgetDecision(
+                severity="info",
+                suppress_incident=True,
+                reason=(
+                    f"SMALL_NOISE: qty_delta={qty_delta} shares ≤ {policy.small_diff_shares} "
+                    f"for {consecutive} consecutive days"
+                ),
+                quantity_delta=qty_delta,
+                consecutive_small_days=consecutive,
+                baseline_avg=baseline_avg,
+                details={"trigger": "suppress"},
+            )
+
+    return ErrorBudgetDecision(
+        severity="warning",
+        suppress_incident=False,
+        reason=f"NORMAL: qty_delta={qty_delta} shares, mismatches={total_mismatches}",
+        quantity_delta=qty_delta,
+        consecutive_small_days=0,
+        baseline_avg=baseline_avg,
+        details={"trigger": "normal"},
+    )
 
 
 def ensure_reconciliation_schema(conn: sqlite3.Connection) -> None:
@@ -94,10 +289,19 @@ def reconcile_broker_state(
         mismatches=mismatches,
         broker_context=broker_context,
     )
+
+    # Evaluate error budget before writing the report (history lookup uses
+    # existing rows so we must query *before* inserting the new one).
+    budget: ErrorBudgetDecision | None = None
+    if mismatch_count:
+        budget = evaluate_error_budget(conn, mismatches)
+
+    quantity_delta = budget.quantity_delta if budget else 0
     report = {
         "report_id": str(uuid.uuid4()),
         "created_at": int(time.time() * 1000),
         "mismatch_count": mismatch_count,
+        "quantity_delta": quantity_delta,
         "ok": mismatch_count == 0,
         "mismatches": mismatches,
         "diagnostics": diagnostics,
@@ -107,20 +311,26 @@ def reconcile_broker_state(
         "INSERT INTO reconciliation_reports(report_id, created_at, mismatch_count, summary_json) VALUES (?, ?, ?, ?)",
         (report["report_id"], report["created_at"], mismatch_count, json.dumps(report, ensure_ascii=True)),
     )
+
     simulation_expected = (
         diagnostics.get("resolved_simulation") is True
         and "MODE_OR_ACCOUNT_MISMATCH_SUSPECTED" in diagnostics.get("diagnosis_codes", [])
     )
     if mismatch_count and not simulation_expected:
-        try:
-            _insert_reconciliation_incident_best_effort(
-                conn=conn,
-                report=report,
-                mismatches=mismatches,
-                diagnostics=diagnostics,
-            )
-        except sqlite3.Error:
-            pass
+        if budget is not None and budget.suppress_incident:
+            log.info("[reconciliation] Error Budget suppressed incident: %s", budget.reason)
+        else:
+            try:
+                _insert_reconciliation_incident_best_effort(
+                    conn=conn,
+                    report=report,
+                    mismatches=mismatches,
+                    diagnostics=diagnostics,
+                    budget=budget,
+                )
+            except sqlite3.Error:
+                pass
+
     if auto_commit:
         conn.commit()
     return report
@@ -185,6 +395,7 @@ def _insert_reconciliation_incident_best_effort(
     report: dict[str, Any],
     mismatches: dict[str, list[dict[str, Any]]],
     diagnostics: dict[str, Any],
+    budget: "ErrorBudgetDecision | None" = None,
 ) -> None:
     stable_detail = _stable_incident_detail(mismatches, diagnostics)
     rows = conn.execute(
@@ -203,18 +414,38 @@ def _insert_reconciliation_incident_best_effort(
             continue
         if payload.get("stable_detail") == stable_detail:
             return
-    severity = "critical" if diagnostics.get("suspected_mode_or_account_mismatch") else "warning"
+
+    # Severity priority: budget spike → critical; account mismatch → critical;
+    # budget normal/warning; fallback → warning.
+    if budget is not None and budget.severity == "critical":
+        severity = "critical"
+    elif diagnostics.get("suspected_mode_or_account_mismatch"):
+        severity = "critical"
+    elif budget is not None:
+        severity = budget.severity  # "warning" or "info"
+    else:
+        severity = "warning"
+
+    detail: dict[str, Any] = {
+        "report_id": report["report_id"],
+        "stable_detail": stable_detail,
+        "mismatches": mismatches,
+        "diagnostics": diagnostics,
+    }
+    if budget is not None:
+        detail["error_budget"] = {
+            "severity": budget.severity,
+            "reason": budget.reason,
+            "quantity_delta": budget.quantity_delta,
+            "baseline_avg": budget.baseline_avg,
+        }
+
     insert_incident(
         conn,
         ts=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         severity=severity,
         source="broker_reconciliation",
         code="RECONCILIATION_MISMATCH",
-        detail={
-            "report_id": report["report_id"],
-            "stable_detail": stable_detail,
-            "mismatches": mismatches,
-            "diagnostics": diagnostics,
-        },
+        detail=detail,
         auto_commit=False,
     )

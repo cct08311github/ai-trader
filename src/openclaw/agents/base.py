@@ -18,8 +18,8 @@ _REPO_ROOT = get_repo_root()
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
 
 # 預設模型：可透過環境變數覆寫
-DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "MiniMax-M2.5")
-COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "MiniMax-M2.5")
+DEFAULT_MODEL: str = os.environ.get("AGENT_LLM_MODEL", "MiniMax-M2.7")
+COMMITTEE_MODEL: str = os.environ.get("AGENT_COMMITTEE_MODEL", "MiniMax-M2.7")
 
 
 def open_conn(db_path: str = _DEFAULT_DB) -> sqlite3.Connection:
