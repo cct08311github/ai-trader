@@ -64,6 +64,8 @@ _WATCHLIST_CFG = _REPO_ROOT / "config" / "watchlist.json"
 _FALLBACK_UNIVERSE: List[str] = ["2330", "2317", "2454"]
 _PRICE_HISTORY_MAX: int = 60    # 每支股票保留最近 N 筆收盤價，供 regime 分類
 _CASH_MODE_MIN_PRICES: int = 20  # 至少需要此筆數才能評估 market regime
+_SNAPSHOT_FAILURE_THRESHOLD: int = int(os.environ.get("SNAPSHOT_FAILURE_THRESHOLD", "3"))
+_SUSPENDED_POSITION_STATE: str = "SUSPENDED"
 
 # 信號閾值（可透過環境變數覆寫）
 import os as _os
@@ -220,6 +222,17 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             last_auto_change_ts INTEGER,
             frozen_until_ts     INTEGER
         )""",
+        """CREATE TABLE IF NOT EXISTS watcher_symbol_health (
+            symbol                        TEXT PRIMARY KEY,
+            consecutive_snapshot_failures INTEGER NOT NULL DEFAULT 0,
+            suspended                     INTEGER NOT NULL DEFAULT 0,
+            last_error                    TEXT,
+            last_failure_at               INTEGER,
+            last_success_at               INTEGER,
+            suspended_at                  INTEGER,
+            updated_at                    INTEGER NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_watcher_symbol_health_suspended ON watcher_symbol_health (suspended)",
     ]
     for ddl in sprint2_ddl:
         conn.execute(ddl)
@@ -315,36 +328,160 @@ def _load_manual_watchlist() -> List[str]:
 _BASE_PRICE: Dict[str, float] = _BASE_PRICE_DEFAULT
 
 
-def _get_snapshot(api, symbol: str) -> dict:
+class SnapshotUnavailableError(RuntimeError):
+    """Raised when a live broker snapshot cannot be used safely."""
+
+
+def _mock_snapshot(symbol: str) -> dict:
+    """Generate a deterministic-enough mock snapshot around the base price."""
+    import random
+
+    base = _BASE_PRICE.get(symbol, 100.0)
+    close = round(base * (1 + random.uniform(-0.003, 0.003)), 1)
+    return {
+        "close": close,
+        "bid": round(close * 0.999, 1),
+        "ask": round(close * 1.001, 1),
+        "reference": base,
+        "volume": random.randint(500, 5000),
+        "source": "mock",
+    }
+
+
+def _get_snapshot(api, symbol: str, *, allow_mock_fallback: bool = True) -> dict:
     """取得 bid/ask/close/reference/volume。優先 Shioaji，不可用時 mock。"""
     if api is not None:
         try:
             contract = api.Contracts.Stocks[symbol]
             snaps = api.snapshots([contract])
-            if snaps:
-                s = snaps[0]
-                close = float(getattr(s, "close", 0) or 0)
-                bid   = float(getattr(s, "buy_price",  0) or close * 0.999)
-                ask   = float(getattr(s, "sell_price", 0) or close * 1.001)
-                ref   = float(getattr(s, "reference",  close) or close)
-                vol   = int(getattr(s, "volume", 1000) or 1000)
-                if close > 0:
-                    return {"close": close, "bid": bid, "ask": ask, "reference": ref, "volume": vol}
+            if not snaps:
+                raise SnapshotUnavailableError("empty snapshot payload")
+            s = snaps[0]
+            close = float(getattr(s, "close", 0) or 0)
+            if close <= 0:
+                raise SnapshotUnavailableError("snapshot close <= 0")
+            bid = float(getattr(s, "buy_price", 0) or close * 0.999)
+            ask = float(getattr(s, "sell_price", 0) or close * 1.001)
+            ref = float(getattr(s, "reference", close) or close)
+            vol = int(getattr(s, "volume", 1000) or 1000)
+            return {"close": close, "bid": bid, "ask": ask, "reference": ref, "volume": vol}
+        except SnapshotUnavailableError:
+            if not allow_mock_fallback:
+                raise
         except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
+            if not allow_mock_fallback:
+                raise SnapshotUnavailableError(str(e)) from e
             log.warning("Shioaji snapshot [%s]: %s — using mock", symbol, e)
 
-    # Mock: small random walk around base price
-    import random
-    base = _BASE_PRICE.get(symbol, 100.0)
-    close = round(base * (1 + random.uniform(-0.003, 0.003)), 1)
-    return {
-        "close": close,
-        "bid":   round(close * 0.999, 1),
-        "ask":   round(close * 1.001, 1),
-        "reference": base,
-        "volume": random.randint(500, 5000),
-        "source": "mock",
-    }
+    return _mock_snapshot(symbol)
+
+
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
+
+
+def _active_suspended_symbols(conn: sqlite3.Connection) -> set[str]:
+    if not _table_exists(conn, "watcher_symbol_health"):
+        return set()
+    rows = conn.execute(
+        "SELECT symbol FROM watcher_symbol_health WHERE suspended=1"
+    ).fetchall()
+    return {str(r[0]).upper() for r in rows}
+
+
+def _record_snapshot_success(conn: sqlite3.Connection, symbol: str) -> None:
+    now_ms = int(time.time() * 1000)
+    conn.execute(
+        """
+        INSERT INTO watcher_symbol_health(
+            symbol,
+            consecutive_snapshot_failures,
+            suspended,
+            last_error,
+            last_failure_at,
+            last_success_at,
+            suspended_at,
+            updated_at
+        ) VALUES (?, 0, 0, NULL, NULL, ?, NULL, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            consecutive_snapshot_failures=0,
+            last_error=NULL,
+            last_failure_at=NULL,
+            last_success_at=excluded.last_success_at,
+            updated_at=excluded.updated_at
+        """,
+        (symbol.upper(), now_ms, now_ms),
+    )
+
+
+def _record_snapshot_failure(
+    conn: sqlite3.Connection,
+    symbol: str,
+    *,
+    error: str,
+    threshold: int = _SNAPSHOT_FAILURE_THRESHOLD,
+) -> tuple[int, bool]:
+    """Persist consecutive live snapshot failures and suspend once threshold is reached."""
+    now_ms = int(time.time() * 1000)
+    symbol = symbol.upper()
+    row = conn.execute(
+        """
+        SELECT consecutive_snapshot_failures, suspended, suspended_at
+          FROM watcher_symbol_health
+         WHERE symbol=?
+        """,
+        (symbol,),
+    ).fetchone()
+    prev_failures = int(row[0]) if row is not None else 0
+    already_suspended = bool(row[1]) if row is not None else False
+    failure_count = prev_failures + 1
+    newly_suspended = (not already_suspended) and failure_count >= max(1, threshold)
+    suspended = already_suspended or newly_suspended
+    suspended_at = row[2] if row is not None and row[2] is not None else (now_ms if newly_suspended else None)
+
+    conn.execute(
+        """
+        INSERT INTO watcher_symbol_health(
+            symbol,
+            consecutive_snapshot_failures,
+            suspended,
+            last_error,
+            last_failure_at,
+            last_success_at,
+            suspended_at,
+            updated_at
+        ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            consecutive_snapshot_failures=excluded.consecutive_snapshot_failures,
+            suspended=excluded.suspended,
+            last_error=excluded.last_error,
+            last_failure_at=excluded.last_failure_at,
+            suspended_at=excluded.suspended_at,
+            updated_at=excluded.updated_at
+        """,
+        (symbol, failure_count, int(suspended), error[:1000], now_ms, suspended_at, now_ms),
+    )
+    if newly_suspended:
+        conn.execute(
+            "UPDATE positions SET state=? WHERE UPPER(symbol)=UPPER(?) AND quantity > 0",
+            (_SUSPENDED_POSITION_STATE, symbol),
+        )
+    return failure_count, newly_suspended
+
+
+def _notify_snapshot_suspension(symbol: str, *, failure_count: int, error: str) -> None:
+    from openclaw.tg_notify import send_message
+
+    send_message(
+        f"⚠️ <b>[Watcher Suspension]</b> {symbol} 連續 {failure_count} 次 snapshot 失敗，"
+        f"已標記為 <b>{_SUSPENDED_POSITION_STATE}</b> 並停止自動信號。\n"
+        f"最後錯誤：{error[:300]}\n"
+        f"請確認是否停牌、下市或合約資料異常，再由 operator 手動處理。"
+    )
 
 
 # ── 訊號產生 (rule-based, no LLM) ────────────────────────────────────────────
@@ -868,6 +1005,18 @@ def run_watcher() -> None:
         log.info("=== Watcher scan start | active=%s ===", active_watchlist)
         conn = _open_conn()
         try:
+            suspended_symbols = _active_suspended_symbols(conn)
+            processable_watchlist = [
+                sym for sym in active_watchlist if sym.upper() not in suspended_symbols
+            ]
+            if suspended_symbols:
+                skipped = [sym for sym in active_watchlist if sym.upper() in suspended_symbols]
+                if skipped:
+                    log.warning(
+                        "[watcher] skipping suspended symbols: %s",
+                        skipped,
+                    )
+
             # 每輪掃描統一時間戳（毫秒），供 session 判斷與 Decision 使用
             scan_ms = int(dt.datetime.now(tz=dt.timezone.utc).timestamp() * 1000)
 
@@ -911,11 +1060,51 @@ def run_watcher() -> None:
                             "New position opens are BLOCKED. Only close signals (sell) allowed.")
 
             # 一次性取得所有行情，並更新價格歷史
-            snaps: Dict[str, dict] = {sym: _get_snapshot(api, sym) for sym in active_watchlist}
+            snaps: Dict[str, dict] = {}
+            for sym in processable_watchlist:
+                try:
+                    snap = _get_snapshot(api, sym, allow_mock_fallback=data_is_mock)
+                    snaps[sym] = snap
+                    if not data_is_mock:
+                        _record_snapshot_success(conn, sym)
+                except SnapshotUnavailableError as snap_err:
+                    failure_count, newly_suspended = _record_snapshot_failure(
+                        conn,
+                        sym,
+                        error=str(snap_err),
+                    )
+                    log.warning(
+                        "[%s] live snapshot failed (%d/%d): %s",
+                        sym,
+                        failure_count,
+                        _SNAPSHOT_FAILURE_THRESHOLD,
+                        snap_err,
+                    )
+                    if newly_suspended:
+                        suspended_symbols.add(sym.upper())
+                        try:
+                            _notify_snapshot_suspension(
+                                sym,
+                                failure_count=failure_count,
+                                error=str(snap_err),
+                            )
+                        except Exception as notify_err:  # noqa: BLE001 — Telegram optional
+                            log.warning(
+                                "[%s] suspension notification failed: %s",
+                                sym,
+                                notify_err,
+                            )
             # 黑天鵝熔斷：無論 0050 是否在 watchlist，都取其即時快照供熔斷判斷
             _BELLWETHER = "0050"
             if _BELLWETHER not in snaps:
-                snaps[_BELLWETHER] = _get_snapshot(api, _BELLWETHER)
+                try:
+                    snaps[_BELLWETHER] = _get_snapshot(
+                        api,
+                        _BELLWETHER,
+                        allow_mock_fallback=data_is_mock,
+                    )
+                except SnapshotUnavailableError as snap_err:
+                    log.warning("[%s] bellwether snapshot unavailable: %s", _BELLWETHER, snap_err)
             for sym, s in snaps.items():
                 _update_price_history(price_history, sym, s["close"])
 
@@ -953,6 +1142,9 @@ def run_watcher() -> None:
                 pass
 
             for _exit_sym, (_exit_qty, _exit_avg) in list(positions.items()):
+                if _exit_sym.upper() in suspended_symbols:
+                    log.warning("[%s] exit scan skipped — symbol is suspended", _exit_sym)
+                    continue
                 _exit_closes = _build_exit_closes(conn, _exit_sym, price_history)
                 if len(_exit_closes) < 5:
                     continue
@@ -1049,7 +1241,7 @@ def run_watcher() -> None:
                     except Exception:  # noqa: BLE001 — rollback guard; must not raise
                         pass
 
-            for symbol in active_watchlist:
+            for symbol in processable_watchlist:
                 snap      = snaps[symbol]
                 pos_entry = positions.get(symbol)          # (qty, avg_price) or None
                 avg_price = pos_entry[1] if pos_entry else None
