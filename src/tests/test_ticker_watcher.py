@@ -31,6 +31,9 @@ import pytest
 from openclaw.ticker_watcher import (
     _CASH_MODE_MIN_PRICES,
     _PRICE_HISTORY_MAX,
+    _SUSPENDED_POSITION_STATE,
+    SnapshotUnavailableError,
+    _active_suspended_symbols,
     _evaluate_cash_mode,
     _ensure_schema,
     _generate_signal,
@@ -41,6 +44,8 @@ from openclaw.ticker_watcher import (
     _open_conn,
     _load_manual_watchlist,
     _get_snapshot,
+    _record_snapshot_failure,
+    _record_snapshot_success,
     _persist_decision,
     _persist_risk_check,
     _persist_order,
@@ -174,6 +179,8 @@ def test_positions_table_has_high_water_mark(tmp_path, monkeypatch):
     _ensure_schema(conn)
     cols = [r[1] for r in conn.execute("PRAGMA table_info(positions)").fetchall()]
     assert "high_water_mark" in cols
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "watcher_symbol_health" in tables
     conn.close()
 
 
@@ -354,7 +361,8 @@ def _make_mem_db() -> sqlite3.Connection:
             signal_score REAL,
             signal_ttl_ms INTEGER,
             llm_ref TEXT,
-            reason_json TEXT
+            reason_json TEXT,
+            signal_source TEXT
         );
 
         CREATE TABLE risk_checks (
@@ -379,7 +387,8 @@ def _make_mem_db() -> sqlite3.Connection:
             tif TEXT,
             status TEXT,
             strategy_version TEXT,
-            settlement_date TEXT
+            settlement_date TEXT,
+            account_mode TEXT
         );
 
         CREATE TABLE fills (
@@ -625,6 +634,85 @@ class TestGetSnapshot:
 
         snap = _get_snapshot(mock_api, "2330")
         assert snap["source"] == "mock"
+
+    def test_live_snapshot_failure_raises_when_mock_disabled(self):
+        """live mode 下禁用 mock fallback 時，snapshot 失敗應 raise。"""
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.side_effect = Exception("connection error")
+
+        with pytest.raises(SnapshotUnavailableError):
+            _get_snapshot(mock_api, "2330", allow_mock_fallback=False)
+
+    def test_live_snapshot_zero_close_raises_when_mock_disabled(self):
+        """live mode 下 close<=0 應視為不可用 snapshot。"""
+        mock_snap = MagicMock()
+        mock_snap.close = 0
+        mock_api = MagicMock()
+        mock_api.Contracts.Stocks.__getitem__.return_value = MagicMock()
+        mock_api.snapshots.return_value = [mock_snap]
+
+        with pytest.raises(SnapshotUnavailableError):
+            _get_snapshot(mock_api, "2330", allow_mock_fallback=False)
+
+
+def _make_snapshot_health_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute(
+        """CREATE TABLE positions (
+            symbol TEXT PRIMARY KEY,
+            quantity INTEGER,
+            avg_price REAL,
+            current_price REAL,
+            unrealized_pnl REAL,
+            state TEXT,
+            high_water_mark REAL,
+            entry_trading_day TEXT
+        )"""
+    )
+    _ensure_schema(conn)
+    return conn
+
+
+class TestSnapshotSuspension:
+    def test_record_snapshot_failure_suspends_after_threshold(self):
+        """連續失敗達門檻後應標記為 suspended 並更新持倉 state。"""
+        conn = _make_snapshot_health_db()
+        conn.execute(
+            "INSERT INTO positions(symbol, quantity, avg_price, current_price, state) VALUES (?, ?, ?, ?, ?)",
+            ("2330", 100, 900.0, 900.0, "HOLDING"),
+        )
+
+        count1, suspended1 = _record_snapshot_failure(conn, "2330", error="boom-1", threshold=3)
+        count2, suspended2 = _record_snapshot_failure(conn, "2330", error="boom-2", threshold=3)
+        count3, suspended3 = _record_snapshot_failure(conn, "2330", error="boom-3", threshold=3)
+
+        assert (count1, suspended1) == (1, False)
+        assert (count2, suspended2) == (2, False)
+        assert (count3, suspended3) == (3, True)
+        assert _active_suspended_symbols(conn) == {"2330"}
+        row = conn.execute(
+            "SELECT state FROM positions WHERE symbol='2330'"
+        ).fetchone()
+        assert row["state"] == _SUSPENDED_POSITION_STATE
+
+    def test_record_snapshot_success_resets_counter_for_active_symbol(self):
+        """未 suspended 的 symbol 成功拿到 live snapshot 後應清空失敗計數。"""
+        conn = _make_snapshot_health_db()
+
+        count, suspended = _record_snapshot_failure(conn, "2317", error="timeout", threshold=3)
+        assert (count, suspended) == (1, False)
+
+        _record_snapshot_success(conn, "2317")
+
+        row = conn.execute(
+            "SELECT consecutive_snapshot_failures, suspended, last_error, last_success_at "
+            "FROM watcher_symbol_health WHERE symbol='2317'"
+        ).fetchone()
+        assert row["consecutive_snapshot_failures"] == 0
+        assert row["suspended"] == 0
+        assert row["last_error"] is None
+        assert row["last_success_at"] is not None
 
 
 # ── DB persist helpers ────────────────────────────────────────────────────────
@@ -1106,7 +1194,8 @@ def _make_proposal_flow_db() -> sqlite3.Connection:
             signal_score REAL,
             signal_ttl_ms INTEGER,
             llm_ref TEXT,
-            reason_json TEXT
+            reason_json TEXT,
+            signal_source TEXT
         );
         CREATE TABLE risk_checks (
             check_id TEXT PRIMARY KEY,
@@ -1129,7 +1218,8 @@ def _make_proposal_flow_db() -> sqlite3.Connection:
             tif TEXT,
             status TEXT,
             strategy_version TEXT,
-            settlement_date TEXT
+            settlement_date TEXT,
+            account_mode TEXT
         );
         CREATE TABLE fills (
             fill_id TEXT PRIMARY KEY,
