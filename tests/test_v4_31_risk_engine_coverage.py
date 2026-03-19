@@ -449,10 +449,12 @@ def test_get_daily_pm_approval_false_when_no_file(tmp_path, monkeypatch):
 
 def test_get_daily_pm_approval_true_when_approved(tmp_path, monkeypatch):
     import json
-    from datetime import date
+    from datetime import datetime, timezone, timedelta
     import openclaw.risk_engine as re_mod
+    _tz_twn = timezone(timedelta(hours=8))
+    today_twn = datetime.now(tz=_tz_twn).strftime("%Y-%m-%d")
     state_file = tmp_path / "state.json"
-    state_file.write_text(json.dumps({"date": date.today().isoformat(), "approved": True}))
+    state_file.write_text(json.dumps({"date": today_twn, "approved": True}))
     monkeypatch.setattr(re_mod, "_DAILY_PM_PATH", str(state_file))
     assert re_mod._get_daily_pm_approval() is True
 

@@ -172,6 +172,7 @@ class TestAutoReviewCostGuard:
             "status": "pending",
             "decided_at": None,
             "expires_at": None,
+            "target_rule": "POSITION_REBALANCE",
         }
 
     def test_stops_at_daily_limit(self, monkeypatch):
