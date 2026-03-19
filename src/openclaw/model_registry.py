@@ -12,8 +12,8 @@ from typing import Dict
 # Values: pinned provider model ids that are safe to call.
 ALLOWED_MODELS: Dict[str, str] = {
     # MiniMax (primary strategy LLM)
-    "minimax/MiniMax-M2.5": "MiniMax-M2.5",
-    "MiniMax-M2.5": "MiniMax-M2.5",
+    "minimax/MiniMax-M2.7": "MiniMax-M2.7",
+    "MiniMax-M2.7": "MiniMax-M2.7",
 
     # Google Gemini (kept for backward compat / fallback)
     "google/gemini-1.5-pro-002": "google/gemini-1.5-pro-002",

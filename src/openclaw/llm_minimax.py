@@ -21,7 +21,7 @@ import requests
 log = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.minimax.io/v1"
-_DEFAULT_MODEL = "MiniMax-M2.5"
+_DEFAULT_MODEL = "MiniMax-M2.7"
 _TIMEOUT = 120  # seconds
 
 
@@ -51,7 +51,7 @@ def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str,
     """呼叫 MiniMax M2.5，回傳解析後的 JSON dict。
 
     Args:
-        model: MiniMax 模型 ID，e.g. "MiniMax-M2.5"。
+        model: MiniMax 模型 ID，e.g. "MiniMax-M2.7"。
         prompt: 完整 prompt 字串。
         temperature: 生成溫度，預設 0.2（低隨機性，審查決策更穩定）。
 
@@ -75,7 +75,7 @@ def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str,
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
-        "temperature": temperature,
+        "max_tokens": 16384,
     }
 
     t0 = time.time()

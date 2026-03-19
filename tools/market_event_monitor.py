@@ -38,8 +38,7 @@ from typing import Any
 try:
     import yfinance as yf
 except ImportError:
-    print("[market-monitor] ERROR: yfinance 未安裝。請執行: pip install yfinance", file=sys.stderr)
-    sys.exit(1)
+    yf = None
 
 # ── 監控閾值 ────────────────────────────────────────────────────────────────
 
@@ -109,10 +108,16 @@ _US_SYMBOLS = {
 _VIX_SYMBOL = "^VIX"
 
 
+def _require_yfinance():
+    if yf is None:
+        raise RuntimeError("yfinance 未安裝。請執行: pip install yfinance")
+    return yf
+
+
 def _pct_change(symbol: str, label: str) -> float | None:
     """抓取單一 symbol 前日收盤漲跌幅（%）。回傳 None 表示資料不可用。"""
     try:
-        ticker = yf.Ticker(symbol)
+        ticker = _require_yfinance().Ticker(symbol)
         hist = ticker.history(period="5d")
         if hist.empty or len(hist) < 2:
             log.warning("無法取得 %s (%s) 歷史資料", label, symbol)
@@ -129,6 +134,7 @@ def _pct_change(symbol: str, label: str) -> float | None:
 
 def fetch_us_market() -> dict[str, Any]:
     """抓取美股大盤及 VIX 前日漲跌幅。"""
+    _require_yfinance()
     result: dict[str, Any] = {}
     for label, symbol in _US_SYMBOLS.items():
         result[label] = _pct_change(symbol, label)
@@ -299,7 +305,11 @@ def main(dry_run: bool = False) -> int:
 
     # 1. 抓取美股大盤與 VIX
     log.info("抓取美股大盤與 VIX...")
-    us_data = fetch_us_market()
+    try:
+        us_data = fetch_us_market()
+    except RuntimeError as exc:
+        log.error("%s", exc)
+        return 2
     log.info("S&P 500: %s, Nasdaq: %s, VIX: %s",
              us_data.get("S&P 500"), us_data.get("Nasdaq"), us_data.get("VIX"))
 

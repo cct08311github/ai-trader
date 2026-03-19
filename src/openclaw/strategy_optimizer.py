@@ -384,7 +384,7 @@ proposals 中每項格式：{{"param_key": "...", "action": "increase|decrease|r
 
     def _call_llm(self, prompt: str) -> str:
         from openclaw.llm_minimax import minimax_call
-        result = minimax_call("MiniMax-M2.5", prompt)
+        result = minimax_call("MiniMax-M2.7", prompt)
         return result.get("_raw_response", "")
 
     def _parse_proposals(self, response: str) -> list[dict]:
