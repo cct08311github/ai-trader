@@ -61,3 +61,4 @@ firebase-debug.log
 *.log
 config/daily_pm_state.json
 config/system_state.json
+config/market_monitor_state.json
