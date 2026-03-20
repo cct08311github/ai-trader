@@ -58,15 +58,15 @@ class TestPmReject:
 
 class TestPmReview:
     def test_review_no_llm_key(self, client, monkeypatch):
-        """Without GEMINI_API_KEY, review falls back to pending_manual."""
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        """Without MINIMAX_API_KEY, review falls back to pending_manual."""
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         r = client.post("/api/pm/review", headers=_AUTH)
         # Should succeed (no LLM call)
         assert r.status_code in (200, 503)
 
     def test_review_with_mock_llm(self, client, monkeypatch):
         """Mock the LLM call so review succeeds."""
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         mock_state = {
             "date": "2026-03-03",
             "approved": True,
@@ -88,7 +88,7 @@ class TestPmReview:
 
     def test_review_llm_exception_returns_503(self, client, monkeypatch):
         """If LLM raises, return 503."""
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         with patch("app.api.pm.run_daily_pm_review", side_effect=RuntimeError("LLM down")):
             r = client.post("/api/pm/review", headers=_AUTH)
         assert r.status_code == 503
@@ -108,7 +108,7 @@ class TestPmReview:
             yield
 
         monkeypatch.setattr(db_mod, "get_conn", bad_conn)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
         mock_state = {
             "date": "2026-03-03",
@@ -127,21 +127,10 @@ class TestPmReview:
 
 
 class TestGetLlmCall:
-    def test_returns_none_when_no_key(self, monkeypatch):
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    def test_returns_callable(self):
         from app.api.pm import _get_llm_call
         result = _get_llm_call()
-        assert result is None
-
-    def test_returns_callable_when_key_set(self, monkeypatch):
-        monkeypatch.setenv("GEMINI_API_KEY", "AIza-test-key")
-        mock_gemini = MagicMock()
-        with patch.dict("sys.modules", {"openclaw.llm_gemini": MagicMock(gemini_call=mock_gemini)}):
-            from importlib import reload
-            import app.api.pm as pm_mod
-            result = pm_mod._get_llm_call()
-            # Either returns the mock or None depending on module state
-            assert result is None or callable(result)
+        assert callable(result)
 
 
 class TestWriteDebateToDB:
@@ -345,7 +334,7 @@ class TestWritePmReviewToDb:
 
     def test_review_endpoint_persists(self, client, monkeypatch):
         """POST /api/pm/review (mocked LLM) should persist to pm_reviews."""
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         mock_state = {
             "date": "2026-03-07",
             "approved": True,

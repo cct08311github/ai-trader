@@ -1,6 +1,6 @@
 """llm_minimax.py — MiniMax M2.5 LLM adapter（OpenAI-compatible API）。
 
-實作與 llm_gemini.gemini_call 相同的介面：
+LLM 呼叫介面：
     minimax_call(model, prompt) -> dict
 
 Env:
@@ -26,7 +26,7 @@ _TIMEOUT = 120  # seconds
 
 
 def _extract_json(text: str) -> Dict[str, Any]:
-    """從 LLM 回應文字中提取 JSON dict（與 llm_gemini 相同的容錯邏輯）。"""
+    """從 LLM 回應文字中提取 JSON dict。"""
     text = text.strip()
     try:
         return json.loads(text)

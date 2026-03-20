@@ -328,7 +328,7 @@ def _llm_refine_candidates(
     result = call_agent_llm(prompt, model=DEFAULT_MODEL)
     write_trace(conn, agent="screener_llm", prompt=prompt[:500], result=result)
 
-    # Parse — gemini_call wraps array responses as {"items": [...]};
+    # Parse — minimax_call wraps array responses as {"items": [...]};
     # also accept {"candidates": [...]} for flexibility.
     refined: List[Dict] = []
     if isinstance(result, dict) and "items" in result and isinstance(result["items"], list):

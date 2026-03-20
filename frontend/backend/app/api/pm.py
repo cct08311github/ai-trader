@@ -113,11 +113,9 @@ def pm_reject(body: OverrideRequest = OverrideRequest()):
 
 
 def _get_llm_call():
-    """Return gemini_call if GEMINI_API_KEY is configured, else None."""
-    if os.environ.get("GEMINI_API_KEY", "").strip():
-        from openclaw.llm_gemini import gemini_call
-        return gemini_call
-    return None
+    """Return minimax_call."""
+    from openclaw.llm_minimax import minimax_call
+    return minimax_call
 
 
 def _write_pm_review_to_db(state: dict, llm_trace_id: str | None = None) -> None:
@@ -200,7 +198,7 @@ def _write_debate_to_db(state: dict) -> None:
 def pm_review():
     """Trigger LLM-based daily review via Gemini.
 
-    Requires GEMINI_API_KEY in environment or .env.
+    Requires MINIMAX_API_KEY in environment or .env.
     If not set, marks state as pending_manual (manual override required).
     """
     try:
@@ -211,7 +209,7 @@ def pm_review():
         context = build_daily_context(conn=None)
 
     # Read model at request time (not module load) so env vars from run.sh are visible
-    model = os.environ.get("PM_LLM_MODEL", "gemini-3.1-pro-preview")
+    model = os.environ.get("PM_LLM_MODEL", "MiniMax-M2.5")
     llm_call = _get_llm_call()
     try:
         state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)

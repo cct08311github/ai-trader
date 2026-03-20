@@ -159,23 +159,23 @@ class TestChatCreateProposal:
 class TestPickStreamer:
     def test_no_keys_returns_none(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         from app.api.chat import _pick_streamer
         streamer, model = _pick_streamer("")
         assert streamer is None
         assert model == "none"
 
-    def test_gemini_model_override(self, monkeypatch):
+    def test_minimax_model_override(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        from app.api.chat import _pick_streamer, _stream_gemini
-        streamer, model = _pick_streamer("gemini-pro")
-        assert streamer is _stream_gemini
-        assert model == "gemini-pro"
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        from app.api.chat import _pick_streamer, _stream_minimax
+        streamer, model = _pick_streamer("MiniMax-M2.5")
+        assert streamer is _stream_minimax
+        assert model == "MiniMax-M2.5"
 
     def test_claude_model_override(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         from app.api.chat import _pick_streamer, _stream_claude
         streamer, model = _pick_streamer("claude-3")
         assert streamer is _stream_claude
@@ -183,17 +183,18 @@ class TestPickStreamer:
 
     def test_anthropic_key_present(self, monkeypatch):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         from app.api.chat import _pick_streamer, _stream_claude
         streamer, model = _pick_streamer("")
         assert streamer is _stream_claude
 
-    def test_gemini_key_present(self, monkeypatch):
+    def test_minimax_key_present(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.setenv("GEMINI_API_KEY", "AIza-test")
-        from app.api.chat import _pick_streamer, _stream_gemini
+        monkeypatch.setenv("MINIMAX_API_KEY", "test-key")
+        from app.api.chat import _pick_streamer, _stream_minimax
         streamer, model = _pick_streamer("")
-        assert streamer is _stream_gemini
+        assert streamer is _stream_minimax
+        assert model == "MiniMax-M2.5"
 
 
 class TestGetChatModel:
@@ -245,68 +246,28 @@ class TestStreamFunctions:
 
         asyncio.run(run())
 
-    def test_stream_gemini_no_key_raises(self):
-        """_stream_gemini raises ValueError when GEMINI_API_KEY not set."""
+    def test_stream_minimax_no_key_raises(self):
+        """_stream_minimax raises ValueError when MINIMAX_API_KEY not set."""
         import os
         import asyncio
-        os.environ.pop("GEMINI_API_KEY", None)
-        from app.api.chat import _stream_gemini
+        os.environ.pop("MINIMAX_API_KEY", None)
+        from app.api.chat import _stream_minimax
 
         async def run():
-            gen = _stream_gemini("system", [{"role": "user", "content": "hi"}], "gemini-pro")
+            gen = _stream_minimax("system", [{"role": "user", "content": "hi"}], "MiniMax-M2.5")
             with pytest.raises((ValueError, Exception)):
                 async for _ in gen:
                     pass
 
         asyncio.run(run())
 
-    def test_stream_gemini_message_roles(self, monkeypatch):
-        """_stream_gemini correctly maps assistant role to model."""
-        import asyncio
-        import os
-        import types
-
-        # Create a fake google.generativeai module
-        fake_genai = types.ModuleType("google.generativeai")
-        configure_calls = []
-
-        class FakeModel:
-            def generate_content(self, msgs, stream=True, generation_config=None):
-                return []
-
-        fake_genai.configure = lambda api_key: configure_calls.append(api_key)
-        fake_genai.GenerativeModel = lambda name: FakeModel()
-
-        import sys
-        sys.modules["google"] = types.ModuleType("google")
-        sys.modules["google.generativeai"] = fake_genai
-
-        monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
-
-        from app.api.chat import _stream_gemini
-
-        async def run():
-            messages = [
-                {"role": "user", "content": "hello"},
-                {"role": "assistant", "content": "hi there"},
-            ]
-            gen = _stream_gemini("system", messages, "gemini-pro")
-            chunks = []
-            try:
-                async for chunk in gen:
-                    chunks.append(chunk)
-            except Exception:
-                pass  # OK if model returns nothing
-
-        asyncio.run(run())
-
-    def test_pick_streamer_gemini_case_insensitive(self, monkeypatch):
-        """model_override with 'GEMINI' (uppercase) should match gemini streamer."""
+    def test_pick_streamer_non_claude_uses_minimax(self, monkeypatch):
+        """model_override with non-claude name should map to minimax streamer."""
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        from app.api.chat import _pick_streamer, _stream_gemini
-        streamer, model = _pick_streamer("GEMINI-flash")
-        assert streamer is _stream_gemini
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+        from app.api.chat import _pick_streamer, _stream_minimax
+        streamer, model = _pick_streamer("MiniMax-M2.5-pro")
+        assert streamer is _stream_minimax
 
     def test_chat_message_empty_after_strip(self, chat_client):
         """Message with only whitespace returns 400."""
