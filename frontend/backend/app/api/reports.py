@@ -263,6 +263,18 @@ def _get_committee_outlook(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]
         return None
 
 
+def _get_coder_agent_results() -> Optional[Dict[str, Any]]:
+    """Read latest Coder Agent backtest results from config/coder_agent_results.json."""
+    state_path = os.path.join(
+        os.path.dirname(__file__), "../../../../config/coder_agent_results.json"
+    )
+    try:
+        with open(state_path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 def _get_latest_eod_analysis(conn: sqlite3.Connection) -> Optional[Dict[str, Any]]:
     """Latest EOD analysis report."""
     try:
@@ -323,6 +335,9 @@ def get_report_context(
     # 8. Committee outlook (last 24h, morning/evening only)
     committee_outlook = _get_committee_outlook(conn) if type in ("morning", "evening") else None
 
+    # 9. Coder Agent backtest results (evening only)
+    coder_agent_results = _get_coder_agent_results() if type == "evening" else None
+
     # 10. System state
     system_state = None
     try:
@@ -353,6 +368,7 @@ def get_report_context(
         "recent_trades": recent_trades,
         "eod_analysis": eod_analysis,
         "committee_outlook": committee_outlook,
+        "coder_agent_results": coder_agent_results,
         "system_state": {
             "simulation_mode": system_state.get("simulation_mode", True) if system_state else True,
             "trading_enabled": system_state.get("trading_enabled", False) if system_state else False,
