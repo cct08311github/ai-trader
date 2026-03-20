@@ -3,47 +3,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-
-_VALID_RESPONSE = json.dumps({
-    "summary": "test",
-    "confidence": 0.5,
-    "action_type": "suggest",
-    "market_outlook": {"sentiment": "neutral", "sector_focus": [], "confidence": 0.5},
-    "position_actions": [],
-    "watchlist_opportunities": [],
-    "risk_notes": [],
-    "proposals": [],
-})
-
-
-def _make_google_modules(response_text: str) -> dict:
-    """Build fake google.genai modules (same pattern as test_llm_gemini.py)."""
-    mock_response = MagicMock()
-    mock_response.text = response_text
-
-    mock_models = MagicMock()
-    mock_models.generate_content.return_value = mock_response
-
-    mock_client_instance = MagicMock()
-    mock_client_instance.models = mock_models
-
-    genai_mod = types.ModuleType("google.genai")
-    genai_mod.Client = MagicMock(return_value=mock_client_instance)
-    genai_mod.types = MagicMock()
-    genai_mod.types.GenerateContentConfig = MagicMock()
-
-    google_mod = types.ModuleType("google")
-    google_mod.genai = genai_mod
-
-    return {"google": google_mod, "google.genai": genai_mod}
 
 
 def _setup_db(conn: sqlite3.Connection, trade_date: str) -> None:
@@ -118,7 +80,7 @@ def _setup_db(conn: sqlite3.Connection, trade_date: str) -> None:
 
 def test_eod_analysis_calls_screen_candidates(tmp_path, monkeypatch):
     """screen_candidates is called with correct trade_date during EOD analysis."""
-    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)  # call_agent_llm handles missing key
 
     trade_date = "2026-03-05"
     db_path = str(tmp_path / "test.db")
@@ -143,7 +105,6 @@ def test_eod_analysis_calls_screen_candidates(tmp_path, monkeypatch):
 
     # Track screen_candidates calls
     screen_calls = []
-    original_screen = None
 
     def fake_screen(conn_, td, *, manual_watchlist, max_candidates=10, llm_refine=True):
         screen_calls.append({
@@ -153,18 +114,13 @@ def test_eod_analysis_calls_screen_candidates(tmp_path, monkeypatch):
         })
         return []
 
-    # Mock Gemini LLM
-    mods = _make_google_modules(_VALID_RESPONSE)
-
-    with patch.dict("sys.modules", mods):
-        with patch("openclaw.stock_screener.screen_candidates", fake_screen):
-            # Also mock strategy_optimizer to avoid side effects
-            with patch.object(eod_mod, "_REPO_ROOT", tmp_path):
-                result = eod_mod.run_eod_analysis(
-                    trade_date=trade_date,
-                    conn=conn,
-                    db_path=db_path,
-                )
+    with patch("openclaw.stock_screener.screen_candidates", fake_screen):
+        with patch.object(eod_mod, "_REPO_ROOT", tmp_path):
+            result = eod_mod.run_eod_analysis(
+                trade_date=trade_date,
+                conn=conn,
+                db_path=db_path,
+            )
 
     assert result.success is True
     assert len(screen_calls) == 1
@@ -175,7 +131,7 @@ def test_eod_analysis_calls_screen_candidates(tmp_path, monkeypatch):
 
 def test_eod_analysis_screener_failure_continues(tmp_path, monkeypatch):
     """If screen_candidates raises, EOD analysis still completes."""
-    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
     trade_date = "2026-03-05"
     db_path = str(tmp_path / "test.db")
@@ -186,7 +142,6 @@ def test_eod_analysis_screener_failure_continues(tmp_path, monkeypatch):
     import openclaw.agents.eod_analysis as eod_mod
     monkeypatch.setattr(eod_mod, "_REPO_ROOT", tmp_path)
 
-    # No watchlist config → screener import may fail or raise
     mock_fetch = MagicMock()
     monkeypatch.setattr(
         "openclaw.market_data_fetcher.run_daily_fetch", mock_fetch, raising=False
@@ -195,24 +150,20 @@ def test_eod_analysis_screener_failure_continues(tmp_path, monkeypatch):
     def broken_screen(*a, **kw):
         raise RuntimeError("screener exploded")
 
-    mods = _make_google_modules(_VALID_RESPONSE)
+    with patch("openclaw.stock_screener.screen_candidates", broken_screen):
+        result = eod_mod.run_eod_analysis(
+            trade_date=trade_date,
+            conn=conn,
+            db_path=db_path,
+        )
 
-    with patch.dict("sys.modules", mods):
-        with patch("openclaw.stock_screener.screen_candidates", broken_screen):
-            result = eod_mod.run_eod_analysis(
-                trade_date=trade_date,
-                conn=conn,
-                db_path=db_path,
-            )
-
-    # Should succeed despite screener failure
     assert result.success is True
     conn.close()
 
 
 def test_eod_analysis_reads_universe_fallback(tmp_path, monkeypatch):
     """When watchlist has 'universe' key (no manual_watchlist), falls back correctly."""
-    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
     trade_date = "2026-03-05"
     db_path = str(tmp_path / "test.db")
@@ -239,15 +190,12 @@ def test_eod_analysis_reads_universe_fallback(tmp_path, monkeypatch):
         screen_calls.append({"manual_watchlist": manual_watchlist})
         return []
 
-    mods = _make_google_modules(_VALID_RESPONSE)
-
-    with patch.dict("sys.modules", mods):
-        with patch("openclaw.stock_screener.screen_candidates", fake_screen):
-            result = eod_mod.run_eod_analysis(
-                trade_date=trade_date,
-                conn=conn,
-                db_path=db_path,
-            )
+    with patch("openclaw.stock_screener.screen_candidates", fake_screen):
+        result = eod_mod.run_eod_analysis(
+            trade_date=trade_date,
+            conn=conn,
+            db_path=db_path,
+        )
 
     assert result.success is True
     assert len(screen_calls) == 1

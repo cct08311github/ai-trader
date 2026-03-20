@@ -637,7 +637,7 @@ class TestChatMessageGenerator:
 
         monkeypatch.setenv("DB_PATH", str(db_path))
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         monkeypatch.delenv("CHAT_LLM_MODEL", raising=False)
 
         async def run():
@@ -670,7 +670,7 @@ class TestChatMessageGenerator:
 
         monkeypatch.setenv("DB_PATH", str(db_path))
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
         monkeypatch.delenv("CHAT_LLM_MODEL", raising=False)
 
         async def run():
@@ -708,7 +708,7 @@ class TestChatMessageGenerator:
 
         monkeypatch.setenv("DB_PATH", str(db_path))
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
         async def run():
             # Reload inside asyncio.run() for fresh READONLY_POOL
@@ -753,7 +753,7 @@ class TestChatMessageGenerator:
 
         monkeypatch.setenv("DB_PATH", str(db_path))
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
         async def run():
             # Reload inside asyncio.run() for fresh READONLY_POOL
@@ -792,7 +792,7 @@ class TestChatMessageGenerator:
         self._make_chat_db(db_path)
         monkeypatch.setenv("DB_PATH", str(db_path))
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
 
         async def run():
             # Reload inside asyncio.run() for fresh READONLY_POOL

@@ -1,7 +1,7 @@
 """Tests for screener_llm JSON array response handling (issue #176).
 
 Verifies that:
-1. gemini_call wraps list responses in {"items": [...]}
+1. minimax_call wraps list responses in {"items": [...]}
 2. _llm_refine_candidates parses both "items" and "candidates" keys
 """
 
@@ -18,33 +18,33 @@ class TestExtractJsonAndWrapping:
     """_extract_json handles both list and dict JSON."""
 
     def test_extract_json_returns_list_for_array(self):
-        from openclaw.llm_gemini import _extract_json
+        from openclaw.llm_minimax import _extract_json
 
         result = _extract_json('[{"symbol": "2330"}]')
         assert isinstance(result, list)
         assert result[0]["symbol"] == "2330"
 
     def test_extract_json_returns_dict_for_object(self):
-        from openclaw.llm_gemini import _extract_json
+        from openclaw.llm_minimax import _extract_json
 
         result = _extract_json('{"summary": "test"}')
         assert isinstance(result, dict)
         assert result["summary"] == "test"
 
     def test_extract_json_markdown_fenced_array(self):
-        from openclaw.llm_gemini import _extract_json
+        from openclaw.llm_minimax import _extract_json
 
         text = '```json\n[{"symbol": "2330"}]\n```'
         result = _extract_json(text)
         assert isinstance(result, list)
 
     def test_wrapping_logic_list_becomes_items_dict(self):
-        """Simulate what gemini_call does when _extract_json returns a list."""
+        """Simulate what minimax_call does when _extract_json returns a list."""
         from typing import Any, Dict
 
         parsed = [{"symbol": "2330"}, {"symbol": "2454"}]
 
-        # This is the exact logic from the fix in gemini_call
+        # This is the exact logic from the fix in minimax_call
         if isinstance(parsed, list):
             result: Dict[str, Any] = {"items": parsed}
         else:
@@ -83,7 +83,7 @@ class TestLlmRefineCandidates:
     ]
 
     def test_items_key_from_wrapped_list(self, monkeypatch):
-        """When gemini_call wraps a list → {"items": [...]}."""
+        """When minimax_call wraps a list → {"items": [...]}."""
         llm_response = {
             "items": [
                 {"symbol": "2330", "label": "short_term", "score": 0.9, "reasons": ["strong"]},

@@ -1,4 +1,4 @@
-"""test_agents.py — agents/base.py 的單元測試（mock gemini_call）。"""
+"""test_agents.py — agents/base.py 的單元測試（mock minimax_call）。"""
 from __future__ import annotations
 
 import json
@@ -95,11 +95,11 @@ def mem_db():
     conn.close()
 
 
-# ── Gemini mock helper ───────────────────────────────────────────────────────
+# ── MiniMax mock helper ──────────────────────────────────────────────────────
 
 def _mock_gemini(summary: str, confidence: float = 0.8,
                  action_type: str = "observe", proposals: list = None):
-    """回傳模擬 gemini_call 結果的 MagicMock。"""
+    """回傳模擬 minimax_call 結果的 MagicMock。"""
     return {
         "summary": summary,
         "confidence": confidence,

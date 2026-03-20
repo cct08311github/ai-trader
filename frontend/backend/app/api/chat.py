@@ -56,43 +56,56 @@ async def _stream_claude(system: str, messages: list[dict], model: str) -> Async
             yield text  # pragma: no cover
 
 
-async def _stream_gemini(system: str, messages: list[dict], model: str) -> AsyncGenerator[str, None]:
-    """Stream response from Google Gemini."""
-    import google.generativeai as genai  # pragma: no cover
-    api_key = os.environ.get("GEMINI_API_KEY", "").strip()  # pragma: no cover
+async def _stream_minimax(system: str, messages: list[dict], model: str) -> AsyncGenerator[str, None]:
+    """Stream response from MiniMax (OpenAI-compatible SSE)."""
+    import requests  # pragma: no cover
+    api_key = os.environ.get("MINIMAX_API_KEY", "").strip()  # pragma: no cover
     if not api_key:  # pragma: no cover
-        raise ValueError("GEMINI_API_KEY not set")  # pragma: no cover
-    genai.configure(api_key=api_key)  # pragma: no cover
-    # Prepend system as first user turn (Gemini doesn't have native system prompt in same way)
-    gemini_messages = [{"role": "user", "parts": [system]},  # pragma: no cover
-                       {"role": "model", "parts": ["了解，我是 OpenClaw AI 交易助手。"]}]
-    for msg in messages:  # pragma: no cover
-        role = "user" if msg["role"] == "user" else "model"  # pragma: no cover
-        gemini_messages.append({"role": role, "parts": [msg["content"]]})  # pragma: no cover
-    gmodel = genai.GenerativeModel(model)  # pragma: no cover
-    response = gmodel.generate_content(  # pragma: no cover
-        gemini_messages,
+        raise ValueError("MINIMAX_API_KEY not set")  # pragma: no cover
+    payload = {  # pragma: no cover
+        "model": model,
+        "messages": [{"role": "system", "content": system}] + messages,
+        "max_tokens": 1000,
+        "stream": True,
+    }
+    with requests.post(  # pragma: no cover
+        "https://api.minimax.io/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
         stream=True,
-        generation_config={"max_output_tokens": 1000}
-    )
-    for chunk in response:  # pragma: no cover
-        if chunk.text:  # pragma: no cover
-            yield chunk.text  # pragma: no cover
+        timeout=120,
+    ) as resp:
+        resp.raise_for_status()  # pragma: no cover
+        for line in resp.iter_lines():  # pragma: no cover
+            if not line:  # pragma: no cover
+                continue  # pragma: no cover
+            if isinstance(line, bytes):  # pragma: no cover
+                line = line.decode("utf-8")  # pragma: no cover
+            if not line.startswith("data:"):  # pragma: no cover
+                continue  # pragma: no cover
+            data = line[5:].strip()  # pragma: no cover
+            if data == "[DONE]":  # pragma: no cover
+                break  # pragma: no cover
+            try:  # pragma: no cover
+                chunk = json.loads(data)  # pragma: no cover
+                text = chunk["choices"][0].get("delta", {}).get("content", "")  # pragma: no cover
+                if text:  # pragma: no cover
+                    yield text  # pragma: no cover
+            except (json.JSONDecodeError, KeyError):  # pragma: no cover
+                continue  # pragma: no cover
 
 
 def _pick_streamer(model_override: str):
     """Return (streamer_fn, model_name) based on available keys."""
     # Explicit override via CHAT_LLM_MODEL env var
     if model_override:
-        if "gemini" in model_override.lower():
-            return _stream_gemini, model_override
-        return _stream_claude, model_override
+        return _stream_claude if "claude" in model_override.lower() else _stream_minimax, model_override
 
-    # Auto-detect: prefer Claude if key set, else Gemini
+    # Auto-detect: prefer Claude if key set, else MiniMax
     if os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return _stream_claude, "claude-sonnet-4-6"
-    if os.environ.get("GEMINI_API_KEY", "").strip():
-        return _stream_gemini, "gemini-3.1-pro-preview"
+    if os.environ.get("MINIMAX_API_KEY", "").strip():
+        return _stream_minimax, "MiniMax-M2.5"
     return None, "none"
 
 
@@ -178,7 +191,7 @@ async def chat_message(req: ChatRequest):
         start = time.time()
         try:
             if streamer is None:
-                error_msg = "未設定 ANTHROPIC_API_KEY 或 GEMINI_API_KEY，無法使用 AI 對話功能。"
+                error_msg = "未設定 ANTHROPIC_API_KEY 或 MINIMAX_API_KEY，無法使用 AI 對話功能。"
                 yield f"data: {json.dumps({'type': 'chunk', 'text': error_msg})}\n\n"
                 yield f"data: {json.dumps({'type': 'done', 'model': 'none'})}\n\n"
                 return

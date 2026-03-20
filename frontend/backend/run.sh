@@ -7,7 +7,7 @@ VENV_PYTHON="$REPO/bin/venv/bin/python"
 # Ensure requirements are met (optional on every start, but safe)
 # $VENV_PYTHON -m pip install -r requirements.txt > /dev/null 2>&1
 
-# Load shared API keys from openclaw root .env (GEMINI_API_KEY etc.)
+# Load shared API keys from openclaw root .env
 OPENCLAW_ENV="${OPENCLAW_ROOT_ENV:-$HOME/.openclaw/.env}"
 if [ -f "$OPENCLAW_ENV" ]; then
     set -a
