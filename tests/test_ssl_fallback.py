@@ -123,6 +123,29 @@ class TestFetchTextSslFallback:
             with pytest.raises(urllib.error.URLError):
                 _fetch_text("https://openapi.twse.com.tw/v1/test")
 
+    def test_urlerror_wrapped_ssl_error_triggers_fallback(self):
+        """URLError(reason=SSLError) should use the insecure fallback path."""
+        from openclaw.eod_ingest import _fetch_text
+
+        wrapped_ssl_err = urllib.error.URLError(ssl.SSLError("CERTIFICATE_VERIFY_FAILED"))
+        mock_resp = _make_mock_response(b"twse data")
+
+        call_count = [0]
+
+        def side_effect(req, context, timeout):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise wrapped_ssl_err
+            return mock_resp
+
+        with patch("openclaw.eod_ingest.urlopen", side_effect=side_effect) as mock_urlopen:
+            result = _fetch_text("https://openapi.twse.com.tw/v1/test")
+
+        assert result == "twse data"
+        assert mock_urlopen.call_count == 2
+        ctx_fallback = mock_urlopen.call_args_list[1][1]["context"]
+        assert ctx_fallback.verify_mode == ssl.CERT_NONE
+
     def test_encoding_applied_on_fallback(self):
         """Encoding parameter is respected even on the fallback path."""
         from openclaw.eod_ingest import _fetch_text
