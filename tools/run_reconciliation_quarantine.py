@@ -4,21 +4,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import sqlite3
 import sys
+from pathlib import Path
 
-REPO_ROOT = get_repo_root()
+REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "frontend" / "backend"))
 
-from openclaw.position_quarantine import (
 from openclaw.path_utils import get_repo_root
+from openclaw.position_quarantine import (
     apply_quarantine_plan,
     build_reconciliation_quarantine_plan,
     clear_quarantine_symbols,
     get_quarantine_status,
 )
+
+REPO_ROOT = get_repo_root()
 
 
 def _load_latest_report(path: Path) -> dict:
