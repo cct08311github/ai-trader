@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 from openclaw.path_utils import get_repo_root
 
@@ -95,6 +96,19 @@ def _fetch_text(url: str, timeout: int = 20, encoding: str = "utf-8") -> str:
         with urlopen(req, context=_make_ssl_ctx(verify=False), timeout=timeout) as resp:
             raw = resp.read()
             return raw.decode(encoding, errors="replace")
+    except URLError as exc:
+        reason = getattr(exc, "reason", None)
+        if isinstance(reason, ssl.SSLError):
+            _log.warning(
+                "[SECURITY] SSL verification failed for %s (%s); retrying with CERT_NONE. "
+                "This is a known TWSE/TPEx certificate issue (missing SKI, RFC 5280 §4.2.1.2).",
+                url,
+                reason,
+            )
+            with urlopen(req, context=_make_ssl_ctx(verify=False), timeout=timeout) as resp:
+                raw = resp.read()
+                return raw.decode(encoding, errors="replace")
+        raise
 
 
 def _to_float(value: Any) -> Optional[float]:
