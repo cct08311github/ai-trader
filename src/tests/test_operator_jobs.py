@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 from openclaw.operator_jobs import (
@@ -350,3 +352,24 @@ def test_run_incident_hygiene_job_resolves_duplicates(tmp_path):
     assert result["summary"]["duplicates_resolved"] == 1
     latest = json.loads((out_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest["summary"]["duplicates_resolved"] == 1
+
+
+def test_operator_cli_entrypoints_bootstrap_with_help():
+    repo_root = Path(__file__).resolve().parents[2]
+    scripts = [
+        "tools/capture_ops_summary.py",
+        "tools/run_reconciliation.py",
+        "tools/run_incident_hygiene.py",
+        "tools/run_reconciliation_quarantine.py",
+        "tools/run_incident_resolution.py",
+    ]
+
+    for script in scripts:
+        proc = subprocess.run(
+            [sys.executable, str(repo_root / script), "--help"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, f"{script} failed: {proc.stderr}"

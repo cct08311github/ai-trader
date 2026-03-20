@@ -4,15 +4,17 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
-REPO_ROOT = get_repo_root()
+REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "frontend" / "backend"))
 
 from openclaw.operator_jobs import run_incident_hygiene_job
 from openclaw.path_utils import get_repo_root
+
+REPO_ROOT = get_repo_root()
 
 
 def main() -> int:
