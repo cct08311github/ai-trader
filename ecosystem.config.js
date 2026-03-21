@@ -41,7 +41,9 @@ module.exports = {
       watch: false,
       kill_timeout: 30000,
       env: {
-        OPENCLAW_CURRENT_IP: "127.0.0.1"
+        OPENCLAW_CURRENT_IP: "127.0.0.1",
+        WATCHER_TELEGRAM_BOT_TOKEN: "8773751510:AAHFORPaipYCA_993wx8B5fGH_eOAq5jqP0",
+        WATCHER_TELEGRAM_CHAT_ID: "1017252031"
       }
     },
     {

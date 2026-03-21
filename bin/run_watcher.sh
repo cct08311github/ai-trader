@@ -30,6 +30,17 @@ fi
 export PYTHONPATH="${PYTHONPATH:-$REPO/src:$REPO/frontend/backend}"
 export DB_PATH="${DB_PATH:-$REPO/data/sqlite/trades.db}"
 
+# 4. 允許 watcher 使用專用 Telegram bot，避免和 OpenClaw 共用 token
+if [ -n "${WATCHER_TELEGRAM_BOT_TOKEN:-}" ]; then
+    export TELEGRAM_BOT_TOKEN="$WATCHER_TELEGRAM_BOT_TOKEN"
+fi
+
+if [ -n "${WATCHER_TELEGRAM_CHAT_ID:-}" ]; then
+    export TELEGRAM_CHAT_ID="$WATCHER_TELEGRAM_CHAT_ID"
+elif [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+    export TELEGRAM_CHAT_ID="1017252031"
+fi
+
 echo "[run_watcher] Starting ai-trader-watcher"
 echo "[run_watcher] SHIOAJI_API_KEY=${SHIOAJI_API_KEY:+SET} DB_PATH=$DB_PATH"
 
