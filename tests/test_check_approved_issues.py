@@ -267,6 +267,13 @@ class TestMainDryRun:
             rc = cai.main(["--dry-run", "--token", "fake"])
         assert rc == 0
 
+    def test_no_approved_issues_clears_state_in_non_dry_run(self):
+        with patch.object(cai, "fetch_approved_issues", return_value=[]), \
+             patch.object(cai, "save_results_state") as mock_save:
+            rc = cai.main(["--token", "fake"])
+        assert rc == 0
+        mock_save.assert_called_once_with([])
+
     def test_github_api_failure_returns_1(self):
         import urllib.error
         with patch.object(
