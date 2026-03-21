@@ -461,6 +461,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not issues:
         print("No approved issues found.")
+        if not args.dry_run:
+            # Clear stale state so evening report does not show outdated backtest results.
+            save_results_state([])
         return 0
 
     print(f"Found {len(issues)} approved issue(s).")
