@@ -49,13 +49,42 @@ class AggregatedSignal:
 def _get_regime(conn: sqlite3.Connection, symbol: str) -> tuple[str, float]:
     """從 eod_prices 取收盤價序列，判斷 market regime。
     回傳 (regime_str, volatility_multiplier)。
+
+    #390: 加入 0050 benchmark MA direction 和外資連續買賣天數。
     """
     candles = fetch_candles(conn, symbol, days=60)
     if len(candles) < 20:
         return "range", 1.0
     prices  = [c["close"]  for c in candles]
     volumes = [c["volume"] for c in candles]
-    result = classify_market_regime(prices, volumes)
+
+    # Fetch benchmark (0050) prices for regime override
+    bench_prices = None
+    try:
+        bench_candles = fetch_candles(conn, "0050", days=60)
+        if len(bench_candles) >= 21:
+            bench_prices = [c["close"] for c in bench_candles]
+    except Exception:
+        pass
+
+    # Fetch foreign investor net buy streak
+    fi_net_buy = None
+    try:
+        fi_rows = conn.execute(
+            """SELECT net_buy FROM eod_institution_flows
+               WHERE symbol = ? ORDER BY trade_date DESC LIMIT 10""",
+            (symbol,),
+        ).fetchall()
+        if fi_rows:
+            fi_net_buy = [float(r[0] or 0) for r in reversed(fi_rows)]
+    except Exception:
+        pass
+
+    result = classify_market_regime(
+        prices, volumes,
+        benchmark_prices=bench_prices,
+        foreign_net_buy_days=fi_net_buy,
+    )
     return result.regime.value, result.volatility_multiplier
 
 

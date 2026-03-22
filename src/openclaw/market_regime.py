@@ -223,6 +223,48 @@ def compute_regime_features(
         "atr": float(atr),
     }
 
+def _benchmark_ma_direction(benchmark_prices: Sequence[float], window: int = 20) -> str:
+    """Determine benchmark (0050) MA direction as a hard regime indicator (#390).
+
+    Returns 'up', 'down', or 'flat' based on 20-day MA slope.
+    """
+    ps = _to_floats(benchmark_prices)
+    if len(ps) < window + 1:
+        return "flat"
+    ma_now = mean(ps[-window:])
+    ma_prev = mean(ps[-(window + 1):-1])
+    if ma_prev <= 0:
+        return "flat"
+    change_pct = (ma_now - ma_prev) / ma_prev
+    if change_pct > 0.001:   # MA rising > 0.1%
+        return "up"
+    elif change_pct < -0.001:
+        return "down"
+    return "flat"
+
+
+def _foreign_investor_streak(net_buy_days: Sequence[float]) -> int:
+    """Count consecutive net-buy (positive) or net-sell (negative) days (#390).
+
+    Args:
+        net_buy_days: sequence of daily net buy amounts (positive = net buy),
+                      ordered oldest to newest.
+    Returns:
+        Positive int for consecutive buy days, negative for sell days, 0 if mixed/empty.
+    """
+    vals = _to_floats(net_buy_days)
+    if not vals:
+        return 0
+    streak = 0
+    direction = 1 if vals[-1] > 0 else -1 if vals[-1] < 0 else 0
+    for v in reversed(vals):
+        if (direction > 0 and v > 0) or (direction < 0 and v < 0):
+            streak += 1
+        else:
+            break
+    return streak * direction
+
+
 def classify_market_regime(
     prices: Sequence[float],
     volumes: Sequence[float] | None = None,
@@ -231,8 +273,15 @@ def classify_market_regime(
     long_window: int = 60,
     trend_threshold: float = 0.01,
     slope_threshold: float = 0.0005,
+    benchmark_prices: Sequence[float] | None = None,
+    foreign_net_buy_days: Sequence[float] | None = None,
 ) -> MarketRegimeResult:
-    """Classify bull/bear/range based on trend + volume + volatility."""
+    """Classify bull/bear/range based on trend + volume + volatility.
+
+    #390 enhancements:
+    - benchmark_prices: 0050 price series for MA direction override
+    - foreign_net_buy_days: institutional net buy amounts for confirmation
+    """
 
     feats = compute_regime_features(prices, volumes, short_window=short_window, long_window=long_window)
     trend = feats["trend_strength"]
@@ -248,6 +297,33 @@ def classify_market_regime(
         regime = MarketRegime.BEAR
     else:
         regime = MarketRegime.RANGE
+
+    # ── Benchmark MA override (#390) ──────────────────────────────
+    # 0050 MA direction is a hard indicator: if benchmark disagrees
+    # with individual stock regime, downgrade to RANGE.
+    if benchmark_prices is not None:
+        bench_dir = _benchmark_ma_direction(benchmark_prices)
+        feats["benchmark_ma_direction"] = {"up": 1.0, "down": -1.0, "flat": 0.0}[bench_dir]
+        if regime == MarketRegime.BULL and bench_dir == "down":
+            regime = MarketRegime.RANGE
+            feats["regime_override"] = 1.0  # flag the override
+        elif regime == MarketRegime.BEAR and bench_dir == "up":
+            regime = MarketRegime.RANGE
+            feats["regime_override"] = 1.0
+
+    # ── Foreign investor streak (#390) ────────────────────────────
+    # Strong institutional flow confirms or weakens the regime.
+    if foreign_net_buy_days is not None:
+        fi_streak = _foreign_investor_streak(foreign_net_buy_days)
+        feats["foreign_investor_streak"] = float(fi_streak)
+        # 5+ consecutive buy days in bear → upgrade to range
+        if regime == MarketRegime.BEAR and fi_streak >= 5:
+            regime = MarketRegime.RANGE
+            feats["regime_fi_upgrade"] = 1.0
+        # 5+ consecutive sell days in bull → downgrade to range
+        elif regime == MarketRegime.BULL and fi_streak <= -5:
+            regime = MarketRegime.RANGE
+            feats["regime_fi_downgrade"] = 1.0
 
     # Confidence: mostly trend strength + slope, penalize extreme volatility.
     trend_score = min(1.0, abs(trend) / max(trend_threshold * 3.0, 1e-9))
