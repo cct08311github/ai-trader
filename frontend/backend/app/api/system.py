@@ -345,6 +345,38 @@ def system_events():
     }
 
 
+@router.get("/performance-summary")
+def performance_summary():
+    """Daily performance summary (#387). Returns key metrics for monitoring."""
+    from datetime import timezone
+    tz_twn = timezone(timedelta(hours=8))
+    trade_date = datetime.now(tz_twn).strftime("%Y-%m-%d")
+
+    conn = db.get_conn()
+    try:
+        from openclaw.performance_summary import (
+            build_daily_summary,
+            check_nav_staleness,
+            format_summary_text,
+        )
+        from dataclasses import asdict
+
+        summary = build_daily_summary(conn, trade_date)
+        staleness = check_nav_staleness(conn)
+
+        return {
+            "status": "ok",
+            "summary": asdict(summary),
+            "formatted": format_summary_text(summary),
+            "nav_staleness_warning": staleness,
+        }
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "detail": str(e)},
+        )
+
+
 # ─── /api/inventory ────────────────────────────────────────────────────────────
 
 @inventory_router.get("")
