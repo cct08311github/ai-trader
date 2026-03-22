@@ -35,6 +35,11 @@ _shutdown_requested: bool = False
 # EOD 清理旗標：記錄最後一次執行取消未成交訂單的日期，確保每日只執行一次
 _eod_cleanup_done_date: Optional[dt.date] = None
 
+# Strategy stance lookback window (24 hours in milliseconds)
+_STANCE_LOOKBACK_MS = 24 * 60 * 60 * 1000
+# Score threshold under neutral stance (default 0.65 → raised to 0.75)
+_NEUTRAL_STANCE_SCORE_THRESHOLD = 0.75
+
 
 def _handle_shutdown_signal(signum: int, frame: object) -> None:  # noqa: ARG001
     global _shutdown_requested
@@ -52,6 +57,33 @@ def _interruptible_sleep(seconds: int) -> bool:
     return False
 
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
+
+
+def _get_latest_committee_stance(conn: sqlite3.Connection) -> str:
+    """Return the most recent strategy committee stance within the lookback window.
+
+    Queries strategy_proposals for STRATEGY_DIRECTION proposals (status='noted')
+    and extracts the arbiter stance from the proposal JSON.
+    Returns 'constructive', 'neutral', or 'defensive'. Defaults to 'neutral'.
+    """
+    cutoff_ms = int(time.time() * 1000) - _STANCE_LOOKBACK_MS
+    try:
+        row = conn.execute(
+            """SELECT json_extract(proposal_json, '$.committee_context.arbiter.stance')
+               FROM strategy_proposals
+               WHERE target_rule = 'STRATEGY_DIRECTION'
+                 AND status = 'noted'
+                 AND created_at > ?
+               ORDER BY created_at DESC
+               LIMIT 1""",
+            (cutoff_ms,),
+        ).fetchone()
+        if row and row[0] in ("defensive", "neutral", "constructive"):
+            return row[0]
+    except sqlite3.Error as e:
+        log.warning("stance lookup failed: %s", e)
+    return "neutral"
+
 
 # ── 設定 ────────────────────────────────────────────────────────────────────
 POLL_INTERVAL_SEC: int = 180  # 3 分鐘
@@ -1303,6 +1335,27 @@ def run_watcher() -> None:
                     log.info("[%s] signal=buy BLOCKED — mock data mode", symbol)
                     continue
 
+                # ── 策略立場守衛：委員會 stance 影響買入決策 (#383) ────────
+                if sig == "buy":
+                    _stance = _get_latest_committee_stance(conn)
+                    _agg_meta["committee_stance"] = _stance
+                    if _stance == "defensive":
+                        _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
+                                   approved=False, reject_code="RISK_STRATEGY_STANCE_DEFENSIVE",
+                                   decision_id=decision_id, extra_meta=_agg_meta)
+                        log.info("[%s] signal=buy BLOCKED — committee stance is defensive", symbol)
+                        continue
+                    if _stance == "neutral":
+                        _raw_score = _agg_meta.get("score", 0.0)
+                        if _raw_score < _NEUTRAL_STANCE_SCORE_THRESHOLD:
+                            _agg_meta["neutral_threshold"] = _NEUTRAL_STANCE_SCORE_THRESHOLD
+                            _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
+                                       approved=False, reject_code="RISK_STRATEGY_STANCE_NEUTRAL_LOW_SCORE",
+                                       decision_id=decision_id, extra_meta=_agg_meta)
+                            log.info("[%s] signal=buy BLOCKED — neutral stance + score %.2f < %.2f",
+                                     symbol, _raw_score, _NEUTRAL_STANCE_SCORE_THRESHOLD)
+                            continue
+
                 decision = Decision(
                     decision_id=decision_id,
                     ts_ms=scan_ms,
@@ -1437,11 +1490,13 @@ def run_watcher() -> None:
                 from openclaw.proposal_executor import (
                     SellIntent,
                     execute_pending_proposals,
+                    expire_stale_noted_proposals,
                     mark_intent_executed,
                     mark_intent_executing,
                     mark_intent_failed,
                 )
                 from openclaw.risk_engine import OrderCandidate
+                expire_stale_noted_proposals(conn)
                 sell_intents, n_noted = execute_pending_proposals(conn)
                 for intent in sell_intents:
                     try:
