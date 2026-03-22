@@ -226,6 +226,31 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
     return intents, n_noted
 
 
+# 48 hours in milliseconds — noted proposals older than this are expired (#383)
+_NOTED_EXPIRY_MS = 48 * 60 * 60 * 1000
+
+
+def expire_stale_noted_proposals(conn: sqlite3.Connection) -> int:
+    """Expire 'noted' proposals older than 48 hours. Returns count of expired rows."""
+    cutoff_ms = _now_ms() - _NOTED_EXPIRY_MS
+    try:
+        cursor = conn.execute(
+            """UPDATE strategy_proposals
+               SET status = 'expired', decided_at = ?
+               WHERE status = 'noted'
+                 AND created_at < ?""",
+            (_now_ms(), cutoff_ms),
+        )
+        n = cursor.rowcount
+        if n > 0:
+            conn.commit()
+            log.info("Expired %d stale noted proposals (older than 48h)", n)
+        return n
+    except sqlite3.Error as e:
+        log.warning("expire_stale_noted_proposals failed: %s", e)
+        return 0
+
+
 def mark_intent_executing(conn: sqlite3.Connection, proposal_id: str, execution_key: str) -> None:
     ensure_execution_journal_schema(conn)
     now = _now_ms()
