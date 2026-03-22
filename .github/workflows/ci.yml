@@ -65,6 +65,33 @@ jobs:
         working-directory: frontend/backend
         run: pytest -q tests/
 
+  backtest-validation:
+    name: 📈 Backtest Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: guardrails
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: frontend/backend/requirements.txt
+
+      - name: 📦 Install backend deps
+        run: pip install -r frontend/backend/requirements.txt
+
+      - name: 🧪 Run CI backtest validation
+        run: PYTHONPATH=src python tools/run_backtest_ci.py --report-file backtest_ci_report.json
+
+      - name: 📄 Print backtest report
+        if: always()
+        run: cat backtest_ci_report.json
+
   # ── Job 3：Frontend 測試 + Build（與 backend 並行）────────────────
   frontend:
     name: 🟢 Frontend Build & Test

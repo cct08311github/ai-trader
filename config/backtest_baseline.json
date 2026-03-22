@@ -1,0 +1,37 @@
+{
+  "dataset": {
+    "days": 60,
+    "start_date": "2025-01-02",
+    "symbols": ["2330", "2317", "2454"]
+  },
+  "signal_params": {
+    "ma_short": 3,
+    "ma_long": 7,
+    "rsi_entry_max": 100.0,
+    "take_profit_pct": 0.04,
+    "stop_loss_pct": 0.04,
+    "trailing_pct": 0.08,
+    "trailing_pct_tight": 0.05,
+    "trailing_profit_threshold": 0.04
+  },
+  "thresholds": {
+    "min_win_rate_pct": 40.0,
+    "max_drawdown_pct": 15.0,
+    "min_total_trades": 5
+  },
+  "allowed_regression": {
+    "total_return_pct": -5.0,
+    "sharpe_ratio": -2.0,
+    "total_trades": -3
+  },
+  "metrics": {
+    "total_return_pct": 10.2736,
+    "annualized_return_pct": 50.7928,
+    "sharpe_ratio": 9.4361,
+    "max_drawdown_pct": 0.057,
+    "win_rate_pct": 100.0,
+    "profit_factor": 0.0,
+    "avg_holding_days": 2.0,
+    "total_trades": 9
+  }
+}
