@@ -205,6 +205,7 @@ class TestSaveResultsState:
         data = json.loads(state_file.read_text())
         assert "generated_at" in data
         assert data["results"] == results
+        assert data["verification_backlog"] == []
 
     def test_creates_parent_dir(self, tmp_path):
         state_file = tmp_path / "subdir" / "results.json"
@@ -217,6 +218,90 @@ class TestSaveResultsState:
         cai.save_results_state([{"issue_number": 2}], state_path=state_file)
         data = json.loads(state_file.read_text())
         assert data["results"][0]["issue_number"] == 2
+
+    def test_persists_verification_backlog(self, tmp_path):
+        state_file = tmp_path / "r.json"
+        backlog = [{"issue_number": 388, "missing_checks": ["before_after"]}]
+        cai.save_results_state([], verification_backlog=backlog, state_path=state_file)
+        data = json.loads(state_file.read_text())
+        assert data["verification_backlog"] == backlog
+
+
+class TestVerificationScan:
+    def test_issue_verification_status_detects_complete_evidence(self):
+        issue = {"body": "Before/After\nVerification window: 2026-03-01~2026-03-10"}
+        comments = [{"body": "Regression test: pytest tests/test_example.py -q"}]
+        verified, missing = cai.issue_verification_status(issue, comments)
+        assert verified is True
+        assert missing == []
+
+    def test_issue_verification_status_detects_missing_items(self):
+        issue = {"body": "Only before numbers are listed here."}
+        comments = []
+        verified, missing = cai.issue_verification_status(issue, comments)
+        assert verified is False
+        assert "time_window" in missing
+        assert "regression" in missing
+
+    def test_scan_closed_issues_adds_backlog_without_mutating_in_dry_run(self):
+        closed_issue = {
+            "number": 388,
+            "title": "Needs verification",
+            "body": "No evidence here",
+            "html_url": "https://example.com/388",
+            "labels": [],
+        }
+        with patch.object(cai, "fetch_closed_issues_for_verification", return_value=[closed_issue]), \
+             patch.object(cai, "fetch_issue_comments", return_value=[]), \
+             patch.object(cai, "add_label") as mock_add:
+            backlog = cai.scan_closed_issues_for_verification(
+                repo="o/r",
+                token="fake",
+                dry_run=True,
+                days=30,
+            )
+        assert backlog[0]["issue_number"] == 388
+        mock_add.assert_not_called()
+
+    def test_scan_closed_issues_adds_label_when_needed(self):
+        closed_issue = {
+            "number": 388,
+            "title": "Needs verification",
+            "body": "No evidence here",
+            "html_url": "https://example.com/388",
+            "labels": [],
+        }
+        with patch.object(cai, "fetch_closed_issues_for_verification", return_value=[closed_issue]), \
+             patch.object(cai, "fetch_issue_comments", return_value=[]), \
+             patch.object(cai, "add_label") as mock_add:
+            cai.scan_closed_issues_for_verification(
+                repo="o/r",
+                token="fake",
+                dry_run=False,
+                days=30,
+            )
+        mock_add.assert_called_once_with("o/r", 388, cai._NEEDS_VERIFICATION_LABEL, token="fake")
+
+    def test_scan_closed_issues_removes_label_when_verified(self):
+        closed_issue = {
+            "number": 388,
+            "title": "Verified",
+            "body": "Before/After\nVerification window: 2026-03-01~2026-03-10",
+            "html_url": "https://example.com/388",
+            "labels": [{"name": cai._NEEDS_VERIFICATION_LABEL}],
+        }
+        comments = [{"body": "Regression test: pytest tests/test_example.py -q"}]
+        with patch.object(cai, "fetch_closed_issues_for_verification", return_value=[closed_issue]), \
+             patch.object(cai, "fetch_issue_comments", return_value=comments), \
+             patch.object(cai, "remove_label") as mock_remove:
+            backlog = cai.scan_closed_issues_for_verification(
+                repo="o/r",
+                token="fake",
+                dry_run=False,
+                days=30,
+            )
+        assert backlog == []
+        mock_remove.assert_called_once_with("o/r", 388, cai._NEEDS_VERIFICATION_LABEL, token="fake")
 
 
 # ─────────────────────────── main() dry-run ──────────────────────────────────
@@ -269,10 +354,22 @@ class TestMainDryRun:
 
     def test_no_approved_issues_clears_state_in_non_dry_run(self):
         with patch.object(cai, "fetch_approved_issues", return_value=[]), \
+             patch.object(cai, "scan_closed_issues_for_verification", return_value=[]), \
              patch.object(cai, "save_results_state") as mock_save:
             rc = cai.main(["--token", "fake"])
         assert rc == 0
-        mock_save.assert_called_once_with([])
+        mock_save.assert_called_once_with([], verification_backlog=[])
+
+    def test_main_scans_closed_issues_for_verification(self, tmp_path):
+        with patch.object(cai, "fetch_approved_issues", return_value=[]), \
+             patch.object(
+                 cai,
+                 "scan_closed_issues_for_verification",
+                 return_value=[{"issue_number": 388, "missing_checks": ["regression"]}],
+             ) as mock_scan:
+            rc = cai.main(["--dry-run", "--token", "fake", "--db", str(tmp_path / "fake.db")])
+        assert rc == 0
+        mock_scan.assert_called_once()
 
     def test_github_api_failure_returns_1(self):
         import urllib.error

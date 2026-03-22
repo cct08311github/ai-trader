@@ -10,11 +10,34 @@
 
 - [ ] Tests run locally
 - [ ] Not run (explain why)
+- [ ] Added or updated regression tests for the changed behavior
 
 Commands:
 
 ```bash
 ```
+
+## Verification Evidence
+
+- [ ] Before/After data included
+- [ ] Verification time window included
+- [ ] Effect validation included
+
+Before:
+
+- 
+
+After:
+
+- 
+
+Verification window:
+
+- 
+
+Regression coverage:
+
+- 
 
 ## Risk
 

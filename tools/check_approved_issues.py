@@ -50,7 +50,34 @@ _BACKTEST_CAPITAL = float(os.environ.get("BACKTEST_CAPITAL", "1_000_000"))
 _GITHUB_API = "https://api.github.com"
 _APPROVED_LABEL = "approved"
 _IN_PROGRESS_LABEL = "in-progress"
+_NEEDS_VERIFICATION_LABEL = "needs-verification"
 _RESULTS_STATE_FILE = _PROJECT / "config" / "coder_agent_results.json"
+_VERIFICATION_WINDOW_DAYS = int(os.environ.get("VERIFICATION_WINDOW_DAYS", "30"))
+_VERIFICATION_KEYWORDS = {
+    "before_after": (
+        "before/after",
+        "before",
+        "after",
+        "前",
+        "後",
+    ),
+    "time_window": (
+        "verification window",
+        "time window",
+        "date range",
+        "驗證時間",
+        "時間範圍",
+        "期間",
+    ),
+    "regression": (
+        "regression test",
+        "regression",
+        "回歸測試",
+        "pytest",
+        "vitest",
+        "test",
+    ),
+}
 
 # ── Coder Agent Prompt Template ──────────────────────────────────────────────
 CODER_AGENT_PROMPT = """
@@ -108,6 +135,32 @@ def fetch_approved_issues(repo: str = _GITHUB_REPO, token: str = "") -> list[dic
     return [i for i in result if not i.get("pull_request")]
 
 
+def fetch_closed_issues_for_verification(
+    repo: str = _GITHUB_REPO,
+    token: str = "",
+    days: int = _VERIFICATION_WINDOW_DAYS,
+) -> list[dict]:
+    """Fetch recently updated closed issues for verification evidence review."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    path = (
+        f"/repos/{repo}/issues?state=closed&sort=updated&direction=desc"
+        f"&since={since}&per_page=50"
+    )
+    result = _github_request("GET", path, token=token)
+    return [i for i in result if not i.get("pull_request")]
+
+
+def fetch_issue_comments(
+    repo: str,
+    issue_number: int,
+    token: str = "",
+) -> list[dict]:
+    """Fetch all comments for an issue."""
+    path = f"/repos/{repo}/issues/{issue_number}/comments?per_page=100"
+    result = _github_request("GET", path, token=token)
+    return result if isinstance(result, list) else []
+
+
 def post_issue_comment(
     repo: str,
     issue_number: int,
@@ -150,6 +203,80 @@ def remove_label(
     except urllib.error.HTTPError as e:
         if e.code != 404:
             raise
+
+
+def issue_has_label(issue: dict, label: str) -> bool:
+    return any((lbl.get("name") == label) for lbl in issue.get("labels", []))
+
+
+def issue_verification_status(issue: dict, comments: list[dict]) -> tuple[bool, list[str]]:
+    """Return whether issue closure contains sufficient verification evidence."""
+    text_parts = [issue.get("body") or ""]
+    text_parts.extend((comment.get("body") or "") for comment in comments)
+    haystack = "\n".join(text_parts).lower()
+
+    missing: list[str] = []
+    for check_name, keywords in _VERIFICATION_KEYWORDS.items():
+        if not any(keyword.lower() in haystack for keyword in keywords):
+            missing.append(check_name)
+
+    return len(missing) == 0, missing
+
+
+def format_verification_followup(issue: dict, missing_checks: list[str]) -> str:
+    labels = {
+        "before_after": "Before/After data",
+        "time_window": "verification time window",
+        "regression": "regression test evidence",
+    }
+    missing_text = ", ".join(labels.get(item, item) for item in missing_checks)
+    return (
+        "## Verification Follow-up Needed\n\n"
+        "This closed issue is missing required verification evidence before it should be treated "
+        f"as fully validated.\n\nMissing: {missing_text}\n\n"
+        "Please add:\n"
+        "- Before/After data\n"
+        "- Verification time window\n"
+        "- Regression test evidence\n"
+    )
+
+
+def scan_closed_issues_for_verification(
+    repo: str,
+    token: str,
+    dry_run: bool,
+    days: int = _VERIFICATION_WINDOW_DAYS,
+) -> list[dict]:
+    """Detect recently closed issues that are missing verification evidence."""
+    issues = fetch_closed_issues_for_verification(repo=repo, token=token, days=days)
+    backlog: list[dict] = []
+
+    for issue in issues:
+        comments = fetch_issue_comments(repo, issue["number"], token=token)
+        verified, missing_checks = issue_verification_status(issue, comments)
+        has_label = issue_has_label(issue, _NEEDS_VERIFICATION_LABEL)
+
+        if verified:
+            if has_label and not dry_run:
+                remove_label(repo, issue["number"], _NEEDS_VERIFICATION_LABEL, token=token)
+            continue
+
+        backlog.append(
+            {
+                "issue_number": issue["number"],
+                "issue_title": issue["title"],
+                "url": issue.get("html_url"),
+                "missing_checks": missing_checks,
+            }
+        )
+
+        if dry_run:
+            continue
+
+        if not has_label:
+            add_label(repo, issue["number"], _NEEDS_VERIFICATION_LABEL, token=token)
+
+    return backlog
 
 
 # ─────────────────────────── 策略參數解析 ────────────────────────────────────
@@ -422,12 +549,17 @@ def process_issue(
     return True, result
 
 
-def save_results_state(results: list[dict], state_path: str | Path = _RESULTS_STATE_FILE) -> None:
+def save_results_state(
+    results: list[dict],
+    verification_backlog: list[dict] | None = None,
+    state_path: str | Path = _RESULTS_STATE_FILE,
+) -> None:
     """將回測結果儲存到 config/coder_agent_results.json（供 Evening 報告讀取）。"""
     now_twn = datetime.now(tz=timezone(timedelta(hours=8))).isoformat()
     state = {
         "generated_at": now_twn,
         "results": results,
+        "verification_backlog": verification_backlog or [],
     }
     try:
         Path(state_path).parent.mkdir(parents=True, exist_ok=True)
@@ -444,6 +576,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", default=_DB_PATH, help="SQLite DB 路徑")
     parser.add_argument("--repo", default=_GITHUB_REPO, help="owner/repo")
     parser.add_argument("--token", default=_GITHUB_TOKEN, help="GitHub token")
+    parser.add_argument(
+        "--verification-window-days",
+        type=int,
+        default=_VERIFICATION_WINDOW_DAYS,
+        help="只掃描最近 N 天內更新的 closed issues",
+    )
     args = parser.parse_args(argv)
 
     if not args.token and not args.dry_run:
@@ -461,12 +599,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not issues:
         print("No approved issues found.")
-        if not args.dry_run:
-            # Clear stale state so evening report does not show outdated backtest results.
-            save_results_state([])
-        return 0
-
-    print(f"Found {len(issues)} approved issue(s).")
+    else:
+        print(f"Found {len(issues)} approved issue(s).")
 
     # 2. 逐一處理
     errors = 0
@@ -484,11 +618,31 @@ def main(argv: list[str] | None = None) -> int:
         if result:
             all_results.append(result)
 
-    # 3. 儲存結果供 Evening 報告讀取
-    if not args.dry_run:
-        save_results_state(all_results)
+    # 3. 掃描已關閉 issue 的驗證證據
+    verification_backlog: list[dict] = []
+    try:
+        verification_backlog = scan_closed_issues_for_verification(
+            repo=args.repo,
+            token=args.token,
+            dry_run=args.dry_run,
+            days=args.verification_window_days,
+        )
+    except Exception as exc:
+        print(f"[ERROR] Failed to scan closed issues for verification: {exc}")
+        if not args.dry_run:
+            errors += 1
 
-    print(f"\nDone. {len(issues) - errors}/{len(issues)} succeeded.")
+    if verification_backlog:
+        print(f"Found {len(verification_backlog)} closed issue(s) missing verification evidence.")
+    else:
+        print("No closed issues are missing verification evidence.")
+
+    # 4. 儲存結果供 Evening 報告讀取
+    if not args.dry_run:
+        save_results_state(all_results, verification_backlog=verification_backlog)
+
+    succeeded = max(len(issues) - errors, 0)
+    print(f"\nDone. {succeeded}/{len(issues)} succeeded.")
     return 0 if errors == 0 else 1
 
 
