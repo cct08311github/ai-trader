@@ -54,29 +54,35 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def recompute_rolling_drawdown(conn: sqlite3.Connection) -> None:
-    """Recompute rolling_peak_nav and rolling_drawdown for daily_pnl_summary.
+    """Recompute rolling drawdown, preferring daily_nav but preserving legacy fallback.
 
-    P1 use-case: ensure cumulative drawdown fields remain consistent even if
-    rows were backfilled or edited.
+    daily_nav is the authoritative source introduced in #398, but some test
+    fixtures and maintenance paths still only populate daily_pnl_summary.
     """
-
     if not _table_exists(conn, "daily_pnl_summary"):
         return
 
-    rows = conn.execute(
-        "SELECT trade_date, nav_end FROM daily_pnl_summary ORDER BY trade_date ASC"
-    ).fetchall()
+    if _table_exists(conn, "daily_nav"):
+        rows = conn.execute(
+            "SELECT trade_date, nav FROM daily_nav ORDER BY trade_date ASC"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT trade_date, nav_end FROM daily_pnl_summary ORDER BY trade_date ASC"
+        ).fetchall()
+
     peak = 0.0
-    for r in rows:
-        trade_date = str(r[0])
-        nav_end = float(r[1] or 0.0)
-        peak = max(peak, nav_end)
-        dd = 0.0
-        if peak > 0:
-            dd = max(0.0, (peak - nav_end) / peak)
+    for trade_date, nav in rows:
+        nav_val = float(nav or 0.0)
+        peak = max(peak, nav_val)
+        dd = max(0.0, (peak - nav_val) / peak) if peak > 0 else 0.0
         conn.execute(
-            "UPDATE daily_pnl_summary SET rolling_peak_nav = ?, rolling_drawdown = ? WHERE trade_date = ?",
-            (peak, dd, trade_date),
+            """
+            UPDATE daily_pnl_summary
+            SET rolling_peak_nav = ?, rolling_drawdown = ?
+            WHERE trade_date = ?
+            """,
+            (peak, dd, str(trade_date)),
         )
 
 
@@ -104,42 +110,42 @@ def evaluate_drawdown_guard(conn: sqlite3.Connection, policy: DrawdownPolicy) ->
 
 
 def _compute_monthly_returns(conn: sqlite3.Connection) -> list[tuple[str, float]]:
-    """Compute monthly NAV return from daily_pnl_summary.
+    """Compute monthly NAV return from daily_nav table (#398).
 
-    Returns list of (YYYY-MM, monthly_return) ordered oldest-first.
-    monthly_return = (last_nav_of_month - first_nav_of_month) / first_nav_of_month
+    Uses daily_nav (trade_date, nav) — the authoritative NAV snapshot table.
+    For each complete month, returns (YYYY-MM, monthly_return) where
+    monthly_return = (last_nav - first_nav) / first_nav.
+
+    Returns list ordered oldest-first. Current (incomplete) month is included
+    so the guard can react before month-end if losses are already severe.
     """
-    if not _table_exists(conn, "daily_pnl_summary"):
+    if not _table_exists(conn, "daily_nav"):
         return []
 
     rows = conn.execute(
         """
         SELECT strftime('%Y-%m', trade_date) AS month,
-               MIN(nav_start) AS first_nav,
-               MAX(nav_end)   AS last_nav_approx,
                MIN(trade_date) AS first_date,
                MAX(trade_date) AS last_date
-        FROM daily_pnl_summary
-        WHERE nav_start > 0
+        FROM daily_nav
         GROUP BY month
+        HAVING COUNT(*) >= 1
         ORDER BY month ASC
         """
     ).fetchall()
 
-    # Use nav_start of first day and nav_end of last day for accuracy
     results: list[tuple[str, float]] = []
-    for row in rows:
-        month, _, _, first_date, last_date = row
-        nav_start_row = conn.execute(
-            "SELECT nav_start FROM daily_pnl_summary WHERE trade_date = ?", (first_date,)
+    for month, first_date, last_date in rows:
+        first_row = conn.execute(
+            "SELECT nav FROM daily_nav WHERE trade_date = ?", (first_date,)
         ).fetchone()
-        nav_end_row = conn.execute(
-            "SELECT nav_end FROM daily_pnl_summary WHERE trade_date = ?", (last_date,)
+        last_row = conn.execute(
+            "SELECT nav FROM daily_nav WHERE trade_date = ?", (last_date,)
         ).fetchone()
-        if not nav_start_row or not nav_end_row:
+        if not first_row or not last_row:
             continue
-        nav_start = float(nav_start_row[0] or 0)
-        nav_end = float(nav_end_row[0] or 0)
+        nav_start = float(first_row[0] or 0)
+        nav_end = float(last_row[0] or 0)
         if nav_start <= 0:
             continue
         results.append((month, (nav_end - nav_start) / nav_start))

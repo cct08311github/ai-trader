@@ -7,7 +7,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from openclaw.drawdown_guard import DrawdownDecision, evaluate_drawdown_guard, DrawdownPolicy
+from openclaw.drawdown_guard import (
+    DrawdownDecision,
+    DrawdownPolicy,
+    apply_drawdown_actions,
+    evaluate_deep_suspend_guard,
+    evaluate_drawdown_guard,
+)
 from openclaw.llm_observability import LLMTrace, insert_llm_trace
 from openclaw.model_registry import resolve_pinned_model_id
 from openclaw.news_guard import build_news_sentiment_prompt, sanitize_external_news_text
@@ -158,7 +164,14 @@ def run_decision_with_sentinel(
     
     # Step 2: Evaluate drawdown guard
     drawdown_decision = evaluate_drawdown_guard(conn, drawdown_policy)
-    
+
+    # Step 2b: Deep suspend guard — consecutive monthly losses (#398)
+    deep_decision = evaluate_deep_suspend_guard(conn, drawdown_policy)
+    if deep_decision.risk_mode == "deep_suspend":
+        apply_drawdown_actions(conn, deep_decision)
+        _insert_risk_check(conn, decision_id, "deep_suspend_guard", False, deep_decision.reason_code)
+        return PipelineResult(approved=False, reject_code=deep_decision.reason_code)
+
     # Step 3: Sentinel pre-trade check (hard circuit-breakers)
     sentinel_verdict = sentinel_pre_trade_check(
         system_state=system_state,
