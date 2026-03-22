@@ -99,6 +99,29 @@ def _init_system_db(path: Path) -> None:
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_pnl_summary (
+            trade_date TEXT PRIMARY KEY,
+            nav_start REAL NOT NULL,
+            nav_end REAL NOT NULL,
+            realized_pnl REAL NOT NULL,
+            unrealized_pnl REAL NOT NULL,
+            total_pnl REAL NOT NULL,
+            daily_return REAL NOT NULL,
+            rolling_peak_nav REAL NOT NULL,
+            rolling_drawdown REAL NOT NULL,
+            losing_streak_days INTEGER NOT NULL DEFAULT 0,
+            risk_mode TEXT NOT NULL DEFAULT 'normal'
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_nav (
+            trade_date TEXT PRIMARY KEY,
+            nav REAL,
+            unrealized_pnl REAL,
+            realized_pnl_cumulative REAL
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS order_events (
             event_id TEXT PRIMARY KEY,
             ts TEXT NOT NULL,
@@ -765,3 +788,100 @@ class TestSystemRiskPnl:
                 sys.modules["openclaw.pnl_engine"] = pnl_engine
             except Exception:
                 pass
+
+
+class TestGraduationCheck:
+    def test_graduation_check_returns_fail_safe_when_no_data(self, sys_client):
+        c, _, _ = sys_client
+        r = c.get("/api/system/graduation-check", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ready_for_live"] is False
+        assert "win_rate_28d_pct" in data["metrics"]
+
+    def test_graduation_check_passes_when_all_thresholds_met(self, sys_client):
+        c, _, db_path = sys_client
+        now_ms = int(__import__("time").time() * 1000)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO daily_pnl_summary VALUES ('2026-03-01', 1000000, 1010000, 5000, 0, 5000, 0.005, 1010000, 0.02, 0, 'normal')"
+        )
+        conn.execute(
+            "INSERT INTO daily_pnl_summary VALUES ('2026-03-02', 1010000, 1020000, 6000, 0, 6000, 0.006, 1020000, 0.03, 0, 'normal')"
+        )
+        conn.execute(
+            "INSERT INTO daily_pnl_summary VALUES ('2026-03-03', 1020000, 1015000, -1000, 0, -1000, -0.001, 1020000, 0.03, 0, 'normal')"
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2330', 100, 100.0, 100.0, NULL, NULL)"
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2317', 100, 100.0, 100.0, NULL, NULL)"
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2454', 100, 100.0, 100.0, NULL, NULL)"
+        )
+        conn.execute(
+            "INSERT INTO strategy_proposals VALUES ('p1', 'approved', ?)",
+            (now_ms,),
+        )
+        conn.execute(
+            "INSERT INTO strategy_proposals VALUES ('p2', 'approved', ?)",
+            (now_ms,),
+        )
+        conn.execute(
+            "INSERT INTO strategy_proposals VALUES ('p3', 'approved', ?)",
+            (now_ms,),
+        )
+        conn.execute(
+            "INSERT INTO strategy_proposals VALUES ('p4', 'approved', ?)",
+            (now_ms,),
+        )
+        for idx, pid in enumerate(("p1", "p2", "p3", "p4"), start=1):
+            conn.execute(
+                "INSERT INTO proposal_execution_journal VALUES (?, ?, 'RULE', '2330', 100, 500.0, 'executed', 1, ?, NULL, ?, ?)",
+                (f"ek{idx}", pid, f"o{idx}", now_ms, now_ms),
+            )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/graduation-check", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ready_for_live"] is True
+        assert data["blockers"] == []
+        assert data["metrics"]["proposal_execution_alignment_pct"]["value"] == 100.0
+
+    def test_graduation_check_flags_blockers(self, sys_client):
+        c, _, db_path = sys_client
+        now_ms = int(__import__("time").time() * 1000)
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "INSERT INTO daily_pnl_summary VALUES ('2026-03-01', 1000000, 900000, -10000, 0, -10000, -0.01, 1000000, 0.15, 0, 'normal')"
+        )
+        conn.execute(
+            "INSERT INTO incidents VALUES ('i1', datetime('now'), 'critical', 'risk', 'P0', '{}', 0)"
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2330', 100, 1000.0, 1000.0, NULL, NULL)"
+        )
+        conn.execute(
+            "INSERT INTO positions VALUES ('2317', 10, 100.0, 100.0, NULL, NULL)"
+        )
+        conn.execute(
+            "INSERT INTO strategy_proposals VALUES ('p1', 'approved', ?)",
+            (now_ms,),
+        )
+        conn.execute(
+            "INSERT INTO order_events VALUES ('e1', datetime('now'), 'o1', 'rejected', NULL, 'rejected', 'pre_trade_guard', 'RISK_WASH_SALE_SELL_TODAY', '{}')"
+        )
+        conn.commit()
+        conn.close()
+
+        r = c.get("/api/system/graduation-check", headers=_AUTH)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["ready_for_live"] is False
+        assert "incident_free_20d" in data["blockers"]
+        assert "max_concentration_pct" in data["blockers"]
+        assert "wash_sale_violations_28d" in data["blockers"]

@@ -377,6 +377,168 @@ def performance_summary():
         )
 
 
+def _metric_payload(value, threshold, passed: bool, detail: str | None = None) -> dict:
+    payload = {
+        "value": value,
+        "threshold": threshold,
+        "passed": bool(passed),
+    }
+    if detail:
+        payload["detail"] = detail
+    return payload
+
+
+@router.get("/graduation-check")
+def graduation_check():
+    """Simulation-to-live graduation checklist (#392)."""
+    now = datetime.now()
+    recent_ts_text = (now - timedelta(days=28)).isoformat()
+    recent_ms = int((now - timedelta(days=28)).timestamp() * 1000)
+
+    with READONLY_POOL.conn() as conn:
+        try:
+            incident_row = conn.execute(
+                """
+                SELECT COUNT(*)
+                  FROM incidents
+                 WHERE resolved = 0
+                   AND severity IN ('critical', 'warning')
+                   AND ts >= ?
+                """,
+                (recent_ts_text,),
+            ).fetchone()
+            incident_count = int(incident_row[0] or 0) if incident_row else 0
+        except sqlite3.Error:
+            incident_count = 999
+
+        try:
+            from openclaw.performance_summary import _get_28d_stats
+
+            win_rate, profit_factor, trade_days = _get_28d_stats(conn)
+            win_rate_pct = round((win_rate or 0.0) * 100, 2)
+            profit_factor_val = round(profit_factor or 0.0, 2)
+        except Exception:
+            win_rate_pct = 0.0
+            profit_factor_val = 0.0
+            trade_days = 0
+
+        try:
+            row = conn.execute(
+                """
+                SELECT MAX(COALESCE(rolling_drawdown, 0))
+                  FROM daily_pnl_summary
+                 WHERE trade_date >= date('now', '-28 days', '+8 hours')
+                """
+            ).fetchone()
+            max_drawdown_pct = round(float(row[0] or 0.0) * 100, 2) if row else 0.0
+        except sqlite3.Error:
+            max_drawdown_pct = 999.0
+
+        try:
+            rows = conn.execute(
+                """
+                SELECT quantity, avg_price, current_price
+                  FROM positions
+                 WHERE quantity > 0
+                """
+            ).fetchall()
+            exposures = [
+                float((row["current_price"] or row["avg_price"] or 0.0)) * float(row["quantity"] or 0.0)
+                for row in rows
+            ]
+            total_exposure = sum(exposures)
+            max_concentration_pct = round((max(exposures) / total_exposure) * 100, 2) if total_exposure > 0 else 0.0
+        except sqlite3.Error:
+            max_concentration_pct = 999.0
+
+        try:
+            row = conn.execute(
+                """
+                SELECT COUNT(*)
+                  FROM order_events
+                 WHERE ts >= ?
+                   AND COALESCE(reason_code, '') LIKE 'RISK_WASH_SALE%'
+                """,
+                (recent_ts_text,),
+            ).fetchone()
+            wash_sale_violations = int(row[0] or 0) if row else 0
+        except sqlite3.Error:
+            wash_sale_violations = 999
+
+        try:
+            proposals_row = conn.execute(
+                """
+                SELECT COUNT(*)
+                  FROM strategy_proposals
+                 WHERE created_at >= ?
+                """,
+                (recent_ms,),
+            ).fetchone()
+            executed_row = conn.execute(
+                """
+                SELECT COUNT(DISTINCT proposal_id)
+                  FROM proposal_execution_journal
+                 WHERE created_at >= ?
+                """,
+                (recent_ms,),
+            ).fetchone()
+            proposal_count = int(proposals_row[0] or 0) if proposals_row else 0
+            executed_count = int(executed_row[0] or 0) if executed_row else 0
+            proposal_alignment_pct = round((executed_count / proposal_count) * 100, 2) if proposal_count > 0 else 0.0
+        except sqlite3.Error:
+            proposal_count = 0
+            executed_count = 0
+            proposal_alignment_pct = 0.0
+
+    metrics = {
+        "incident_free_20d": _metric_payload(
+            incident_count,
+            "0 unresolved warning/critical incidents in recent window",
+            incident_count == 0,
+            "Uses recent unresolved incidents as a fail-safe proxy for P0/P1 incident-free days.",
+        ),
+        "win_rate_28d_pct": _metric_payload(
+            win_rate_pct,
+            ">= 45%",
+            win_rate_pct >= 45.0 and trade_days > 0,
+        ),
+        "max_drawdown_pct": _metric_payload(
+            max_drawdown_pct,
+            "<= 10%",
+            max_drawdown_pct <= 10.0,
+        ),
+        "profit_factor_28d": _metric_payload(
+            profit_factor_val,
+            ">= 1.2",
+            profit_factor_val >= 1.2,
+        ),
+        "max_concentration_pct": _metric_payload(
+            max_concentration_pct,
+            "<= 40%",
+            max_concentration_pct <= 40.0,
+        ),
+        "wash_sale_violations_28d": _metric_payload(
+            wash_sale_violations,
+            "== 0",
+            wash_sale_violations == 0,
+        ),
+        "proposal_execution_alignment_pct": _metric_payload(
+            proposal_alignment_pct,
+            ">= 80%",
+            proposal_alignment_pct >= 80.0 and proposal_count > 0,
+            f"{executed_count}/{proposal_count} proposals linked to execution journal entries in recent window.",
+        ),
+    }
+    blockers = [name for name, item in metrics.items() if not item["passed"]]
+
+    return {
+        "status": "ok",
+        "ready_for_live": len(blockers) == 0,
+        "blockers": blockers,
+        "metrics": metrics,
+    }
+
+
 # ─── /api/inventory ────────────────────────────────────────────────────────────
 
 @inventory_router.get("")
