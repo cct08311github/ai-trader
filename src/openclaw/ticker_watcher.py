@@ -48,7 +48,7 @@ def _interruptible_sleep(seconds: int) -> bool:
     while time.monotonic() < deadline:
         if _shutdown_requested:
             return True
-        time.sleep(min(1, deadline - time.monotonic()))
+        time.sleep(max(0, min(1, deadline - time.monotonic())))
     return False
 
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
