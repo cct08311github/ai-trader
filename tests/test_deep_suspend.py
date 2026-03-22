@@ -28,22 +28,17 @@ from openclaw.drawdown_guard import (
 # DB helpers
 # ──────────────────────────────────────────────
 
-def _make_db(daily_rows: list[tuple] | None = None) -> sqlite3.Connection:
-    """Build in-memory DB with daily_pnl_summary + supporting tables."""
+def _make_db(nav_rows: list[tuple] | None = None) -> sqlite3.Connection:
+    """Build in-memory DB with daily_nav + supporting tables (#398)."""
     conn = sqlite3.connect(":memory:")
     conn.execute(
-        """CREATE TABLE daily_pnl_summary (
-            trade_date       TEXT PRIMARY KEY,
-            nav_start        REAL,
-            nav_end          REAL,
-            realized_pnl     REAL DEFAULT 0,
-            unrealized_pnl   REAL DEFAULT 0,
-            total_pnl        REAL DEFAULT 0,
-            daily_return     REAL DEFAULT 0,
-            rolling_peak_nav REAL DEFAULT 0,
-            rolling_drawdown REAL DEFAULT 0,
-            losing_streak_days INTEGER DEFAULT 0,
-            risk_mode        TEXT DEFAULT 'normal'
+        """CREATE TABLE daily_nav (
+            trade_date              TEXT PRIMARY KEY,
+            nav                     REAL NOT NULL,
+            cash                    REAL NOT NULL DEFAULT 0,
+            unrealized_pnl          REAL NOT NULL DEFAULT 0,
+            realized_pnl_cumulative REAL NOT NULL DEFAULT 0,
+            recorded_at             INTEGER NOT NULL DEFAULT 0
         )"""
     )
     conn.execute(
@@ -69,10 +64,10 @@ def _make_db(daily_rows: list[tuple] | None = None) -> sqlite3.Connection:
     )
     conn.commit()
 
-    if daily_rows:
+    if nav_rows:
         conn.executemany(
-            "INSERT INTO daily_pnl_summary (trade_date, nav_start, nav_end) VALUES (?,?,?)",
-            daily_rows,
+            "INSERT INTO daily_nav (trade_date, nav) VALUES (?,?)",
+            nav_rows,
         )
         conn.commit()
 
@@ -81,13 +76,13 @@ def _make_db(daily_rows: list[tuple] | None = None) -> sqlite3.Connection:
 
 def _nav_sequence(
     months: list[tuple[str, float, float]]
-) -> list[tuple[str, float, float]]:
-    """Helper: build daily rows from (YYYY-MM, nav_start, nav_end) specs.
-    Inserts two rows per month: first day and last day."""
+) -> list[tuple[str, float]]:
+    """Helper: build daily_nav rows from (YYYY-MM, nav_start, nav_end) specs.
+    Inserts first day at nav_start and last day at nav_end."""
     rows = []
     for month, start, end in months:
-        rows.append((f"{month}-01", start, start * 0.995))   # mid-month row
-        rows.append((f"{month}-28", start * 0.995, end))     # last day
+        rows.append((f"{month}-01", start))
+        rows.append((f"{month}-28", end))
     return rows
 
 
@@ -101,8 +96,7 @@ class TestComputeMonthlyReturns:
         assert _compute_monthly_returns(conn) == []
 
     def test_single_month_positive(self):
-        rows = [("2026-01-01", 1_000_000, 990_000),
-                ("2026-01-31", 990_000, 1_050_000)]
+        rows = [("2026-01-01", 1_000_000), ("2026-01-31", 1_050_000)]
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert len(results) == 1
@@ -111,8 +105,7 @@ class TestComputeMonthlyReturns:
         assert abs(ret - 0.05) < 0.001   # +5%
 
     def test_single_month_negative(self):
-        rows = [("2026-02-01", 1_000_000, 980_000),
-                ("2026-02-28", 980_000, 870_000)]
+        rows = [("2026-02-01", 1_000_000), ("2026-02-28", 870_000)]
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert len(results) == 1
@@ -120,10 +113,8 @@ class TestComputeMonthlyReturns:
         assert ret < 0   # negative return
 
     def test_ordered_oldest_first(self):
-        rows = [("2026-01-01", 1_000_000, 950_000),
-                ("2026-01-31", 950_000, 900_000),
-                ("2026-02-01", 900_000, 1_000_000),
-                ("2026-02-28", 1_000_000, 1_100_000)]
+        rows = [("2026-01-01", 1_000_000), ("2026-01-31", 900_000),
+                ("2026-02-01", 900_000), ("2026-02-28", 1_100_000)]
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert results[0][0] < results[1][0]   # 2026-01 < 2026-02
