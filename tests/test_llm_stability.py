@@ -67,18 +67,24 @@ class TestMinimaxCallConfig:
         payload = call_args.kwargs.get("json") or call_args[1].get("json")
         assert payload["temperature"] == 0.05
 
-    @patch("openclaw.llm_minimax.time.time")
     @patch("openclaw.llm_minimax.requests.post")
     @patch.dict("os.environ", {"MINIMAX_API_KEY": "test-key"})
-    def test_latency_warning_logged(self, mock_post, mock_time, caplog):
+    def test_latency_warning_logged(self, mock_post, caplog, monkeypatch):
         from openclaw.llm_minimax import minimax_call
         import openclaw.llm_minimax as mod
 
         old_warn = mod._LATENCY_WARN_MS
         mod._LATENCY_WARN_MS = 1000  # 1 second threshold
 
-        # Simulate 5-second latency
-        mock_time.side_effect = [100.0, 105.0]
+        # Simulate 5-second latency via time.time returning increasing values
+        _call_count = 0
+        _times = [100.0, 105.0]  # 5s apart
+        def _fake_time():
+            nonlocal _call_count
+            idx = min(_call_count, len(_times) - 1)
+            _call_count += 1
+            return _times[idx]
+        monkeypatch.setattr(mod.time, "time", _fake_time)
 
         mock_resp = MagicMock()
         mock_resp.json.return_value = {
