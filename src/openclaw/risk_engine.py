@@ -94,6 +94,7 @@ class PortfolioState:
     positions: Dict[str, Position] = field(default_factory=dict)
     consecutive_losses: int = 0
     same_day_fill_symbols: set = field(default_factory=set)
+    same_day_sell_symbols: set = field(default_factory=set)  # #386: sell-then-buy prevention
 
     def position_value(self, symbol: str) -> float:
         pos = self.positions.get(symbol)
@@ -244,6 +245,14 @@ def evaluate_and_build_order(
         and decision.symbol in portfolio.same_day_fill_symbols
     ):
         return EvaluationResult(False, "RISK_WASH_SALE", metrics=base_metrics)
+
+    # HARD WASH SALE — blocks buy on symbol sold today (#386).
+    # NO config bypass: sell-then-buy same day is never allowed.
+    if (
+        decision.signal_side == "buy"
+        and decision.symbol in portfolio.same_day_sell_symbols
+    ):
+        return EvaluationResult(False, "RISK_WASH_SALE_SELL_TODAY", metrics=base_metrics)
 
     # DAILY PM APPROVAL — blocks all trading if today's review not approved.
     # Bypass with limits["pm_review_required"] = 0 (e.g. simulation / backtest).
