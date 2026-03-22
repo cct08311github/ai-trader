@@ -162,7 +162,7 @@ def test_analyze_strategy_edge_sufficient_trades(tmp_path):
     """Enough trades → full analysis path."""
     db = str(tmp_path / "trades.db")
     from datetime import datetime, timedelta
-    base_date = datetime(2026, 3, 1)
+    base_date = datetime.now()  # Use relative date to avoid 30-day lookback expiry
     trades = [
         {"agent_id": "strat", "pnl": 10.0 if i % 2 == 0 else -4.0,
          "timestamp": (base_date - timedelta(days=i)).strftime("%Y-%m-%dT00:00:00")}
