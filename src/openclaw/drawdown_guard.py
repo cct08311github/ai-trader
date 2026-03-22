@@ -54,25 +54,35 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 
 
 def recompute_rolling_drawdown(conn: sqlite3.Connection) -> None:
-    """Recompute rolling_drawdown for daily_pnl_summary using daily_nav (#398).
+    """Recompute rolling drawdown, preferring daily_nav but preserving legacy fallback.
 
-    Uses daily_nav table (authoritative NAV) to compute peak and drawdown,
-    then updates the rolling_drawdown column in daily_pnl_summary.
+    daily_nav is the authoritative source introduced in #398, but some test
+    fixtures and maintenance paths still only populate daily_pnl_summary.
     """
-    if not _table_exists(conn, "daily_pnl_summary") or not _table_exists(conn, "daily_nav"):
+    if not _table_exists(conn, "daily_pnl_summary"):
         return
 
-    rows = conn.execute(
-        "SELECT trade_date, nav FROM daily_nav ORDER BY trade_date ASC"
-    ).fetchall()
+    if _table_exists(conn, "daily_nav"):
+        rows = conn.execute(
+            "SELECT trade_date, nav FROM daily_nav ORDER BY trade_date ASC"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT trade_date, nav_end FROM daily_pnl_summary ORDER BY trade_date ASC"
+        ).fetchall()
+
     peak = 0.0
     for trade_date, nav in rows:
         nav_val = float(nav or 0.0)
         peak = max(peak, nav_val)
         dd = max(0.0, (peak - nav_val) / peak) if peak > 0 else 0.0
         conn.execute(
-            "UPDATE daily_pnl_summary SET rolling_drawdown = ? WHERE trade_date = ?",
-            (dd, str(trade_date)),
+            """
+            UPDATE daily_pnl_summary
+            SET rolling_peak_nav = ?, rolling_drawdown = ?
+            WHERE trade_date = ?
+            """,
+            (peak, dd, str(trade_date)),
         )
 
 
