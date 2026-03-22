@@ -126,8 +126,9 @@ class TestBackwardCompatibility:
         assert "LOCKED_SYM" in symbols
 
 
-def test_dedup_skips_symbol_with_pending_sell(tmp_path):
-    """Symbol with pending sell order → skipped (no duplicate proposal)."""
+def test_dedup_skips_symbol_with_sufficient_pending_sell(tmp_path):
+    """Symbol with sufficient recent pending sell order → skipped (#385: dedup checks qty)."""
+    import time as _time
     db_path = tmp_path / "dedup.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -136,14 +137,15 @@ def test_dedup_skips_symbol_with_pending_sell(tmp_path):
     conn.execute("CREATE TABLE strategy_proposals (proposal_id TEXT PRIMARY KEY, generated_by TEXT, target_rule TEXT, rule_category TEXT, proposed_value TEXT, supporting_evidence TEXT, confidence REAL, requires_human_approval INTEGER, status TEXT, proposal_json TEXT, created_at INTEGER)")
     conn.execute("INSERT INTO positions VALUES ('HIGH', 700, 100.0, 80.0, 'holding')")
     conn.execute("INSERT INTO positions VALUES ('LOW', 300, 100.0, 90.0, 'holding')")
-    # HIGH has a pending sell order → should be deduped
-    conn.execute("INSERT INTO orders VALUES ('o1','HIGH','sell','submitted',100,100.0,'2026-03-14',NULL,NULL,NULL,NULL,NULL)")
+    # HIGH has a recent pending sell for 600 qty → sufficient to bring to 10% (below 20% target)
+    now_iso = _time.strftime("%Y-%m-%dT%H:%M:%S", _time.gmtime())
+    conn.execute(f"INSERT INTO orders VALUES ('o1','HIGH','sell','submitted',600,100.0,'{now_iso}',NULL,NULL,NULL,NULL,NULL)")
     conn.commit()
 
     from openclaw.concentration_guard import check_concentration
     proposals = check_concentration(conn)
     high_proposals = [p for p in proposals if p["symbol"] == "HIGH"]
-    assert len(high_proposals) == 0  # deduped
+    assert len(high_proposals) == 0  # deduped — sell qty sufficient
 
 
 def test_dedup_does_not_skip_filled_sell(tmp_path):
@@ -183,4 +185,4 @@ def test_concentration_40_60_pending_proposal(tmp_path):
     proposals = check_concentration(conn)
     mid_proposals = [p for p in proposals if p["symbol"] == "MID"]
     assert len(mid_proposals) == 1
-    assert mid_proposals[0]["auto_approve"] is False  # 50% is between 40-60%
+    assert mid_proposals[0]["auto_approve"] is True  # 50% > 40% → auto-approve (#385 lowered thresholds)
