@@ -47,13 +47,16 @@ def _extract_json(text: str) -> Dict[str, Any]:
     raise ValueError(f"Cannot parse JSON from MiniMax response: {text[:300]}")
 
 
-def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str, Any]:
-    """呼叫 MiniMax M2.5，回傳解析後的 JSON dict。
+_LATENCY_WARN_MS = int(os.environ.get("LLM_LATENCY_WARN_MS", "30000"))  # 30s default
+
+
+def minimax_call(model: str, prompt: str, temperature: float = 0.1) -> Dict[str, Any]:
+    """呼叫 MiniMax，回傳解析後的 JSON dict。
 
     Args:
         model: MiniMax 模型 ID，e.g. "MiniMax-M2.7"。
         prompt: 完整 prompt 字串。
-        temperature: 生成溫度，預設 0.2（低隨機性，審查決策更穩定）。
+        temperature: 生成溫度，預設 0.1（#391: 降低決策隨機性）。
 
     Returns:
         解析後的 dict，包含 '_raw_response', '_prompt', '_latency_ms', '_model'。
@@ -75,6 +78,7 @@ def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str,
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "response_format": {"type": "json_object"},
+        "temperature": temperature,
         "max_tokens": 16384,
     }
 
@@ -106,8 +110,17 @@ def minimax_call(model: str, prompt: str, temperature: float = 0.2) -> Dict[str,
     result["_raw_response"] = raw_text
     result["_latency_ms"] = latency_ms
     result["_model"] = model
+    result["_temperature"] = temperature
     result["_input_tokens"] = usage.get("prompt_tokens", 0)
     result["_output_tokens"] = usage.get("completion_tokens", 0)
+
+    # Latency warning (#391)
+    if latency_ms > _LATENCY_WARN_MS:
+        log.warning(
+            "LLM call slow: model=%s latency=%dms (threshold=%dms) tokens_in=%d tokens_out=%d",
+            model, latency_ms, _LATENCY_WARN_MS,
+            result["_input_tokens"], result["_output_tokens"],
+        )
 
     return result
 
