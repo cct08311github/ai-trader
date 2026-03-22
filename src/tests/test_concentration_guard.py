@@ -53,28 +53,31 @@ def test_auto_reduce_creates_approved_proposal_in_db(tmp_path):
     assert any(r[0] == "approved" for r in rows)
 
 
-def test_pending_proposal_when_40_to_60_pct(tmp_path):
-    """單檔 40-60% 生成 pending proposal（需人工核准）"""
+def test_pending_proposal_when_25_to_40_pct(tmp_path):
+    """單檔 25-40% 生成 pending proposal（需人工核准，#385 閾值降低）"""
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
+    # 3008: 100*2450 = 245000 (30%), 2330: 300*1900 = 570000 (70%)
     conn.execute("INSERT INTO positions VALUES ('3008',100,379.6,2450,0,2450)")
-    conn.execute("INSERT INTO positions VALUES ('2330',300,898.6,1000,0,1000)")
+    conn.execute("INSERT INTO positions VALUES ('2330',300,898.6,1900,0,1900)")
     conn.commit()
 
     proposals = check_concentration(conn)
-    if proposals:
-        p3008 = next((p for p in proposals if p["symbol"] == "3008"), None)
-        if p3008:
-            assert not p3008["auto_approve"]  # 需人工核准
+    p3008 = next((p for p in proposals if p["symbol"] == "3008"), None)
+    if p3008:
+        assert not p3008["auto_approve"]  # 30% is between 25-40% → pending
 
 
-def test_no_proposals_when_under_40pct(tmp_path):
-    """所有持倉均低於 40% 時不生成 proposal（各佔約 33%）"""
+def test_no_proposals_when_under_25pct(tmp_path):
+    """所有持倉均低於 25% 時不生成 proposal（#385 閾值降至 25%）"""
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
+    # 5 stocks at 20% each → all under 25%
     conn.execute("INSERT INTO positions VALUES ('2330',100,0,100,0,100)")
     conn.execute("INSERT INTO positions VALUES ('2317',100,0,100,0,100)")
     conn.execute("INSERT INTO positions VALUES ('2382',100,0,100,0,100)")
+    conn.execute("INSERT INTO positions VALUES ('2454',100,0,100,0,100)")
+    conn.execute("INSERT INTO positions VALUES ('3008',100,0,100,0,100)")
     conn.commit()
 
     proposals = check_concentration(conn)
@@ -89,16 +92,18 @@ def test_empty_positions_returns_no_proposals(tmp_path):
     assert proposals == []
 
 
-def test_dedup_skips_symbol_with_pending_sell_orders(tmp_path):
-    """已有 submitted sell orders 的標的不應再產生新 proposal"""
+def test_dedup_skips_symbol_with_sufficient_recent_sell(tmp_path):
+    """已有足夠的 recent submitted sell → 不再產生新 proposal (#385 dedup fix)"""
+    import time as _time
     from openclaw.concentration_guard import check_concentration
     conn = _make_db(tmp_path)
     conn.execute("INSERT INTO positions VALUES ('3008',591,379.6,2450,0,2450)")
     conn.execute("INSERT INTO positions VALUES ('2330',151,898.6,1935,0,1935)")
-    # 已有一筆 submitted sell order for 3008
-    conn.execute("""INSERT INTO orders VALUES (
-        'existing-order','d1','b1','2026-03-06T04:00:00+00:00',
-        '3008','sell',378,2350.0,'limit','ROD','submitted','v1')""")
+    # Recent sell order for 500 shares of 3008 → sufficient to bring below target
+    now_iso = _time.strftime("%Y-%m-%dT%H:%M:%S+00:00", _time.gmtime())
+    conn.execute(f"""INSERT INTO orders VALUES (
+        'existing-order','d1','b1','{now_iso}',
+        '3008','sell',500,2350.0,'limit','ROD','submitted','v1')""")
     conn.commit()
 
     proposals = check_concentration(conn)

@@ -1,9 +1,11 @@
 """concentration_guard.py — 集中度守衛
 
 自動偵測單檔倉位過度集中，生成再平衡 proposal：
-  - 超過 60%：自動核准 → approved（proposal_executor 下輪掃盤自動執行）
-  - 超過 40%：待審 → pending（需人工核准）
-  - 低於 40%：無動作
+  - 超過 40%：自動核准 → approved（proposal_executor 下輪掃盤自動執行）
+  - 超過 25%：待審 → pending（需人工核准）
+  - 低於 25%：無動作
+
+#385: 閾值從 60%/40% 降至 40%/25%，修復 dedup 阻擋減倉的問題
 """
 import json
 import logging
@@ -14,9 +16,10 @@ from typing import TypedDict
 
 log = logging.getLogger(__name__)
 
-_AUTO_REDUCE_THRESHOLD: float = 0.60   # 超過 60%：自動核准減倉
-_WARN_THRESHOLD:        float = 0.40   # 超過 40%：生成待審 proposal
-_TARGET_WEIGHT:         float = 0.30   # 目標降至 30%
+_AUTO_REDUCE_THRESHOLD: float = 0.40   # 超過 40%：自動核准減倉
+_WARN_THRESHOLD:        float = 0.25   # 超過 25%：生成待審 proposal
+_TARGET_WEIGHT:         float = 0.20   # 目標降至 20%（與 risk_engine max_symbol_weight 對齊）
+_STALE_ORDER_SEC:       int   = 360    # 超過 6 分鐘的 submitted 賣單視為 stale
 
 
 class ConcentrationProposal(TypedDict):
@@ -49,17 +52,22 @@ def check_concentration(
     if total_value <= 0:
         return []
 
-    # Dedup: skip symbols that already have pending submitted sell orders
+    # Dedup: check pending sell orders per symbol, but only skip if
+    # the pending sell qty is sufficient to bring weight below target (#385)
+    stale_cutoff = time.strftime("%Y-%m-%dT%H:%M:%S",
+                                 time.gmtime(time.time() - _STALE_ORDER_SEC))
+    pending_sell_qty: dict[str, int] = {}
     try:
-        pending_symbols = {
-            r[0] for r in conn.execute(
-                "SELECT DISTINCT symbol FROM orders WHERE side='sell' AND status='submitted'"
-            ).fetchall()
-        }
+        for r in conn.execute(
+            """SELECT symbol, SUM(qty) FROM orders
+               WHERE side='sell' AND status='submitted' AND ts_submit > ?
+               GROUP BY symbol""",
+            (stale_cutoff,),
+        ).fetchall():
+            pending_sell_qty[r[0]] = int(r[1] or 0)
     except sqlite3.Error as e:
         log.error("Dedup query failed, proceeding WITHOUT dedup — "
                   "duplicate proposals may be generated: %s", e)
-        pending_symbols = set()
 
     proposals: list[ConcentrationProposal] = []
     for symbol, qty, price in rows:
@@ -67,10 +75,17 @@ def check_concentration(
         if weight < _WARN_THRESHOLD:
             continue
 
-        if symbol in pending_symbols:
-            log.info("Concentration %s: %.1f%% — skipped (pending sell orders exist)",
-                     symbol, weight * 100)
-            continue
+        # Check if pending sell is sufficient to bring weight below target
+        pending_qty = pending_sell_qty.get(symbol, 0)
+        if pending_qty > 0:
+            remaining_qty = qty - pending_qty
+            remaining_weight = (remaining_qty * (price or 0)) / total_value if total_value > 0 else 0
+            if remaining_weight <= _TARGET_WEIGHT:
+                log.info("Concentration %s: %.1f%% — skipped (pending sell %d will reduce to %.1f%%)",
+                         symbol, weight * 100, pending_qty, remaining_weight * 100)
+                continue
+            log.info("Concentration %s: %.1f%% — pending sell %d insufficient (would be %.1f%%), generating additional proposal",
+                     symbol, weight * 100, pending_qty, remaining_weight * 100)
 
         if locked_symbols and symbol in locked_symbols:
             log.warning("Concentration %s: %.1f%% — skipped (locked symbol, sell prohibited)",
