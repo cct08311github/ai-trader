@@ -8,7 +8,7 @@ import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from openclaw.signal_logic import SignalParams, evaluate_entry, evaluate_exit
+from openclaw.signal_logic import SignalParams, evaluate_entry, evaluate_exit, evaluate_entry_multi, MultiSignalResult
 
 _TZ_TWN = timezone(timedelta(hours=8))
 # 盤後收盤基準：14:30 TWN（台股 13:30 收盤，ingest 約 14:00–14:30 完成）
@@ -89,6 +89,34 @@ def compute_signal(
         return evaluate_exit(closes, position_avg_price, high_water_mark, params).signal
 
     return evaluate_entry(closes, params).signal
+
+
+def compute_multi_signal(
+    conn: sqlite3.Connection,
+    symbol: str,
+    benchmark_symbol: str = "0050",
+    max_date: Optional[str] = None,
+) -> MultiSignalResult:
+    """Multi-signal entry evaluation with DB I/O (#384).
+
+    Fetches candles for both the target symbol and benchmark (0050),
+    then delegates to signal_logic.evaluate_entry_multi().
+
+    Returns:
+        MultiSignalResult with score 0.0~1.0 and reasons.
+    """
+    candles = _fetch_candles(conn, symbol, days=60, max_date=max_date)
+    if len(candles) < 27:  # Need at least slow MACD period + 1
+        return MultiSignalResult(score=0.0, signals_fired=0, reasons=["insufficient_data"])
+
+    bench_candles = _fetch_candles(conn, benchmark_symbol, days=60, max_date=max_date)
+    bench_closes = [c["close"] for c in bench_candles] if len(bench_candles) >= 21 else []
+
+    closes = [c["close"] for c in candles]
+    volumes = [c["volume"] for c in candles]
+    params = _build_params()
+
+    return evaluate_entry_multi(closes, volumes, bench_closes, params)
 
 
 # Public alias — preferred import for external callers

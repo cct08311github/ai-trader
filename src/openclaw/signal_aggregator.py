@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from openclaw.market_regime import classify_market_regime
-from openclaw.signal_generator import compute_signal, fetch_candles
+from openclaw.signal_generator import compute_signal, compute_multi_signal, fetch_candles
 from openclaw.lm_signal_cache import read_cache_with_fallback
 
 REGIME_WEIGHTS: dict[str, dict[str, float]] = {
@@ -96,10 +96,33 @@ def aggregate(
     weights = REGIME_WEIGHTS.get(regime, REGIME_WEIGHTS["range"])
     reasons.append(f"regime={regime}")
 
-    # 2. Technical signal（無資料時 compute_signal 回傳 flat，不拋例外）
+    # 2. Technical signal（多信號融合 #384）
+    #    持倉時：exit 邏輯不變（trailing/TP/SL）
+    #    空倉時：使用 multi-signal 綜合分數（MACD + Volume + RS + MA）
     tech_str = compute_signal(conn, symbol, position_avg_price, high_water_mark)
-    tech_score = SIGNAL_TO_SCORE.get(tech_str, 0.5)  # default to neutral on unknown
-    reasons.append(f"technical={tech_str}({tech_score:.2f})")
+    if position_avg_price is not None:
+        # 持倉 → exit 信號，維持原有 score mapping
+        tech_score = SIGNAL_TO_SCORE.get(tech_str, 0.5)
+        reasons.append(f"technical={tech_str}({tech_score:.2f})")
+    else:
+        # 空倉 → multi-signal entry；0 個信號時 fallback 到原始 signal
+        _multi_applied = False
+        try:
+            multi = compute_multi_signal(conn, symbol)
+            if multi.signals_fired > 0:
+                # Map multi score (0.0~1.0) to tech_score range:
+                # 1 signal → 0.625, 2 → 0.75, 3 → 0.875, 4 → 1.0
+                tech_score = 0.5 + multi.score * 0.5
+                _multi_reasons = ",".join(multi.reasons) if multi.reasons else ""
+                reasons.append(
+                    f"technical_multi=score{multi.score:.2f}({multi.signals_fired}/4):{_multi_reasons}"
+                )
+                _multi_applied = True
+        except Exception as e:  # noqa: BLE001 — fallback to legacy
+            reasons.append(f"multi_signal_err={e}")
+        if not _multi_applied:
+            tech_score = SIGNAL_TO_SCORE.get(tech_str, 0.5)
+            reasons.append(f"technical={tech_str}({tech_score:.2f})")
 
     # 3. LLM cache（個股 fallback 全市場；miss → neutral 0.5）
     cache = read_cache_with_fallback(conn, symbol)

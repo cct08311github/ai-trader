@@ -99,6 +99,124 @@ def evaluate_entry(
     return SignalResult("flat", "no_entry_signal")
 
 
+# ---------------------------------------------------------------------------
+# Multi-signal entry evaluation (#384) — MACD + Volume Breakout + RS
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class MultiSignalResult:
+    """多信號進場評估結果。score 為 0.0~1.0。"""
+    score: float           # 綜合技術分數
+    signals_fired: int     # 觸發的信號數量
+    reasons: list          # 各信號觸發原因
+
+
+def _macd_entry(closes: Sequence[float]) -> tuple[bool, str]:
+    """MACD histogram 由負翻正（bullish crossover）。"""
+    from openclaw.technical_indicators import calc_macd
+    if len(closes) < 27:  # need at least slow(26) + 1
+        return False, ""
+    macd = calc_macd(closes)
+    hist = macd["histogram"]
+    if len(hist) >= 2 and hist[-1] is not None and hist[-2] is not None:
+        if hist[-2] <= 0 and hist[-1] > 0:
+            return True, f"macd_bullish_cross:hist={hist[-1]:.4f}"
+    return False, ""
+
+
+def _volume_breakout(
+    closes: Sequence[float],
+    volumes: Sequence[float],
+    period: int = 20,
+    volume_ratio: float = 2.0,
+) -> tuple[bool, str]:
+    """價格突破 N 日最高且成交量 > 均量 × ratio。"""
+    if len(closes) < period + 1 or len(volumes) < period + 1:
+        return False, ""
+    high_n = max(closes[-(period + 1):-1])
+    avg_vol = sum(volumes[-(period + 1):-1]) / period
+    latest_close = closes[-1]
+    latest_vol = volumes[-1]
+    if latest_close > high_n and avg_vol > 0 and latest_vol >= avg_vol * volume_ratio:
+        return True, (
+            f"vol_breakout:close={latest_close:.2f}>high{period}={high_n:.2f},"
+            f"vol_ratio={latest_vol / avg_vol:.1f}x"
+        )
+    return False, ""
+
+
+def _relative_strength(
+    closes: Sequence[float],
+    benchmark_closes: Sequence[float],
+    period: int = 20,
+) -> tuple[bool, str]:
+    """個股 N 日報酬率 > 大盤 N 日報酬率（相對強勢）。"""
+    if len(closes) < period + 1 or len(benchmark_closes) < period + 1:
+        return False, ""
+    stock_ret = (closes[-1] - closes[-(period + 1)]) / closes[-(period + 1)]
+    bench_ret = (benchmark_closes[-1] - benchmark_closes[-(period + 1)]) / benchmark_closes[-(period + 1)]
+    rs = stock_ret - bench_ret
+    if rs > 0:
+        return True, f"relative_strength:stock={stock_ret:.2%},bench={bench_ret:.2%},rs={rs:.2%}"
+    return False, ""
+
+
+def evaluate_entry_multi(
+    closes: Sequence[float],
+    volumes: Sequence[float],
+    benchmark_closes: Sequence[float],
+    params: SignalParams = SignalParams(),
+) -> MultiSignalResult:
+    """多信號進場評估。
+
+    四個獨立信號各貢獻 0.25 分，全部觸發 = 1.0：
+    1. MA 黃金交叉 + RSI（原有）
+    2. MACD histogram 翻正
+    3. 成交量突破（20 日新高 + 2x 量）
+    4. 相對強度（vs 大盤）
+
+    Returns:
+        MultiSignalResult with score 0.0~1.0
+    """
+    reasons: list[str] = []
+    score = 0.0
+    signals_fired = 0
+
+    # Signal 1: MA golden cross + RSI (original)
+    ma_result = evaluate_entry(closes, params)
+    if ma_result.signal == "buy":
+        score += 0.25
+        signals_fired += 1
+        reasons.append(ma_result.reason)
+
+    # Signal 2: MACD histogram bullish crossover
+    fired, reason = _macd_entry(closes)
+    if fired:
+        score += 0.25
+        signals_fired += 1
+        reasons.append(reason)
+
+    # Signal 3: Volume breakout
+    fired, reason = _volume_breakout(closes, volumes)
+    if fired:
+        score += 0.25
+        signals_fired += 1
+        reasons.append(reason)
+
+    # Signal 4: Relative strength vs benchmark
+    fired, reason = _relative_strength(closes, benchmark_closes)
+    if fired:
+        score += 0.25
+        signals_fired += 1
+        reasons.append(reason)
+
+    return MultiSignalResult(
+        score=round(score, 4),
+        signals_fired=signals_fired,
+        reasons=reasons,
+    )
+
+
 def load_params_from_file(path: str) -> SignalParams:
     """從 JSON 檔案讀取信號參數，不存在則 fallback 到預設值。"""
     try:
