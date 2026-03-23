@@ -1590,13 +1590,13 @@ def run_watcher() -> None:
             except Exception as ce:  # noqa: BLE001 — dynamic import; can't predict exceptions
                 log.error("[concentration] guard error: %s", ce, exc_info=True)
 
-            # ── Gemini 自動審查 pending proposals → 核准/拒絕 + Telegram 通知 ──
+            # ── LLM 自動審查 pending proposals → 核准/拒絕 + Telegram 通知 ──
             try:
                 from openclaw.proposal_reviewer import auto_review_pending_proposals
                 n_reviewed = auto_review_pending_proposals(conn)
                 if n_reviewed > 0:
                     log.info("[reviewer] Auto-reviewed %d pending proposals", n_reviewed)
-            except Exception as rv:  # noqa: BLE001 — dynamic import + Gemini API
+            except Exception as rv:  # noqa: BLE001 — dynamic import + LLM API
                 log.error("[reviewer] proposal reviewer error: %s", rv, exc_info=True)
 
             # ── Telegram 提案通知 + 老闆 inline 核准 ──────────────────────────
