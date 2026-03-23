@@ -211,7 +211,12 @@ def run_eod_analysis(
         # 0. 抓取盤後公開資料（三大法人 + 融資借券）
         try:
             from openclaw.market_data_fetcher import run_daily_fetch
-            run_daily_fetch(_date, _conn)
+            _ohlcv_syms = [
+                r[0] for r in _conn.execute(
+                    "SELECT DISTINCT symbol FROM eod_prices"
+                ).fetchall()
+            ]
+            run_daily_fetch(_date, _conn, ohlcv_symbols=_ohlcv_syms)
         except Exception as _e:
             log.warning("[eod_analysis] market_data_fetcher 失敗，繼續執行: %s", _e)
 
