@@ -250,6 +250,56 @@ def save_margin_data(
     return len(rows)
 
 
+# ── Yahoo Finance fallback ────────────────────────────────────────────────────
+
+_YAHOO_CHART_URL = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.TW"
+    "?interval=1d&range=5d"
+)
+
+
+def fetch_ohlcv_yahoo(symbols: List[str], sleep_sec: float = 1.0) -> Dict[str, List[Dict]]:
+    """
+    Fetch recent OHLCV from Yahoo Finance as fallback when TWSE API is unavailable.
+
+    Returns {symbol: [{trade_date, open, high, low, close, volume}, ...]}
+    """
+    result: Dict[str, List[Dict]] = {}
+    for sym in symbols:
+        url = _YAHOO_CHART_URL.format(symbol=sym)
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CTX) as resp:
+                data = json.loads(resp.read())
+            chart = data["chart"]["result"][0]
+            timestamps = chart.get("timestamp", [])
+            quotes = chart["indicators"]["quote"][0]
+            rows = []
+            for i, ts in enumerate(timestamps):
+                dt = datetime.datetime.fromtimestamp(
+                    ts, tz=datetime.timezone(datetime.timedelta(hours=8)),
+                )
+                c = quotes["close"][i]
+                if c is None:
+                    continue
+                rows.append({
+                    "trade_date": dt.strftime("%Y-%m-%d"),
+                    "open": quotes["open"][i],
+                    "high": quotes["high"][i],
+                    "low": quotes["low"][i],
+                    "close": c,
+                    "volume": quotes["volume"][i],
+                })
+            result[sym] = rows
+        except Exception as exc:
+            log.warning("[market_data_fetcher] Yahoo fetch failed %s: %s", sym, exc)
+            result[sym] = []
+        time.sleep(sleep_sec)
+    return result
+
+
 # ── Orchestrator ─────────────────────────────────────────────────────────────
 
 _STOCK_DAY_URL = (
@@ -355,17 +405,23 @@ def backfill_ohlcv(
 def run_daily_fetch(
     trade_date: str,
     conn: sqlite3.Connection,
-) -> Dict[str, int]:
+    ohlcv_symbols: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """
     Fetch all market data for *trade_date* and save to DB.
 
     Each data source is fetched independently — one failure does NOT prevent
     the others from completing.
 
-    Returns dict: {institution_flows: N, margin_data: M}
+    If *ohlcv_symbols* is provided, also fetches OHLCV close prices for those
+    symbols. Tries TWSE first; falls back to Yahoo Finance on failure.
+
+    Returns dict: {institution_flows: N, margin_data: M, ohlcv: K}
     """
     ensure_schema(conn)
-    result: Dict[str, Any] = {"institution_flows": 0, "margin_data": 0, "errors": []}
+    result: Dict[str, Any] = {
+        "institution_flows": 0, "margin_data": 0, "ohlcv": 0, "errors": [],
+    }
 
     # Source 1: Institution flows (T86) — independent error isolation
     try:
@@ -386,8 +442,65 @@ def run_daily_fetch(
         log.error("[market_data_fetcher] margin save failed: %s", exc, exc_info=True)
         result["errors"].append(f"margin: {exc}")
 
+    # Source 3: OHLCV close prices — TWSE first, Yahoo Finance fallback
+    if ohlcv_symbols:
+        time.sleep(1)
+        ohlcv_count = 0
+        twse_failed_symbols: List[str] = []
+        today = datetime.date.today()
+
+        # Try TWSE STOCK_DAY first (current month only)
+        for sym in ohlcv_symbols:
+            try:
+                rows = fetch_ohlcv_month(sym, today.year, today.month)
+                if rows:
+                    conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO eod_prices
+                            (trade_date, market, symbol, name, open, high, low, close, volume,
+                             source_url, ingested_at)
+                        VALUES
+                            (:trade_date, 'TWSE', :symbol, NULL, :open, :high, :low, :close, :volume,
+                             'TWSE/STOCK_DAY', datetime('now'))
+                        """,
+                        [{"symbol": sym.upper(), **r} for r in rows],
+                    )
+                    conn.commit()
+                    ohlcv_count += len(rows)
+                else:
+                    twse_failed_symbols.append(sym)
+            except Exception:
+                twse_failed_symbols.append(sym)
+            time.sleep(3)  # Conservative delay — one request per 3 seconds
+
+        # Fallback to Yahoo Finance for symbols that TWSE failed
+        if twse_failed_symbols:
+            log.info(
+                "[market_data_fetcher] TWSE failed for %d symbols, trying Yahoo Finance",
+                len(twse_failed_symbols),
+            )
+            yahoo_data = fetch_ohlcv_yahoo(twse_failed_symbols)
+            for sym, rows in yahoo_data.items():
+                if rows:
+                    conn.executemany(
+                        """
+                        INSERT OR REPLACE INTO eod_prices
+                            (trade_date, market, symbol, name, open, high, low, close, volume,
+                             source_url, ingested_at)
+                        VALUES
+                            (:trade_date, 'TWSE', :symbol, NULL, :open, :high, :low, :close, :volume,
+                             'Yahoo Finance', datetime('now'))
+                        """,
+                        [{"symbol": sym.upper(), **r} for r in rows],
+                    )
+                    conn.commit()
+                    ohlcv_count += len(rows)
+
+        result["ohlcv"] = ohlcv_count
+
     log.info(
-        "[market_data_fetcher] run_daily_fetch %s: institution=%d margin=%d errors=%d",
-        trade_date, result["institution_flows"], result["margin_data"], len(result["errors"]),
+        "[market_data_fetcher] run_daily_fetch %s: institution=%d margin=%d ohlcv=%d errors=%d",
+        trade_date, result["institution_flows"], result["margin_data"],
+        result["ohlcv"], len(result["errors"]),
     )
     return result
