@@ -71,14 +71,14 @@ def _mock_llm_call(model: str, prompt: str) -> dict:
 def run_pipeline_demo(conn: sqlite3.Connection) -> None:
     news_result = run_news_sentiment_with_guard(
         conn,
-        model="gemini-3.0-flash",
+        model="MiniMax-M2.7",
         raw_news_text="台積電法說會優於預期，市場看法偏多",
         llm_call=_mock_llm_call,
         decision_id="demo-decision-001",
     )
     debate_result = run_pm_debate(
         conn,
-        model="gemini-3.1-pro",
+        model="MiniMax-M2.7",
         context={"symbol": "2330", "news": news_result},
         llm_call=_mock_llm_call,
         decision_id="demo-decision-001",

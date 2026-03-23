@@ -1,7 +1,7 @@
 """proposal_reviewer.py — LLM 自動審查 pending 策略提案（MiniMax M2.5）
 
 掃描 strategy_proposals 中 status='pending' 的提案，
-呼叫 Gemini 做快速審查，輸出 approve / reject + 理由，
+呼叫 MiniMax LLM 做快速審查，輸出 approve / reject + 理由，
 更新 DB 並透過 Telegram 通知。
 
 整合點（ticker_watcher 每輪掃盤後呼叫）：
