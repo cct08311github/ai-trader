@@ -363,7 +363,13 @@ def main() -> None:
                 import sys as _sys
                 _sys.path.insert(0, str(Path(__file__).resolve().parent))
                 from market_data_fetcher import run_daily_fetch
-            result = run_daily_fetch(args.trade_date, conn)
+            # Collect symbols that need OHLCV updates from eod_prices
+            _ohlcv_syms = [
+                r[0] for r in conn.execute(
+                    "SELECT DISTINCT symbol FROM eod_prices"
+                ).fetchall()
+            ] if conn else []
+            result = run_daily_fetch(args.trade_date, conn, ohlcv_symbols=_ohlcv_syms)
             inst_rows = result.get("institution_flows", 0)
             margin_rows = result.get("margin_data", 0)
             fetch_errors = result.get("errors", [])
