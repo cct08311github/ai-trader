@@ -159,15 +159,67 @@ def run_pipeline_demo(conn: sqlite3.Connection) -> None:
         " VALUES (?, datetime('now'), ?, ?, ?, ?, 0)",
         (str(uuid.uuid4()), "info", "bootstrap", "DEMO_INCIDENT", json.dumps({"msg": "dry run"}, ensure_ascii=True)),
     )
+    # Seed rows for tables that main.py writes to its subprocess DB,
+    # so print_summary can show count > 0 for all 12 expected tables.
+    decision_id = "demo-decision-001"
+    conn.execute(
+        "INSERT OR REPLACE INTO decisions"
+        " (decision_id, ts, symbol, strategy_id, strategy_version,"
+        "  signal_side, signal_score, signal_ttl_ms, reason_json)"
+        " VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
+        (decision_id, "2330", "breakout", "strat_demo_v1_1",
+         "buy", 0.78, 30000, json.dumps({"note": "demo"}, ensure_ascii=True)),
+    )
+    check_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT OR REPLACE INTO risk_checks"
+        " (check_id, decision_id, ts, passed, reject_code, metrics_json)"
+        " VALUES (?, ?, datetime('now'), ?, ?, ?)",
+        (check_id, decision_id, 1, None, json.dumps({"note": "demo"}, ensure_ascii=True)),
+    )
+    order_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT OR REPLACE INTO orders"
+        " (order_id, decision_id, ts_submit, symbol, side, qty, price,"
+        "  order_type, tif, status, strategy_version)"
+        " VALUES (?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)",
+        (order_id, decision_id, "2330", "buy", 1000, 580.0,
+         "limit", "ROD", "submitted", "strat_demo_v1_1"),
+    )
+    conn.execute(
+        "INSERT INTO fills (fill_id, order_id, ts_fill, qty, price, fee, tax)"
+        " VALUES (?, ?, datetime('now'), ?, ?, ?, ?)",
+        (str(uuid.uuid4()), order_id, 1000, 580.0, 826.0, 1740.0),
+    )
+    conn.execute(
+        "INSERT INTO order_events"
+        " (event_id, ts, order_id, event_type, from_status, to_status,"
+        "  source, reason_code, payload_json)"
+        " VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)",
+        (str(uuid.uuid4()), order_id, "submitted",
+         "new", "submitted", "bootstrap", None,
+         json.dumps({"note": "demo"}, ensure_ascii=True)),
+    )
 
     conn.commit()
     print("pipeline_demo:", json.dumps({"news": news_result, "debate": debate_result}, ensure_ascii=True))
 
 
 def run_main_dry(db_path: str, repo_root: Path) -> None:
+    import os, shutil, tempfile
+    # main.py uses db_router which reads from OPENCLAW_HOME/db/trades.db.
+    # Checkpoint the WAL first so all committed data is in the main DB file,
+    # then copy it to a temp dir so the subprocess finds it.
+    _chk = __import__("sqlite3").connect(db_path)
+    _chk.execute("PRAGMA wal_checkpoint(FULL)")
+    _chk.close()
+    tmp_home = Path(tempfile.mkdtemp(prefix="openclaw_dryrun_"))
+    (tmp_home / "db").mkdir()
+    shutil.copy(db_path, tmp_home / "db" / "trades.db")
     cmd = ["python3", "-m", "openclaw.main", "--db", db_path]
-    env = dict(**__import__('os').environ)
+    env = dict(**os.environ)
     env['PYTHONPATH'] = str(repo_root / 'src') + ((':' + env['PYTHONPATH']) if env.get('PYTHONPATH') else '')
+    env['OPENCLAW_HOME'] = str(tmp_home)
     proc = subprocess.run(cmd, cwd=str(repo_root), check=False, text=True, capture_output=True, env=env)
     print(proc.stdout.strip())
     if proc.stderr.strip():
