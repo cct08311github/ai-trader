@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import openclaw.market_data_fetcher as mdf
 from openclaw.market_data_fetcher import (
     _parse_num,
     _to_api_date,
@@ -542,3 +543,76 @@ class TestRunDailyFetch:
 
         assert result["institution_flows"] == 0
         assert result["margin_data"] == 0
+
+    def test_tpex_symbols_skip_twse_and_use_tpex_yahoo_suffix(self, conn, monkeypatch):
+        conn.execute(
+            """
+            CREATE TABLE eod_prices (
+                trade_date TEXT NOT NULL,
+                market TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                name TEXT,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                volume REAL,
+                source_url TEXT,
+                ingested_at TEXT,
+                PRIMARY KEY (trade_date, market, symbol)
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO eod_prices
+                (trade_date, market, symbol, name, open, high, low, close, volume, source_url, ingested_at)
+            VALUES
+                ('2026-03-20', 'TPEx', '8444', '綠河-KY', 10, 11, 9, 10.5, 1000, 'seed', datetime('now'))
+            """
+        )
+        conn.commit()
+
+        twse_calls = []
+
+        monkeypatch.setattr(mdf, "fetch_institution_flows", lambda trade_date: [])
+        monkeypatch.setattr(mdf, "save_institution_flows", lambda conn, trade_date, rows: 0)
+        monkeypatch.setattr(mdf, "fetch_margin_data", lambda trade_date: [])
+        monkeypatch.setattr(mdf, "save_margin_data", lambda conn, trade_date, rows: 0)
+
+        def fake_fetch_ohlcv_month(symbol, year, month):
+            twse_calls.append((symbol, year, month))
+            return []
+
+        def fake_fetch_ohlcv_yahoo(symbols, market_by_symbol=None, sleep_sec=1.0):
+            assert symbols == ["8444"]
+            assert market_by_symbol == {"8444": "TPEx"}
+            return {
+                "8444": [{
+                    "trade_date": "2026-03-21",
+                    "open": 10.0,
+                    "high": 11.0,
+                    "low": 9.5,
+                    "close": 10.8,
+                    "volume": 1234.0,
+                }]
+            }
+
+        monkeypatch.setattr(mdf, "fetch_ohlcv_month", fake_fetch_ohlcv_month)
+        monkeypatch.setattr(mdf, "fetch_ohlcv_yahoo", fake_fetch_ohlcv_yahoo)
+        monkeypatch.setattr(mdf.time, "sleep", lambda *_args, **_kwargs: None)
+
+        result = run_daily_fetch("2026-03-21", conn, ohlcv_symbols=["8444"])
+
+        row = conn.execute(
+            """
+            SELECT market, symbol, close, source_url
+            FROM eod_prices
+            WHERE trade_date='2026-03-21' AND symbol='8444'
+            """
+        ).fetchone()
+        assert result["ohlcv"] == 1
+        assert twse_calls == []
+        assert row["market"] == "TPEx"
+        assert row["source_url"] == "Yahoo Finance"
+        assert row["close"] == 10.8

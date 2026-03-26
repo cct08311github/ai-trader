@@ -253,12 +253,42 @@ def save_margin_data(
 # ── Yahoo Finance fallback ────────────────────────────────────────────────────
 
 _YAHOO_CHART_URL = (
-    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.TW"
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.{suffix}"
     "?interval=1d&range=5d"
 )
 
 
-def fetch_ohlcv_yahoo(symbols: List[str], sleep_sec: float = 1.0) -> Dict[str, List[Dict]]:
+def _get_symbol_markets(
+    conn: sqlite3.Connection,
+    symbols: List[str],
+) -> Dict[str, str]:
+    """Best-effort lookup of each symbol's market from existing eod_prices rows."""
+    unique_symbols = sorted({str(sym).upper() for sym in symbols if sym})
+    if not unique_symbols:
+        return {}
+
+    placeholders = ",".join("?" for _ in unique_symbols)
+    rows = conn.execute(
+        f"""
+        SELECT symbol, market
+        FROM eod_prices
+        WHERE symbol IN ({placeholders})
+        ORDER BY trade_date DESC
+        """,
+        unique_symbols,
+    ).fetchall()
+
+    result: Dict[str, str] = {}
+    for symbol, market in rows:
+        result.setdefault(str(symbol).upper(), str(market))
+    return result
+
+
+def fetch_ohlcv_yahoo(
+    symbols: List[str],
+    market_by_symbol: Optional[Dict[str, str]] = None,
+    sleep_sec: float = 1.0,
+) -> Dict[str, List[Dict]]:
     """
     Fetch recent OHLCV from Yahoo Finance as fallback when TWSE API is unavailable.
 
@@ -266,7 +296,9 @@ def fetch_ohlcv_yahoo(symbols: List[str], sleep_sec: float = 1.0) -> Dict[str, L
     """
     result: Dict[str, List[Dict]] = {}
     for sym in symbols:
-        url = _YAHOO_CHART_URL.format(symbol=sym)
+        market = (market_by_symbol or {}).get(str(sym).upper(), "TWSE")
+        suffix = "TWO" if market == "TPEx" else "TW"
+        url = _YAHOO_CHART_URL.format(symbol=sym, suffix=suffix)
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         })
@@ -447,10 +479,15 @@ def run_daily_fetch(
         time.sleep(1)
         ohlcv_count = 0
         twse_failed_symbols: List[str] = []
+        market_by_symbol = _get_symbol_markets(conn, ohlcv_symbols)
         today = datetime.date.today()
 
         # Try TWSE STOCK_DAY first (current month only)
         for sym in ohlcv_symbols:
+            market = market_by_symbol.get(str(sym).upper(), "TWSE")
+            if market == "TPEx":
+                twse_failed_symbols.append(sym)
+                continue
             try:
                 rows = fetch_ohlcv_month(sym, today.year, today.month)
                 if rows:
@@ -479,19 +516,23 @@ def run_daily_fetch(
                 "[market_data_fetcher] TWSE failed for %d symbols, trying Yahoo Finance",
                 len(twse_failed_symbols),
             )
-            yahoo_data = fetch_ohlcv_yahoo(twse_failed_symbols)
+            yahoo_data = fetch_ohlcv_yahoo(
+                twse_failed_symbols,
+                market_by_symbol=market_by_symbol,
+            )
             for sym, rows in yahoo_data.items():
                 if rows:
+                    market = market_by_symbol.get(str(sym).upper(), "TWSE")
                     conn.executemany(
                         """
                         INSERT OR REPLACE INTO eod_prices
                             (trade_date, market, symbol, name, open, high, low, close, volume,
                              source_url, ingested_at)
                         VALUES
-                            (:trade_date, 'TWSE', :symbol, NULL, :open, :high, :low, :close, :volume,
+                            (:trade_date, :market, :symbol, NULL, :open, :high, :low, :close, :volume,
                              'Yahoo Finance', datetime('now'))
                         """,
-                        [{"symbol": sym.upper(), **r} for r in rows],
+                        [{"symbol": sym.upper(), "market": market, **r} for r in rows],
                     )
                     conn.commit()
                     ohlcv_count += len(rows)
