@@ -22,6 +22,19 @@ from openclaw.proposal_engine import approve_proposal, reject_proposal
 
 _REPO_ROOT = get_repo_root()
 
+
+def _notify_auto_decision(action: str, target_rule: str, confidence: float) -> None:
+    """Send Telegram notification for auto-approved/rejected strategy proposals."""
+    try:
+        from openclaw.tg_notify import send_message
+        send_message(
+            f"🤖 [AI Trader] 策略{action}\n"
+            f"目標：{target_rule}\n"
+            f"置信度：{confidence:.0%}"
+        )
+    except Exception:  # noqa: BLE001
+        pass  # 通知失敗不影響主流程
+
 _BULL_PROMPT = """\
 你是 AI Trader 的 Bull Analyst（看多派分析師）。
 
@@ -479,9 +492,11 @@ def run_strategy_committee(
             if is_stop_loss or conf >= 0.85:
                 approve_proposal(_conn, proposal_id, decided_by="auto",
                     decision_reason=f"自動核准：{'停損規則' if is_stop_loss else f'高置信度 {conf:.0%}'}")
+                _notify_auto_decision("已自動核准", target_rule, conf)
             elif conf < 0.60:
                 reject_proposal(_conn, proposal_id, decided_by="auto",
                     decision_reason=f"自動拒絕：低置信度 {conf:.0%}")
+                _notify_auto_decision("已自動拒絕", target_rule, conf)
             # else: 0.60-0.84區間維持 pending，需人工審查
 
             # 非阻斷地開 GitHub Issue（失敗不影響主流程）- 已停用
