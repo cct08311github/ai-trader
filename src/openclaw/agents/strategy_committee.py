@@ -18,6 +18,7 @@ from openclaw.agents.base import (
     query_db, to_agent_result, write_proposal, write_trace,
 )
 from openclaw.github_issue_client import open_strategy_proposal_issue
+from openclaw.proposal_engine import approve_proposal, reject_proposal
 
 _REPO_ROOT = get_repo_root()
 
@@ -470,6 +471,18 @@ def run_strategy_committee(
                 proposal_payload=proposal_payload,
             )
             persisted_proposals.append(p)
+
+            # ── 自動審查規則（置信度門檻）──────────────────────────
+            conf = float(p.get("confidence", 0.5))
+            is_stop_loss = "STOP_LOSS" in target_rule.upper()
+
+            if is_stop_loss or conf >= 0.85:
+                approve_proposal(_conn, proposal_id, decided_by="auto",
+                    decision_reason=f"自動核准：{'停損規則' if is_stop_loss else f'高置信度 {conf:.0%}'}")
+            elif conf < 0.60:
+                reject_proposal(_conn, proposal_id, decided_by="auto",
+                    decision_reason=f"自動拒絕：低置信度 {conf:.0%}")
+            # else: 0.60-0.84區間維持 pending，需人工審查
 
             # 非阻斷地開 GitHub Issue（失敗不影響主流程）- 已停用
             # issue_url = open_strategy_proposal_issue(
