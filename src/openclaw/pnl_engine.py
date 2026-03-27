@@ -15,8 +15,11 @@ Schema dependencies:
 from __future__ import annotations
 
 import datetime
+import logging
 import sqlite3
 from typing import Tuple
+
+log = logging.getLogger(__name__)
 
 # ── Cost basis ──────────────────────────────────────────────────────────────
 
