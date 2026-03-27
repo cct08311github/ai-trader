@@ -23,7 +23,9 @@ def make_db() -> sqlite3.Connection:
           avg_price REAL,
           current_price REAL,
           unrealized_pnl REAL,
-          state TEXT
+          state TEXT,
+          entry_trading_day TEXT,
+          high_water_mark REAL
         );
         CREATE TABLE orders (
           order_id TEXT PRIMARY KEY,
@@ -48,7 +50,7 @@ def make_db() -> sqlite3.Connection:
         );
         """
     )
-    conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, 1000.0, 'HOLDING')")
+    conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, 1000.0, 'HOLDING', NULL, NULL)")
     return conn
 
 

@@ -108,6 +108,9 @@ _STOP_LOSS_PCT:            float = float(_os.environ.get("STOP_LOSS_PCT",     "0
 _TRAILING_PCT_BASE:        float = float(_os.environ.get("TRAILING_PCT",      "0.05"))   # Trailing Stop 基礎 5%
 _TRAILING_PCT_TIGHT:       float = float(_os.environ.get("TRAILING_PCT_TIGHT","0.03"))   # 大獲利收緊至 3%
 _TRAILING_PROFIT_THRESHOLD: float = 0.50  # 獲利超過 50% 啟用收緊 trailing
+# #485: 時間止損參數
+_TIME_STOP_DAYS:           int   = int(_os.environ.get("TIME_STOP_DAYS",   "5"))     # 持有 >N 個交易日
+_TIME_STOP_LOSS_PCT:       float = float(_os.environ.get("TIME_STOP_LOSS_PCT", "0.05"))  # 未實現虧損 >5% 觸發
 
 # ── DB 連線（直接指向 data/sqlite/trades.db，與前端共用）────────────────────
 _DEFAULT_DB = str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
@@ -1347,6 +1350,29 @@ def run_watcher() -> None:
                     )
                 decision_id = str(uuid.uuid4())
 
+                # ── #485: 時間止損 — 持有超過 N 天且虧損超過閾值 → 強制 sell ──
+                if sig == "flat" and pos_entry is not None and avg_price and avg_price > 0:
+                    _unrealized_pct = (cur_close - avg_price) / avg_price
+                    if _unrealized_pct < -_TIME_STOP_LOSS_PCT:
+                        try:
+                            _etd_row = conn.execute(
+                                "SELECT entry_trading_day FROM positions WHERE symbol=?",
+                                (symbol,),
+                            ).fetchone()
+                            if _etd_row and _etd_row[0]:
+                                _entry_date = dt.datetime.strptime(_etd_row[0], "%Y-%m-%d").date()
+                                _held_days = (dt.date.today() - _entry_date).days
+                                if _held_days >= _TIME_STOP_DAYS:
+                                    sig = "sell"
+                                    _agg_meta["time_stop"] = {
+                                        "held_days": _held_days,
+                                        "unrealized_pct": round(_unrealized_pct * 100, 1),
+                                    }
+                                    log.warning("[%s] TIME STOP triggered — held %d days, loss %.1f%%",
+                                                symbol, _held_days, _unrealized_pct * 100)
+                        except (sqlite3.Error, ValueError) as _ts_err:
+                            log.debug("[%s] time stop check failed: %s", symbol, _ts_err)
+
                 # ── Mock 防護：mock 資料禁止開新倉（buy） ────────────────
                 if data_is_mock and sig == "buy":
                     _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
@@ -1434,6 +1460,29 @@ def run_watcher() -> None:
                         except Exception:  # noqa: BLE001 — rollback guard; must not raise
                             pass
                     continue
+
+                # ── #484: EOD 價格偏離守衛 — buy order 價格交叉驗證 ────────
+                _EOD_DEVIATION_THRESHOLD = 0.05  # 5%
+                if result.order.side == "buy":
+                    try:
+                        _eod_row = conn.execute(
+                            "SELECT close FROM eod_prices WHERE symbol=? ORDER BY trade_date DESC LIMIT 1",
+                            (symbol,),
+                        ).fetchone()
+                        if _eod_row and _eod_row[0]:
+                            _eod_close = float(_eod_row[0])
+                            _dev = abs(result.order.price - _eod_close) / _eod_close if _eod_close > 0 else 0
+                            if _dev > _EOD_DEVIATION_THRESHOLD:
+                                log.warning("[%s] BUY BLOCKED — price %.2f deviates %.1f%% from EOD close %.2f",
+                                            symbol, result.order.price, _dev * 100, _eod_close)
+                                _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
+                                           approved=False, reject_code="RISK_PRICE_EOD_DEVIATION",
+                                           decision_id=decision_id,
+                                           extra_meta={**_agg_meta, "eod_close": _eod_close,
+                                                       "deviation_pct": round(_dev * 100, 1)})
+                                continue
+                    except sqlite3.Error as _eod_err:
+                        log.warning("[%s] EOD deviation check failed (proceeding): %s", symbol, _eod_err)
 
                 # ── 執行核准訂單 ──────────────────────────────────────────
                 try:
@@ -1579,6 +1628,14 @@ def run_watcher() -> None:
                             log.error("[proposals] ROLLBACK failed — DB state may be inconsistent: %s", rb_err)
                 if sell_intents or n_noted:
                     log.info("[proposals] Processed %d sell intents, %d noted", len(sell_intents), n_noted)
+                # #483: sync positions table after proposal sells so concentration_guard
+                # sees updated qty (prevents infinite loop in simulation mode)
+                if sell_intents:
+                    try:
+                        sync_positions_table(conn)
+                        log.info("[proposals] positions table synced after %d sell intents", len(sell_intents))
+                    except sqlite3.Error as sync_err:
+                        log.warning("[proposals] sync_positions_table after sells failed: %s", sync_err)
             except Exception as pe:  # noqa: BLE001 — dynamic import + multi-step pipeline
                 log.error("[proposals] executor error: %s", pe, exc_info=True)
 

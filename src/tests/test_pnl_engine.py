@@ -20,7 +20,8 @@ def _conn() -> sqlite3.Connection:
             order_id TEXT PRIMARY KEY,
             symbol TEXT,
             side TEXT,
-            status TEXT
+            status TEXT,
+            ts_submit TEXT
         );
         CREATE TABLE fills (
             fill_id TEXT PRIMARY KEY,
@@ -33,7 +34,9 @@ def _conn() -> sqlite3.Connection:
         CREATE TABLE positions (
             symbol TEXT PRIMARY KEY,
             quantity INTEGER,
-            avg_price REAL
+            avg_price REAL,
+            entry_trading_day TEXT,
+            high_water_mark REAL
         );
         CREATE TABLE daily_pnl_summary (
             trade_date TEXT PRIMARY KEY,
@@ -53,14 +56,16 @@ def _conn() -> sqlite3.Connection:
 
 
 def _insert_buy(conn, order_id, symbol, qty, price, fee=0):
-    conn.execute("INSERT INTO orders VALUES (?,?,?,?)", (order_id, symbol, "buy", "filled"))
+    conn.execute("INSERT INTO orders VALUES (?,?,?,?,?)",
+                 (order_id, symbol, "buy", "filled", "2026-03-01T00:00:00+00:00"))
     conn.execute("INSERT INTO fills VALUES (?,?,?,?,?,?)",
                  (f"f_{order_id}", order_id, qty, price, fee, 0))
     conn.commit()
 
 
 def _insert_sell(conn, order_id, symbol, qty, price, fee=0, tax=0):
-    conn.execute("INSERT INTO orders VALUES (?,?,?,?)", (order_id, symbol, "sell", "filled"))
+    conn.execute("INSERT INTO orders VALUES (?,?,?,?,?)",
+                 (order_id, symbol, "sell", "filled", "2026-03-02T00:00:00+00:00"))
     conn.execute("INSERT INTO fills VALUES (?,?,?,?,?,?)",
                  (f"f_{order_id}", order_id, qty, price, fee, tax))
     conn.commit()

@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 _AUTO_REDUCE_THRESHOLD: float = 0.40   # 超過 40%：自動核准減倉
 _WARN_THRESHOLD:        float = 0.25   # 超過 25%：生成待審 proposal
 _TARGET_WEIGHT:         float = 0.20   # 目標降至 20%（與 risk_engine max_symbol_weight 對齊）
-_STALE_ORDER_SEC:       int   = 360    # 超過 6 分鐘的 submitted 賣單視為 stale
+_STALE_ORDER_SEC:       int   = 3600   # 超過 1 小時的賣單視為 stale（#483: was 360s）
+_MAX_DAILY_SELL_ORDERS: int   = 3      # 同一 symbol 每日最多產生 3 筆 concentration sell（#483）
 
 
 class ConcentrationProposal(TypedDict):
@@ -52,15 +53,16 @@ def check_concentration(
     if total_value <= 0:
         return []
 
-    # Dedup: check pending sell orders per symbol, but only skip if
-    # the pending sell qty is sufficient to bring weight below target (#385)
+    # Dedup: check recent sell orders per symbol (submitted + filled),
+    # only skip if the pending/recent sell qty is sufficient to bring weight below target (#385)
+    # #483: include 'filled' status + extend window to 1 hour to prevent infinite loop in simulation
     stale_cutoff = time.strftime("%Y-%m-%dT%H:%M:%S",
                                  time.gmtime(time.time() - _STALE_ORDER_SEC))
     pending_sell_qty: dict[str, int] = {}
     try:
         for r in conn.execute(
             """SELECT symbol, SUM(qty) FROM orders
-               WHERE side='sell' AND status='submitted' AND ts_submit > ?
+               WHERE side='sell' AND status IN ('submitted', 'filled') AND ts_submit > ?
                GROUP BY symbol""",
             (stale_cutoff,),
         ).fetchall():
@@ -68,6 +70,18 @@ def check_concentration(
     except sqlite3.Error as e:
         log.error("Dedup query failed, proceeding WITHOUT dedup — "
                   "duplicate proposals may be generated: %s", e)
+
+    # #483: daily sell cap — count today's filled concentration sells per symbol
+    daily_sell_count: dict[str, int] = {}
+    try:
+        for r in conn.execute(
+            """SELECT symbol, COUNT(DISTINCT order_id) FROM orders
+               WHERE side='sell' AND status='filled' AND date(ts_submit) = date('now')
+               GROUP BY symbol""",
+        ).fetchall():
+            daily_sell_count[r[0]] = int(r[1] or 0)
+    except sqlite3.Error as e:
+        log.warning("Daily sell count query failed: %s", e)
 
     proposals: list[ConcentrationProposal] = []
     for symbol, qty, price in rows:
@@ -86,6 +100,13 @@ def check_concentration(
                 continue
             log.info("Concentration %s: %.1f%% — pending sell %d insufficient (would be %.1f%%), generating additional proposal",
                      symbol, weight * 100, pending_qty, remaining_weight * 100)
+
+        # #483: daily cap — skip if already hit max daily sells for this symbol
+        sym_daily_sells = daily_sell_count.get(symbol, 0)
+        if sym_daily_sells >= _MAX_DAILY_SELL_ORDERS:
+            log.info("Concentration %s: %.1f%% — skipped (daily cap %d/%d reached)",
+                     symbol, weight * 100, sym_daily_sells, _MAX_DAILY_SELL_ORDERS)
+            continue
 
         if locked_symbols and symbol in locked_symbols:
             log.warning("Concentration %s: %.1f%% — skipped (locked symbol, sell prohibited)",
