@@ -147,10 +147,11 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
     Does NOT update current_price or unrealized_pnl (requires live feed).
     """
     conn.execute("DELETE FROM positions")
+    # #485: include entry_trading_day = earliest buy order date for current position
     if _table_exists(conn, "position_quarantine"):
         conn.execute(
             """
-            INSERT INTO positions (symbol, quantity, avg_price)
+            INSERT INTO positions (symbol, quantity, avg_price, entry_trading_day)
             SELECT
               o.symbol,
               SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
@@ -158,7 +159,8 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
               ROUND(
                 SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
                 / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
-              4) AS avg_price
+              4) AS avg_price,
+              MIN(CASE WHEN o.side='buy' THEN date(o.ts_submit) END) AS entry_trading_day
             FROM orders o
             JOIN fills f ON f.order_id = o.order_id
             LEFT JOIN position_quarantine q
@@ -173,7 +175,7 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
     else:
         conn.execute(
             """
-            INSERT INTO positions (symbol, quantity, avg_price)
+            INSERT INTO positions (symbol, quantity, avg_price, entry_trading_day)
             SELECT
               o.symbol,
               SUM(CASE WHEN o.side='buy'  THEN f.qty ELSE 0 END)
@@ -181,7 +183,8 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
               ROUND(
                 SUM(CASE WHEN o.side='buy' THEN f.qty * f.price ELSE 0 END)
                 / MAX(SUM(CASE WHEN o.side='buy' THEN f.qty ELSE 0 END), 1),
-              4) AS avg_price
+              4) AS avg_price,
+              MIN(CASE WHEN o.side='buy' THEN date(o.ts_submit) END) AS entry_trading_day
             FROM orders o
             JOIN fills f ON f.order_id = o.order_id
             WHERE o.status IN ('filled', 'partially_filled')
@@ -190,6 +193,25 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
             """
         )
     conn.commit()
+
+    # #485: backfill high_water_mark from eod_prices for positions that have it NULL
+    _backfill_high_water_mark(conn)
+
+
+def _backfill_high_water_mark(conn: sqlite3.Connection) -> None:
+    """Set high_water_mark from eod_prices max(close) since entry for positions missing it."""
+    try:
+        conn.execute(
+            """UPDATE positions SET high_water_mark = (
+                 SELECT MAX(e.close) FROM eod_prices e
+                 WHERE e.symbol = positions.symbol
+                   AND e.trade_date >= COALESCE(positions.entry_trading_day, '2000-01-01')
+               )
+               WHERE high_water_mark IS NULL AND quantity > 0"""
+        )
+        conn.commit()
+    except sqlite3.Error as e:
+        log.warning("_backfill_high_water_mark failed: %s", e)
 
 
 # ── API helpers ──────────────────────────────────────────────────────────────
