@@ -93,16 +93,11 @@ def _sum_actionable_reconciliation_mismatches(conn: sqlite3.Connection, since_ms
 
 def load_alert_thresholds() -> dict[str, Any]:
     """Load alert thresholds from config/alert_policy.json, falling back to defaults."""
-    config_path = get_repo_root() / "config" / "alert_policy.json"
+    from openclaw.config_manager import get_config
     thresholds = dict(_DEFAULT_THRESHOLDS)
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            overrides = json.load(f)
+    overrides = get_config().alert_policy()
+    if overrides:
         thresholds.update(overrides)
-    except FileNotFoundError:
-        pass  # Use defaults
-    except Exception:
-        _log.warning("Failed to load alert_policy.json, using defaults", exc_info=True)
     return thresholds
 
 

@@ -14,6 +14,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from openclaw.config_manager import get_config
 from openclaw.path_utils import get_repo_root
 
 logging.basicConfig(
@@ -54,20 +55,10 @@ def _pm_review_just_completed(
     last_seen: Optional[str] = None,
 ) -> Optional[str]:
     """回傳新的 reviewed_at，或 None（無新事件）。"""
-    try:
-        with open(state_path) as f:
-            state = json.load(f)
-        reviewed_at = state.get("reviewed_at")
-        if reviewed_at and reviewed_at != last_seen:
-            return reviewed_at
-    except FileNotFoundError:
-        log.debug("Config file not found: %s, using defaults", state_path)
-    except json.JSONDecodeError as e:
-        log.warning("Corrupted config file: %s — %s", state_path, e)
-    except PermissionError:
-        log.error("Permission denied reading: %s", state_path)
-    except Exception as e:
-        log.warning("Unexpected error reading %s: %s", state_path, e)
+    state = get_config().daily_pm_state()
+    reviewed_at = state.reviewed_at
+    if reviewed_at and reviewed_at != last_seen:
+        return reviewed_at
     return None
 
 

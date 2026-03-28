@@ -241,50 +241,69 @@ def test_load_limits_strategy_override():
 # Private helper functions — _is_symbol_locked, _get_daily_pm_approval
 # ---------------------------------------------------------------------------
 
-def test_is_symbol_locked_returns_false_on_file_error():
+def test_is_symbol_locked_returns_false_on_file_error(tmp_path, monkeypatch):
     """Lines 19-20: exception reading locked symbols file → False (fail safe)."""
-    with patch("openclaw.risk_engine.open", side_effect=FileNotFoundError("no file")):
+    from openclaw.config_manager import get_config, reset_config
+    reset_config()
+    get_config(config_dir=tmp_path)  # no locked_symbols.json → default empty
+    try:
         result = _is_symbol_locked("2330")
-    assert result is False
+        assert result is False
+    finally:
+        reset_config()
 
 
 def test_is_symbol_locked_returns_true_for_locked_symbol(tmp_path, monkeypatch):
     """_is_symbol_locked returns True when symbol is in locked list."""
-    lock_file = tmp_path / "locked.json"
-    lock_file.write_text(json.dumps({"locked": ["2330", "0050"]}))
-    import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_LOCKED_SYMBOLS_PATH", str(lock_file))
-    assert _is_symbol_locked("2330") is True
-    assert _is_symbol_locked("0050") is True
-    assert _is_symbol_locked("2454") is False
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "locked_symbols.json").write_text(json.dumps({"locked": ["2330", "0050"]}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert _is_symbol_locked("2330") is True
+        assert _is_symbol_locked("0050") is True
+        assert _is_symbol_locked("2454") is False
+    finally:
+        reset_config()
 
 
-def test_get_daily_pm_approval_returns_false_on_missing_file():
+def test_get_daily_pm_approval_returns_false_on_missing_file(tmp_path):
     """Lines 28-34: file not found → False (fail safe)."""
-    with patch("openclaw.risk_engine.open", side_effect=FileNotFoundError("no file")):
+    from openclaw.config_manager import get_config, reset_config
+    reset_config()
+    get_config(config_dir=tmp_path)  # no daily_pm_state.json → default False
+    try:
         result = _get_daily_pm_approval()
-    assert result is False
+        assert result is False
+    finally:
+        reset_config()
 
 
 def test_get_daily_pm_approval_returns_true_when_approved_today(tmp_path, monkeypatch):
     """Lines 28-34: today's date + approved=True → True."""
     from datetime import datetime, timezone, timedelta
+    from openclaw.config_manager import get_config, reset_config
     _tz_twn = timezone(timedelta(hours=8))
     today_twn = datetime.now(tz=_tz_twn).strftime("%Y-%m-%d")
-    state_file = tmp_path / "daily_pm_state.json"
-    state_file.write_text(json.dumps({"date": today_twn, "approved": True}))
-    import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_DAILY_PM_PATH", str(state_file))
-    assert _get_daily_pm_approval() is True
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"date": today_twn, "approved": True}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert _get_daily_pm_approval() is True
+    finally:
+        reset_config()
 
 
 def test_get_daily_pm_approval_returns_false_when_date_mismatch(tmp_path, monkeypatch):
     """_get_daily_pm_approval: wrong date → False."""
-    state_file = tmp_path / "daily_pm_state.json"
-    state_file.write_text(json.dumps({"date": "2000-01-01", "approved": True}))
-    import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_DAILY_PM_PATH", str(state_file))
-    assert _get_daily_pm_approval() is False
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"date": "2000-01-01", "approved": True}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert _get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
 # ---------------------------------------------------------------------------
@@ -293,30 +312,36 @@ def test_get_daily_pm_approval_returns_false_when_date_mismatch(tmp_path, monkey
 
 def test_reject_pm_not_approved_when_required(tmp_path, monkeypatch):
     """Line 215: pm_review_required=1 + no valid approval → RISK_PM_NOT_APPROVED."""
-    state_file = tmp_path / "daily_pm_state.json"
-    state_file.write_text(json.dumps({"date": "2000-01-01", "approved": False}))
-    import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_DAILY_PM_PATH", str(state_file))
-    limits = default_limits()
-    limits["pm_review_required"] = 1
-    result = evaluate_and_build_order(
-        _base_decision(), _base_market(), _base_portfolio(), limits, _base_system()
-    )
-    assert result.approved is False
-    assert result.reject_code == "RISK_PM_NOT_APPROVED"
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"date": "2000-01-01", "approved": False}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        limits = default_limits()
+        limits["pm_review_required"] = 1
+        result = evaluate_and_build_order(
+            _base_decision(), _base_market(), _base_portfolio(), limits, _base_system()
+        )
+        assert result.approved is False
+        assert result.reject_code == "RISK_PM_NOT_APPROVED"
+    finally:
+        reset_config()
 
 
 def test_reject_symbol_locked_on_sell(tmp_path, monkeypatch):
     """Lines 211-212: sell on locked symbol → RISK_SYMBOL_LOCKED."""
-    lock_file = tmp_path / "locked.json"
-    lock_file.write_text(json.dumps({"locked": ["2330"]}))
-    import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_LOCKED_SYMBOLS_PATH", str(lock_file))
-    d = _base_decision()
-    d.signal_side = "sell"
-    result = evaluate_and_build_order(d, _base_market(), _base_portfolio(), _test_limits(), _base_system())
-    assert result.approved is False
-    assert result.reject_code == "RISK_SYMBOL_LOCKED"
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "locked_symbols.json").write_text(json.dumps({"locked": ["2330"]}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        d = _base_decision()
+        d.signal_side = "sell"
+        result = evaluate_and_build_order(d, _base_market(), _base_portfolio(), _test_limits(), _base_system())
+        assert result.approved is False
+        assert result.reject_code == "RISK_SYMBOL_LOCKED"
+    finally:
+        reset_config()
 
 
 def test_reject_signal_flat_returns_liquidity_limit():

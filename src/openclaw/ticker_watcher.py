@@ -56,7 +56,10 @@ def _interruptible_sleep(seconds: int) -> bool:
         time.sleep(max(0, min(1, deadline - time.monotonic())))
     return False
 
+from openclaw.config_manager import get_config
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
+from openclaw.repositories.order_repository import FillRecord, OrderRecord, OrderRepository
+from openclaw.repositories.decision_repository import DecisionRepository
 
 
 def _get_latest_committee_stance(conn: sqlite3.Connection) -> str:
@@ -122,12 +125,7 @@ _SIM_NAV_FALLBACK: float = 1_000_000.0
 
 def _load_sim_nav() -> float:
     """讀取 config/capital.json 的 total_capital_twd，缺檔時回傳 fallback 1_000_000。"""
-    try:
-        data = json.loads(_CAPITAL_CFG.read_text(encoding="utf-8"))
-        return float(data["total_capital_twd"])
-    except (OSError, KeyError, ValueError, TypeError) as e:
-        log.warning("_load_sim_nav: capital.json read failed (%s) — using fallback %.0f", e, _SIM_NAV_FALLBACK)
-        return _SIM_NAV_FALLBACK
+    return get_config().capital().total_capital_twd
 
 
 def _get_realized_pnl_today(conn: sqlite3.Connection) -> float:
@@ -364,70 +362,38 @@ _BASE_PRICE_DEFAULT: Dict[str, float] = {
 
 def _load_manual_watchlist() -> List[str]:
     """讀取 config/watchlist.json，回傳手動追蹤清單。讀取失敗時用 fallback。"""
-    try:
-        cfg = json.loads(_WATCHLIST_CFG.read_text(encoding="utf-8"))
-        # 優先讀 manual_watchlist，向後相容 universe
-        wl = cfg.get("manual_watchlist") or cfg.get("universe") or []
-        result = [str(s).strip() for s in wl if str(s).strip()]
-        if not result:
-            raise ValueError("manual_watchlist is empty")
-        return result
-    except (OSError, ValueError) as e:
-        log.warning("watchlist.json read failed (%s) — using fallback %s", e, _FALLBACK_UNIVERSE)
+    wl_cfg = get_config().watchlist()
+    result = [str(s).strip() for s in wl_cfg.manual_watchlist if str(s).strip()]
+    if not result:
+        log.warning("manual_watchlist is empty — using fallback %s", _FALLBACK_UNIVERSE)
         return list(_FALLBACK_UNIVERSE)
+    return result
 
 
 
-# ── 行情取得 (Shioaji 或 mock random walk) ──────────────────────────────────
+# ── 行情取得 (delegate to MarketDataService) ────────────────────────────────
+from openclaw.market_data_service import (  # noqa: E402
+    MarketDataService,
+    SnapshotUnavailableError,
+)
+
 _BASE_PRICE: Dict[str, float] = _BASE_PRICE_DEFAULT
-
-
-class SnapshotUnavailableError(RuntimeError):
-    """Raised when a live broker snapshot cannot be used safely."""
+# Module-level MarketDataService instance (set in run_watcher; used by helpers)
+_market_data: MarketDataService = MarketDataService(base_prices=_BASE_PRICE)
 
 
 def _mock_snapshot(symbol: str) -> dict:
-    """Generate a deterministic-enough mock snapshot around the base price."""
-    import random
-
-    base = _BASE_PRICE.get(symbol, 100.0)
-    close = round(base * (1 + random.uniform(-0.003, 0.003)), 1)
-    return {
-        "close": close,
-        "bid": round(close * 0.999, 1),
-        "ask": round(close * 1.001, 1),
-        "reference": base,
-        "volume": random.randint(500, 5000),
-        "source": "mock",
-    }
+    """Generate a mock snapshot — delegates to MarketDataService."""
+    return _market_data.mock_snapshot(symbol)
 
 
 def _get_snapshot(api, symbol: str, *, allow_mock_fallback: bool = True) -> dict:
-    """取得 bid/ask/close/reference/volume。優先 Shioaji，不可用時 mock。"""
-    if api is not None:
-        try:
-            contract = api.Contracts.Stocks[symbol]
-            snaps = api.snapshots([contract])
-            if not snaps:
-                raise SnapshotUnavailableError("empty snapshot payload")
-            s = snaps[0]
-            close = float(getattr(s, "close", 0) or 0)
-            if close <= 0:
-                raise SnapshotUnavailableError("snapshot close <= 0")
-            bid = float(getattr(s, "buy_price", 0) or close * 0.999)
-            ask = float(getattr(s, "sell_price", 0) or close * 1.001)
-            ref = float(getattr(s, "reference", close) or close)
-            vol = int(getattr(s, "volume", 1000) or 1000)
-            return {"close": close, "bid": bid, "ask": ask, "reference": ref, "volume": vol}
-        except SnapshotUnavailableError:
-            if not allow_mock_fallback:
-                raise
-        except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
-            if not allow_mock_fallback:
-                raise SnapshotUnavailableError(str(e)) from e
-            log.warning("Shioaji snapshot [%s]: %s — using mock", symbol, e)
-
-    return _mock_snapshot(symbol)
+    """取得 bid/ask/close/reference/volume — delegates to MarketDataService."""
+    # Use module-level service if api matches, otherwise create ad-hoc
+    if _market_data.has_live_api or api is None:
+        return _market_data.get_snapshot(symbol, allow_mock_fallback=allow_mock_fallback)
+    svc = MarketDataService(api=api, base_prices=_BASE_PRICE)
+    return svc.get_snapshot(symbol, allow_mock_fallback=allow_mock_fallback)
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
@@ -583,31 +549,23 @@ def _generate_signal(
     return "buy" if close < ref * (1 - _BUY_SIGNAL_PCT) else "flat"
 
 
-# ── DB 寫入 helpers ───────────────────────────────────────────────────────────
+# ── DB 寫入 helpers (delegate to repositories) ───────────────────────────────
 def _persist_decision(conn: sqlite3.Connection, *, decision_id: str, symbol: str,
                        signal: str, now_iso: str,
                        signal_source: str = "technical") -> None:
-    conn.execute(
-        """INSERT OR IGNORE INTO decisions
-           (decision_id, ts, symbol, strategy_id, strategy_version,
-            signal_side, signal_score, signal_ttl_ms, llm_ref, reason_json,
-            signal_source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (decision_id, now_iso, symbol, STRATEGY_ID, STRATEGY_VERSION,
-         signal, 0.7 if signal != "flat" else 0.0, 30000, None,
-         json.dumps({"source": "ticker_watcher"}, ensure_ascii=True),
-         signal_source),
+    DecisionRepository(conn).insert_decision(
+        decision_id=decision_id, symbol=symbol, signal_side=signal,
+        now_iso=now_iso, strategy_id=STRATEGY_ID, strategy_version=STRATEGY_VERSION,
+        signal_score=0.7 if signal != "flat" else 0.0,
+        signal_source=signal_source,
     )
 
 
 def _persist_risk_check(conn: sqlite3.Connection, *, decision_id: str, passed: bool,
                          reject_code: Optional[str], metrics: dict) -> None:
-    conn.execute(
-        """INSERT INTO risk_checks
-           (check_id, decision_id, ts, passed, reject_code, metrics_json)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), decision_id, _utc_now_iso(),
-         int(passed), reject_code, json.dumps(metrics, ensure_ascii=True)),
+    DecisionRepository(conn).insert_risk_check(
+        decision_id=decision_id, passed=passed,
+        reject_code=reject_code, metrics=metrics,
     )
 
 
@@ -616,37 +574,28 @@ def _persist_order(conn: sqlite3.Connection, *, order_id: str, decision_id: str,
                     price: float, status: str = "submitted",
                     settlement_date: Optional[str] = None,
                     account_mode: str = "simulation") -> None:
-    conn.execute(
-        """INSERT INTO orders
-           (order_id, decision_id, broker_order_id, ts_submit,
-            symbol, side, qty, price, order_type, tif, status, strategy_version,
-            settlement_date, account_mode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (order_id, decision_id, broker_order_id, _utc_now_iso(),
-         symbol, side, qty, price, "limit", "IOC", status, STRATEGY_VERSION,
-         settlement_date, account_mode),
-    )
+    OrderRepository(conn).insert_order(OrderRecord(
+        order_id=order_id, decision_id=decision_id, broker_order_id=broker_order_id,
+        symbol=symbol, side=side, qty=qty, price=price, status=status,
+        strategy_version=STRATEGY_VERSION, settlement_date=settlement_date,
+        account_mode=account_mode,
+    ))
 
 
 def _persist_fill(conn: sqlite3.Connection, *, order_id: str, qty: int,
                    price: float, fee: float = 0.0, tax: float = 0.0) -> None:
-    conn.execute(
-        """INSERT INTO fills (fill_id, order_id, ts_fill, qty, price, fee, tax)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), order_id, _utc_now_iso(), qty, price, fee, tax),
-    )
+    OrderRepository(conn).insert_fill(FillRecord(
+        order_id=order_id, qty=qty, price=price, fee=fee, tax=tax,
+    ))
 
 
 def _insert_order_event(conn: sqlite3.Connection, *, order_id: str, event_type: str,
                          from_status: Optional[str], to_status: Optional[str],
                          source: str, reason_code: Optional[str], payload: dict) -> None:
-    conn.execute(
-        """INSERT INTO order_events
-           (event_id, ts, order_id, event_type, from_status, to_status,
-            source, reason_code, payload_json)
-           VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), order_id, event_type, from_status, to_status,
-         source, reason_code, json.dumps(payload, ensure_ascii=True)),
+    OrderRepository(conn).insert_order_event(
+        order_id=order_id, event_type=event_type,
+        from_status=from_status, to_status=to_status,
+        source=source, reason_code=reason_code, payload=payload,
     )
 
 

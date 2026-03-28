@@ -68,3 +68,4 @@ config/market_monitor_state.json
 .claude/*.local.md
 _tmp/
 test_crash.py
+frontend/backend/package-lock.json

@@ -497,59 +497,60 @@ class TestUtcNowIso:
 # ── _load_manual_watchlist() ──────────────────────────────────────────────────
 
 class TestLoadManualWatchlist:
-    def test_reads_manual_watchlist_key(self, tmp_path, monkeypatch):
+    @pytest.fixture(autouse=True)
+    def _setup_config(self, tmp_path, monkeypatch):
+        """Provide a temp config dir for ConfigManager."""
+        from openclaw.config_manager import ConfigManager, reset_config
+        self._cfg_dir = tmp_path / "config"
+        self._cfg_dir.mkdir()
+        self._cfg = ConfigManager(config_dir=self._cfg_dir)
+        import openclaw.config_manager as cm_mod
+        monkeypatch.setattr(cm_mod, "_instance", self._cfg)
+        yield
+        reset_config()
+
+    def test_reads_manual_watchlist_key(self):
         """有效的 watchlist.json 應優先讀取 manual_watchlist"""
         cfg = {"manual_watchlist": ["2330", "2317", "2454"]}
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        (self._cfg_dir / "watchlist.json").write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
         result = tw._load_manual_watchlist()
         assert result == ["2330", "2317", "2454"]
 
-    def test_backward_compat_universe_key(self, tmp_path, monkeypatch):
+    def test_backward_compat_universe_key(self):
         """向後相容：無 manual_watchlist 時讀取 universe"""
         cfg = {"universe": ["2330", "2317", "2454"], "max_active": 2}
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        (self._cfg_dir / "watchlist.json").write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
         result = tw._load_manual_watchlist()
         assert result == ["2330", "2317", "2454"]
 
-    def test_missing_file_uses_fallback(self, tmp_path, monkeypatch):
+    def test_missing_file_uses_fallback(self):
         """watchlist.json 不存在時應使用 fallback"""
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", tmp_path / "nonexistent.json")
         result = tw._load_manual_watchlist()
         assert result == list(tw._FALLBACK_UNIVERSE)
 
-    def test_invalid_json_uses_fallback(self, tmp_path, monkeypatch):
+    def test_invalid_json_uses_fallback(self):
         """無效 JSON 應使用 fallback"""
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text("not_json{{", encoding="utf-8")
+        (self._cfg_dir / "watchlist.json").write_text("not_json{{", encoding="utf-8")
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
         result = tw._load_manual_watchlist()
         assert result == list(tw._FALLBACK_UNIVERSE)
 
-    def test_empty_list_uses_fallback(self, tmp_path, monkeypatch):
+    def test_empty_list_uses_fallback(self):
         """manual_watchlist 為空陣列時應使用 fallback"""
         cfg = {"manual_watchlist": []}
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        (self._cfg_dir / "watchlist.json").write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
         result = tw._load_manual_watchlist()
         assert result == list(tw._FALLBACK_UNIVERSE)
 
-    def test_strips_whitespace_from_symbols(self, tmp_path, monkeypatch):
+    def test_strips_whitespace_from_symbols(self):
         """symbol 前後空白應被清除，空白 symbol 被濾掉"""
         cfg = {"manual_watchlist": [" 2330 ", "  ", "2317"]}
-        cfg_file = tmp_path / "watchlist.json"
-        cfg_file.write_text(json.dumps(cfg), encoding="utf-8")
+        (self._cfg_dir / "watchlist.json").write_text(json.dumps(cfg), encoding="utf-8")
         import openclaw.ticker_watcher as tw
-        monkeypatch.setattr(tw, "_WATCHLIST_CFG", cfg_file)
         result = tw._load_manual_watchlist()
         assert "2330" in result
         assert "" not in result

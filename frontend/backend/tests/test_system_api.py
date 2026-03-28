@@ -43,7 +43,11 @@ def _init_system_db(path: Path) -> None:
             avg_price REAL,
             current_price REAL,
             chip_health_score REAL,
-            sector TEXT
+            sector TEXT,
+            unrealized_pnl REAL,
+            state TEXT DEFAULT 'ACTIVE',
+            high_water_mark REAL DEFAULT 0,
+            entry_trading_day TEXT
         )
     """)
     conn.execute("""
@@ -292,7 +296,7 @@ class TestSystemHealth:
     def test_quarantine_status_returns_active_items(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))
-        conn.execute("INSERT INTO positions VALUES ('2330', 0, 500.0, 0.0, NULL, NULL)")
+        conn.execute("INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 0, 500.0, 0.0, NULL, NULL)")
         conn.execute(
             "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
         )
@@ -308,7 +312,7 @@ class TestSystemHealth:
     def test_quarantine_plan_returns_latest_report_plan(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))
-        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute("INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
         conn.execute(
             "INSERT INTO reconciliation_reports VALUES ('r-plan', 1234567891, 1, ?)",
             (json.dumps({"report_id": "r-plan", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
@@ -325,7 +329,7 @@ class TestSystemHealth:
     def test_quarantine_apply_updates_status(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))
-        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute("INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
         conn.execute(
             "INSERT INTO reconciliation_reports VALUES ('r-apply', 1234567892, 1, ?)",
             (json.dumps({"report_id": "r-apply", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
@@ -346,7 +350,7 @@ class TestSystemHealth:
             "INSERT INTO orders VALUES ('o1', 'd1', NULL, '2026-03-06T00:00:00Z', '2330', 'buy', 100, 500.0, 'limit', 'DAY', 'filled', 'v1')"
         )
         conn.execute("INSERT INTO fills VALUES ('o1', 100, 500.0, 10.0, 0.0)")
-        conn.execute("INSERT INTO positions VALUES ('2330', 0, 0.0, 0.0, NULL, NULL)")
+        conn.execute("INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 0, 0.0, 0.0, NULL, NULL)")
         conn.execute(
             "INSERT INTO position_quarantine VALUES ('2330', 1, 'broker_reconciliation', 'BROKER_POSITION_MISSING', 'x', 'r1', 1, NULL, '{}')"
         )
@@ -367,7 +371,7 @@ class TestSystemHealth:
     def test_remediation_history_returns_latest_actions(self, sys_client):
         c, _, db_path = sys_client
         conn = sqlite3.connect(str(db_path))
-        conn.execute("INSERT INTO positions VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
+        conn.execute("INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 500.0, 510.0, NULL, NULL)")
         conn.execute(
             "INSERT INTO reconciliation_reports VALUES ('r-history', 1234567893, 1, ?)",
             (json.dumps({"report_id": "r-history", "mismatches": {"missing_broker_position": [{"symbol": "2330"}]}, "diagnostics": {"suspected_mode_or_account_mismatch": True}}),),
@@ -813,13 +817,13 @@ class TestGraduationCheck:
             "INSERT INTO daily_pnl_summary VALUES ('2026-03-03', 1020000, 1015000, -1000, 0, -1000, -0.001, 1020000, 0.03, 0, 'normal')"
         )
         conn.execute(
-            "INSERT INTO positions VALUES ('2330', 100, 100.0, 100.0, NULL, NULL)"
+            "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 100.0, 100.0, NULL, NULL)"
         )
         conn.execute(
-            "INSERT INTO positions VALUES ('2317', 100, 100.0, 100.0, NULL, NULL)"
+            "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2317', 100, 100.0, 100.0, NULL, NULL)"
         )
         conn.execute(
-            "INSERT INTO positions VALUES ('2454', 100, 100.0, 100.0, NULL, NULL)"
+            "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2454', 100, 100.0, 100.0, NULL, NULL)"
         )
         conn.execute(
             "INSERT INTO strategy_proposals VALUES ('p1', 'approved', ?)",
@@ -863,10 +867,10 @@ class TestGraduationCheck:
             "INSERT INTO incidents VALUES ('i1', datetime('now'), 'critical', 'risk', 'P0', '{}', 0)"
         )
         conn.execute(
-            "INSERT INTO positions VALUES ('2330', 100, 1000.0, 1000.0, NULL, NULL)"
+            "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 1000.0, 1000.0, NULL, NULL)"
         )
         conn.execute(
-            "INSERT INTO positions VALUES ('2317', 10, 100.0, 100.0, NULL, NULL)"
+            "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2317', 10, 100.0, 100.0, NULL, NULL)"
         )
         conn.execute(
             "INSERT INTO strategy_proposals VALUES ('p1', 'approved', ?)",

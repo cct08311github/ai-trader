@@ -62,6 +62,12 @@ def _make_db() -> sqlite3.Connection:
     return conn
 
 
+def _today_trade_date() -> str:
+    """Return today's date as trade_date (ensures tests stay within the 7-day window)."""
+    from datetime import datetime, timezone, timedelta
+    return datetime.now(tz=timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+
+
 def _insert_order_fill(
     conn: sqlite3.Connection,
     *,
@@ -70,12 +76,13 @@ def _insert_order_fill(
     account_mode: str,
     fill_price: float,
     qty: int = 1000,
-    trade_date: str = "2026-03-18",  # Taiwan date (UTC+8)
+    trade_date: str = "",
     status: str = "filled",
 ) -> str:
     """插入一筆訂單 + 成交，ts_submit 用 UTC 時間（+8h 後對應 trade_date）。"""
+    if not trade_date:
+        trade_date = _today_trade_date()
     oid = str(uuid.uuid4())
-    # trade_date 2026-03-18 台北時間 = UTC 2026-03-17T16:00:00Z
     ts = f"{trade_date}T08:00:00+00:00"  # 台北 16:00 = UTC 08:00，仍屬同日
     conn.execute(
         """INSERT INTO orders

@@ -2,13 +2,21 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 import subprocess
 import tempfile
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKUP_SCRIPT = REPO_ROOT / "bin" / "run_backup.sh"
+
+_has_sqlite3_cli = shutil.which("sqlite3") is not None
+_skip_no_sqlite3 = pytest.mark.skipif(
+    not _has_sqlite3_cli, reason="sqlite3 CLI not installed"
+)
 
 
 def _make_db(tmp_path: Path) -> Path:
@@ -36,6 +44,7 @@ def _run_backup(db_path: Path, backup_dir: Path, retain: int = 30) -> subprocess
     )
 
 
+@_skip_no_sqlite3
 class TestRunBackup:
     def test_creates_backup_file(self, tmp_path):
         db = _make_db(tmp_path)
