@@ -423,6 +423,22 @@ def main() -> None:
                 file=__import__("sys").stderr,
             )
 
+        # ── proposal_outcomes backfill（T+5 / T+20 信心校準）────────────
+        try:
+            from openclaw.proposal_engine import backfill_proposal_outcomes
+            conn.row_factory = None
+            _outcomes_updated = backfill_proposal_outcomes(conn)
+            if _outcomes_updated:
+                print(
+                    f"[eod_ingest] proposal_outcomes backfilled: {_outcomes_updated} rows",
+                    file=__import__("sys").stderr,
+                )
+        except Exception as _outcomes_exc:
+            print(
+                f"[eod_ingest] proposal_outcomes backfill skipped: {_outcomes_exc}",
+                file=__import__("sys").stderr,
+            )
+
         # ── Shadow approval logger backfill（T+5 / T+20 回填）──────────
         try:
             from openclaw.shadow_approval_logger import backfill_shadow_decisions_eod

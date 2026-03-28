@@ -446,3 +446,187 @@ def apply_authority_decision(conn: sqlite3.Connection, proposal_id: str) -> Dict
 
     repo.update_status(proposal_id, "auto_approved")
     return {"allowed": True, "reason_code": "AUTH_AUTO_APPROVED"}
+
+
+# ---------------------------------------------------------------------------
+# proposal_outcomes — T+5 / T+20 confidence calibration tracking
+# ---------------------------------------------------------------------------
+
+_CREATE_OUTCOMES_TABLE = """
+CREATE TABLE IF NOT EXISTS proposal_outcomes (
+    proposal_id    TEXT PRIMARY KEY,
+    symbol         TEXT NOT NULL DEFAULT '',
+    direction      TEXT,
+    confidence     REAL,
+    executed_at    INTEGER,
+    price_at_exec  REAL,
+    price_t5       REAL,
+    pnl_t5         REAL,
+    outcome_t5     TEXT,
+    price_t20      REAL,
+    pnl_t20        REAL,
+    outcome_t20    TEXT,
+    evaluated_at   INTEGER
+)
+"""
+
+
+def ensure_proposal_outcomes_table(conn: sqlite3.Connection) -> None:
+    """Create proposal_outcomes table if not exists."""
+    conn.execute(_CREATE_OUTCOMES_TABLE)
+    conn.commit()
+
+
+def backfill_proposal_outcomes(conn: sqlite3.Connection) -> int:
+    """Backfill T+5 and T+20 price outcomes for executed proposals.
+
+    Called from eod_ingest at end of day.
+    Returns number of rows updated.
+    """
+    ensure_proposal_outcomes_table(conn)
+    count = 0
+
+    # T+5 backfill: executed >= 5 days ago, no price_t5 yet
+    t5_cutoff_ms = int((datetime.now(timezone.utc) - timedelta(days=5)).timestamp() * 1000)
+    rows_t5 = conn.execute(
+        """SELECT sp.proposal_id,
+                  COALESCE(po.symbol, '') AS symbol,
+                  sp.confidence,
+                  o.price AS exec_price,
+                  o.ts_submit
+           FROM strategy_proposals sp
+           LEFT JOIN proposal_outcomes po ON po.proposal_id = sp.proposal_id
+           JOIN orders o ON o.symbol = (
+               SELECT proposal_json FROM strategy_proposals
+               WHERE proposal_id = sp.proposal_id LIMIT 1
+           )
+           WHERE sp.status IN ('executed', 'auto_approved', 'approved')
+             AND (po.proposal_id IS NULL OR po.price_t5 IS NULL)
+             AND sp.created_at < ?
+           LIMIT 50""",
+        (t5_cutoff_ms,),
+    ).fetchall()
+
+    for row in rows_t5:
+        proposal_id, symbol, confidence, exec_price, ts_submit = row
+        if not symbol or not exec_price:
+            continue
+        try:
+            exec_date = str(ts_submit)[:10] if ts_submit else None
+            if not exec_date:
+                continue
+            t5_row = conn.execute(
+                """SELECT close FROM eod_prices
+                   WHERE symbol = ?
+                     AND trade_date >= date(?, '+5 days')
+                   ORDER BY trade_date ASC LIMIT 1""",
+                (symbol, exec_date),
+            ).fetchone()
+            if not t5_row or not t5_row[0]:
+                continue
+            price_t5 = float(t5_row[0])
+            pnl_t5 = (price_t5 - exec_price) / exec_price if exec_price > 0 else None
+            outcome_t5 = (
+                "profitable" if pnl_t5 and pnl_t5 > 0
+                else "loss" if pnl_t5 and pnl_t5 < 0
+                else "neutral"
+            )
+            conn.execute(
+                """INSERT OR REPLACE INTO proposal_outcomes
+                   (proposal_id, symbol, confidence, price_at_exec,
+                    price_t5, pnl_t5, outcome_t5, evaluated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    proposal_id, symbol, confidence, exec_price,
+                    price_t5, pnl_t5, outcome_t5,
+                    int(datetime.now(timezone.utc).timestamp() * 1000),
+                ),
+            )
+            count += 1
+        except Exception:
+            pass
+
+    # T+20 backfill: has T+5, missing T+20, executed >= 20 days ago
+    t20_cutoff_ms = int((datetime.now(timezone.utc) - timedelta(days=20)).timestamp() * 1000)
+    rows_t20 = conn.execute(
+        """SELECT po.proposal_id, po.symbol, po.price_at_exec,
+                  sp.created_at
+           FROM proposal_outcomes po
+           JOIN strategy_proposals sp ON sp.proposal_id = po.proposal_id
+           WHERE po.price_t5 IS NOT NULL
+             AND po.price_t20 IS NULL
+             AND sp.created_at < ?
+           LIMIT 50""",
+        (t20_cutoff_ms,),
+    ).fetchall()
+
+    for proposal_id, symbol, price_at_exec, created_ms in rows_t20:
+        if not symbol or not price_at_exec:
+            continue
+        try:
+            exec_date = datetime.fromtimestamp(
+                created_ms / 1000, tz=timezone.utc
+            ).strftime("%Y-%m-%d")
+            t20_row = conn.execute(
+                """SELECT close FROM eod_prices
+                   WHERE symbol = ?
+                     AND trade_date >= date(?, '+20 days')
+                   ORDER BY trade_date ASC LIMIT 1""",
+                (symbol, exec_date),
+            ).fetchone()
+            if not t20_row or not t20_row[0]:
+                continue
+            price_t20 = float(t20_row[0])
+            pnl_t20 = (
+                (price_t20 - price_at_exec) / price_at_exec
+                if price_at_exec > 0 else None
+            )
+            outcome_t20 = (
+                "profitable" if pnl_t20 and pnl_t20 > 0
+                else "loss" if pnl_t20 and pnl_t20 < 0
+                else "neutral"
+            )
+            conn.execute(
+                """UPDATE proposal_outcomes
+                   SET price_t20 = ?, pnl_t20 = ?, outcome_t20 = ?,
+                       evaluated_at = ?
+                   WHERE proposal_id = ?""",
+                (
+                    price_t20, pnl_t20, outcome_t20,
+                    int(datetime.now(timezone.utc).timestamp() * 1000),
+                    proposal_id,
+                ),
+            )
+            count += 1
+        except Exception:
+            pass
+
+    if count:
+        conn.commit()
+
+    return count
+
+
+def confidence_calibration_report(conn: sqlite3.Connection) -> list:
+    """Win-rate by confidence bucket and direction for parameter tuning."""
+    ensure_proposal_outcomes_table(conn)
+    return conn.execute(
+        """SELECT
+             CASE
+               WHEN confidence >= 0.85 THEN '0.85+'
+               WHEN confidence >= 0.70 THEN '0.70-0.84'
+               WHEN confidence >= 0.65 THEN '0.65-0.69'
+               WHEN confidence >= 0.50 THEN '0.50-0.64'
+               ELSE '<0.50'
+             END AS bucket,
+             direction,
+             COUNT(*) AS total,
+             SUM(CASE WHEN outcome_t5  = 'profitable' THEN 1 ELSE 0 END) AS wins_t5,
+             AVG(pnl_t5)  AS avg_pnl_t5,
+             SUM(CASE WHEN outcome_t20 = 'profitable' THEN 1 ELSE 0 END) AS wins_t20,
+             AVG(pnl_t20) AS avg_pnl_t20
+           FROM proposal_outcomes
+           WHERE price_t5 IS NOT NULL
+           GROUP BY bucket, direction
+           ORDER BY bucket DESC, direction"""
+    ).fetchall()
