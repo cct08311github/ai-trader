@@ -153,6 +153,27 @@ _DEDUP_VALUE_SIMILARITY_THRESHOLD = 0.74
 _DEDUP_COMBINED_SIMILARITY_THRESHOLD = 0.7
 
 
+def _adaptive_lookback_hours(conn: sqlite3.Connection) -> int:
+    """市場波動大時縮短 lookback，允許更頻繁的策略更新。
+    近 3 日平均振幅 > 3% → 4h / > 2% → 8h / 否則 12h
+    """
+    try:
+        row = conn.execute(
+            """SELECT AVG(ABS(high - low) / NULLIF(close, 0))
+               FROM eod_prices
+               WHERE trade_date >= date('now', '-3 days')
+                 AND symbol IN (SELECT symbol FROM positions WHERE quantity > 0)"""
+        ).fetchone()
+        avg_range = row[0] if row and row[0] else 0
+    except Exception:
+        avg_range = 0
+    if avg_range > 0.03:
+        return 4
+    if avg_range > 0.02:
+        return 8
+    return 12
+
+
 def _build_market_context(conn: sqlite3.Connection) -> tuple[str, str]:
     """建構市場上下文數據，同時回傳持倉限制字串。
 
@@ -401,6 +422,7 @@ def run_strategy_committee(
                     _conn,
                     proposed_value=proposed_value,
                     supporting_evidence=supporting_evidence,
+                    lookback_hours=_adaptive_lookback_hours(_conn),
                 )
 
             if duplicate_info:

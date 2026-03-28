@@ -23,6 +23,26 @@ log = logging.getLogger(__name__)
 
 _INTENT_STALE_SEC = 300
 
+# Weight threshold above which concentration_guard proposals skip confidence scaling
+# (already at concentration risk, full execution required)
+_CONCENTRATION_AUTO_EXECUTE_WEIGHT = 0.40
+
+
+def _confidence_weighted_qty(base_qty: int, confidence: float) -> int:
+    """依信心調整數量。
+    conf >= 0.85 → 100%
+    conf 0.70-0.84 → 75%
+    conf < 0.70   → 50%
+    最低 1000 股（1 張）。
+    """
+    if confidence >= 0.85:
+        factor = 1.0
+    elif confidence >= 0.70:
+        factor = 0.75
+    else:
+        factor = 0.50
+    return max(min(int(base_qty * factor), base_qty), 1000)
+
 
 @dataclass
 class SellIntent:
@@ -146,7 +166,14 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                     conn.commit()
                     continue
 
-                qty_to_sell = max(1, int(float(pos[0]) * reduce_pct))
+                base_qty = max(1, int(float(pos[0]) * reduce_pct))
+                confidence = float(proposal.get("confidence", 1.0))
+                current_weight = float(proposal.get("current_weight", proposal.get("weight", 0.0)))
+                # Concentration-risk proposals (weight ≥ 40%) execute at full qty
+                if current_weight >= _CONCENTRATION_AUTO_EXECUTE_WEIGHT:
+                    qty_to_sell = base_qty
+                else:
+                    qty_to_sell = _confidence_weighted_qty(base_qty, confidence)
                 price = float(pos[1] or 0.0)
                 if price <= 0:
                     log.warning("Proposal %s: %s has no valid price (%.2f), skipping", proposal_id, symbol, price)
