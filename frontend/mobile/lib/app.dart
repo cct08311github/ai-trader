@@ -4,6 +4,9 @@ import 'features/auth/login_screen.dart';
 import 'features/portfolio/portfolio_screen.dart';
 import 'features/strategy/strategy_screen.dart';
 import 'features/system/system_screen.dart';
+import 'features/trades/trades_screen.dart';
+import 'features/analysis/analysis_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'providers/core_providers.dart';
 
 class AiTraderApp extends ConsumerStatefulWidget {
@@ -44,7 +47,7 @@ class _AiTraderAppState extends ConsumerState<AiTraderApp> {
         ),
       ),
       home: _authenticated
-          ? const _MainShell()
+          ? _MainShell(onLogout: () => setState(() => _authenticated = false))
           : LoginScreen(
               onLoginSuccess: () => setState(() => _authenticated = true),
             ),
@@ -53,7 +56,8 @@ class _AiTraderAppState extends ConsumerState<AiTraderApp> {
 }
 
 class _MainShell extends StatefulWidget {
-  const _MainShell();
+  final VoidCallback onLogout;
+  const _MainShell({required this.onLogout});
 
   @override
   State<_MainShell> createState() => _MainShellState();
@@ -62,13 +66,13 @@ class _MainShell extends StatefulWidget {
 class _MainShellState extends State<_MainShell> {
   int _currentIndex = 0;
 
-  static const _screens = <Widget>[
-    PortfolioScreen(),
-    StrategyScreen(),
-    SystemScreen(),
-    // Placeholder for Analysis + More tabs (Phase 5-6)
-    _PlaceholderTab(label: '盤後分析'),
-    _PlaceholderTab(label: '更多'),
+  late final List<Widget> _screens = [
+    const PortfolioScreen(),
+    const TradesScreen(),
+    const StrategyScreen(),
+    const SystemScreen(),
+    const AnalysisScreen(),
+    SettingsScreen(onLogout: widget.onLogout),
   ];
 
   @override
@@ -82,33 +86,12 @@ class _MainShellState extends State<_MainShell> {
         onDestinationSelected: (i) => setState(() => _currentIndex = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.account_balance_wallet), label: '持倉'),
+          NavigationDestination(icon: Icon(Icons.swap_horiz), label: '交易'),
           NavigationDestination(icon: Icon(Icons.psychology), label: '策略'),
           NavigationDestination(icon: Icon(Icons.monitor_heart), label: '系統'),
           NavigationDestination(icon: Icon(Icons.analytics), label: '分析'),
           NavigationDestination(icon: Icon(Icons.more_horiz), label: '更多'),
         ],
-      ),
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final String label;
-  const _PlaceholderTab({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        title: Text(label),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Center(
-        child: Text('$label — 開發中',
-            style: const TextStyle(color: Colors.white38)),
       ),
     );
   }

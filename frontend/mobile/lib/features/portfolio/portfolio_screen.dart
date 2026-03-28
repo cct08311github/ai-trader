@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/portfolio_providers.dart';
 import '../../data/models/position.dart';
+import 'widgets/position_detail_sheet.dart';
 
 final _twdFmt = NumberFormat('#,##0', 'zh_TW');
 
@@ -50,7 +51,15 @@ class PortfolioScreen extends ConsumerWidget {
                               style: TextStyle(color: Colors.white54))))
                   : Column(
                       children: positions
-                          .map((p) => _PositionCard(position: p))
+                          .map((p) => GestureDetector(
+                                onTap: () => showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (_) => PositionDetailSheet(position: p),
+                                ),
+                                child: _PositionCard(position: p),
+                              ))
                           .toList(),
                     ),
               loading: () =>
