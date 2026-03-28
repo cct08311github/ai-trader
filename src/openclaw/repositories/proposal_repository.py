@@ -92,10 +92,18 @@ class ProposalRepository:
         decided_at: Optional[int] = None,
     ) -> None:
         ts = decided_at or _now_ms()
-        self._conn.execute(
-            "UPDATE strategy_proposals SET status=?, decided_at=? WHERE proposal_id=?",
-            (status, ts, proposal_id),
-        )
+        # Schema-safe: only set decided_at if the column exists
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(strategy_proposals)").fetchall()}
+        if "decided_at" in cols:
+            self._conn.execute(
+                "UPDATE strategy_proposals SET status=?, decided_at=? WHERE proposal_id=?",
+                (status, ts, proposal_id),
+            )
+        else:
+            self._conn.execute(
+                "UPDATE strategy_proposals SET status=? WHERE proposal_id=?",
+                (status, proposal_id),
+            )
 
     def insert_proposal(
         self,

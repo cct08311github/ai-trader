@@ -211,30 +211,24 @@ def approve_proposal(
     decision_reason: Optional[str] = None
 ) -> Dict[str, Any]:
     """Approve a proposal."""
+    from openclaw.repositories.proposal_repository import ProposalRepository
+    repo = ProposalRepository(conn)
+
     proposal = _get_proposal(conn, proposal_id)
     if proposal is None:
         return {"success": False, "reason": "PROPOSAL_NOT_FOUND"}
-    
+
     if proposal["status"] != "pending":
         return {"success": False, "reason": f"INVALID_STATUS_{proposal['status']}"}
-    
+
     # Check expiration
     if proposal["expires_at"] and proposal["expires_at"] < int(datetime.now(timezone.utc).timestamp() * 1000):
         _expire_proposal(conn, proposal_id)
         return {"success": False, "reason": "PROPOSAL_EXPIRED"}
-    
-    # Update status
-    now = int(datetime.now(timezone.utc).timestamp() * 1000)
-    conn.execute(
-        """
-        UPDATE strategy_proposals 
-        SET status = 'approved', decided_at = ?, decided_by = ?, decision_reason = ?
-        WHERE proposal_id = ?
-        """,
-        (now, decided_by, decision_reason or "Approved", proposal_id)
-    )
+
+    repo.update_decision(proposal_id, "approved", decided_by, decision_reason or "Approved")
     conn.commit()
-    
+
     return {"success": True, "proposal_id": proposal_id, "status": "approved"}
 
 
@@ -251,48 +245,26 @@ def reject_proposal(
     
     if proposal["status"] != "pending":
         return {"success": False, "reason": f"INVALID_STATUS_{proposal['status']}"}
-    
-    now = int(datetime.now(timezone.utc).timestamp() * 1000)
-    conn.execute(
-        """
-        UPDATE strategy_proposals 
-        SET status = 'rejected', decided_at = ?, decided_by = ?, decision_reason = ?
-        WHERE proposal_id = ?
-        """,
-        (now, decided_by, decision_reason, proposal_id)
-    )
+
+    from openclaw.repositories.proposal_repository import ProposalRepository
+    ProposalRepository(conn).update_decision(proposal_id, "rejected", decided_by, decision_reason)
     conn.commit()
-    
+
     return {"success": True, "proposal_id": proposal_id, "status": "rejected"}
 
 
 def _expire_proposal(conn: sqlite3.Connection, proposal_id: str) -> None:
     """Expire a proposal (internal)."""
-    now = int(datetime.now(timezone.utc).timestamp() * 1000)
-    conn.execute(
-        """
-        UPDATE strategy_proposals 
-        SET status = 'expired', decided_at = ?, decision_reason = 'Auto-expired'
-        WHERE proposal_id = ?
-        """,
-        (now, proposal_id)
-    )
+    from openclaw.repositories.proposal_repository import ProposalRepository
+    ProposalRepository(conn).update_decision(proposal_id, "expired", "system", "Auto-expired")
     conn.commit()
 
 
 def expire_old_proposals(conn: sqlite3.Connection) -> int:
     """Expire all pending proposals past their expiration time."""
+    from openclaw.repositories.proposal_repository import ProposalRepository
     now = int(datetime.now(timezone.utc).timestamp() * 1000)
-    cursor = conn.execute(
-        """
-        UPDATE strategy_proposals 
-        SET status = 'expired', decided_at = ?, decision_reason = 'Auto-expired'
-        WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?
-        """,
-        (now, now)
-    )
-    conn.commit()
-    return cursor.rowcount
+    return ProposalRepository(conn).expire_pending_proposals(now)
 
 
 def _get_proposal(conn: sqlite3.Connection, proposal_id: str) -> Optional[Dict[str, Any]]:
@@ -438,12 +410,12 @@ def apply_authority_decision(conn: sqlite3.Connection, proposal_id: str) -> Dict
     """
     Legacy function for ref_package test compatibility.
     """
+    from openclaw.repositories.proposal_repository import ProposalRepository
+    repo = ProposalRepository(conn)
+
     row = conn.execute(
-        """
-        SELECT rule_category, auto_approve_eligible, expires_at, status
-        FROM strategy_proposals
-        WHERE proposal_id = ?
-        """,
+        """SELECT rule_category, auto_approve_eligible, expires_at, status
+           FROM strategy_proposals WHERE proposal_id = ?""",
         (proposal_id,),
     ).fetchone()
     if row is None:
@@ -455,12 +427,12 @@ def apply_authority_decision(conn: sqlite3.Connection, proposal_id: str) -> Dict
     if category in LEVEL3_FORBIDDEN_CATEGORIES:
         return {"allowed": False, "reason_code": "AUTH_LEVEL3_FORBIDDEN"}
     if expires_at < datetime.now(timezone.utc).strftime("%Y-%m-%d"):
-        conn.execute("UPDATE strategy_proposals SET status='expired' WHERE proposal_id = ?", (proposal_id,))
+        repo.update_status(proposal_id, "expired")
         return {"allowed": False, "reason_code": "AUTH_PROPOSAL_EXPIRED"}
 
     level = get_authority_level(conn)
     if level < 2 or int(eligible) != 1:
         return {"allowed": False, "reason_code": "AUTH_MANUAL_REQUIRED"}
 
-    conn.execute("UPDATE strategy_proposals SET status='auto_approved' WHERE proposal_id = ?", (proposal_id,))
+    repo.update_status(proposal_id, "auto_approved")
     return {"allowed": True, "reason_code": "AUTH_AUTO_APPROVED"}
