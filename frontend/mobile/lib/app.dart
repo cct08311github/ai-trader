@@ -22,12 +22,16 @@ class _AiTraderAppState extends ConsumerState<AiTraderApp> {
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkAuth());
   }
 
   Future<void> _checkAuth() async {
     final storage = ref.read(storageProvider);
     final token = await storage.getToken();
+    final savedUrl = await storage.getBaseUrl();
+    if (savedUrl != null && savedUrl.isNotEmpty) {
+      ref.read(baseUrlProvider.notifier).state = savedUrl;
+    }
     if (token != null && token.isNotEmpty) {
       ref.read(authTokenProvider.notifier).state = token;
       setState(() => _authenticated = true);

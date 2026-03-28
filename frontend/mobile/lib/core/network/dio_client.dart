@@ -14,10 +14,12 @@ Dio createDio(SecureStorage storage, {String? baseUrl}) {
     headers: {'Content-Type': 'application/json'},
   ));
 
-  // Trust self-signed certs for Tailscale
+  // Only trust self-signed certs for the configured Tailscale host
+  final trustedHost = Uri.parse(baseUrl ?? AppEnv.defaultBaseUrl).host;
   (dio.httpClientAdapter as dynamic).onHttpClientCreate =
       (HttpClient client) {
-    client.badCertificateCallback = (cert, host, port) => true;
+    client.badCertificateCallback = (cert, host, port) =>
+        host == trustedHost;
     return client;
   };
 

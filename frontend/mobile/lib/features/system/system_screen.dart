@@ -30,7 +30,7 @@ class SystemScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           children: [
             statusAsync.when(
-              data: (status) => _ControlPanel(status: status, ref: ref),
+              data: (status) => _ControlPanel(status: status),
               loading: () =>
                   const Center(child: CircularProgressIndicator()),
               error: (e, _) => Text('載入失敗: $e',
@@ -43,13 +43,12 @@ class SystemScreen extends ConsumerWidget {
   }
 }
 
-class _ControlPanel extends StatelessWidget {
+class _ControlPanel extends ConsumerWidget {
   final ControlStatus status;
-  final WidgetRef ref;
-  const _ControlPanel({required this.status, required this.ref});
+  const _ControlPanel({required this.status});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         // Emergency stop
@@ -121,7 +120,7 @@ class _ControlPanel extends StatelessWidget {
             width: double.infinity,
             height: 56,
             child: ElevatedButton.icon(
-              onPressed: () => _confirmEmergencyStop(context),
+              onPressed: () => _confirmEmergencyStop(context, ref),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 shape: RoundedRectangleBorder(
@@ -137,7 +136,7 @@ class _ControlPanel extends StatelessWidget {
             width: double.infinity,
             height: 48,
             child: ElevatedButton(
-              onPressed: () => _confirmResume(context),
+              onPressed: () => _confirmResume(context, ref),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
                 shape: RoundedRectangleBorder(
@@ -150,7 +149,7 @@ class _ControlPanel extends StatelessWidget {
     );
   }
 
-  void _confirmEmergencyStop(BuildContext context) {
+  void _confirmEmergencyStop(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -166,9 +165,16 @@ class _ControlPanel extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final api = ref.read(controlApiProvider);
-              await api.emergencyStop();
-              ref.invalidate(controlStatusProvider);
+              try {
+                final api = ref.read(controlApiProvider);
+                await api.emergencyStop();
+                ref.invalidate(controlStatusProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('緊急停止失敗: $e'), backgroundColor: Colors.redAccent));
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('確認停止'),
@@ -178,7 +184,7 @@ class _ControlPanel extends StatelessWidget {
     );
   }
 
-  void _confirmResume(BuildContext context) {
+  void _confirmResume(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -192,9 +198,16 @@ class _ControlPanel extends StatelessWidget {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              final api = ref.read(controlApiProvider);
-              await api.resumeTrading();
-              ref.invalidate(controlStatusProvider);
+              try {
+                final api = ref.read(controlApiProvider);
+                await api.resumeTrading();
+                ref.invalidate(controlStatusProvider);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('恢復交易失敗: $e'), backgroundColor: Colors.redAccent));
+                }
+              }
             },
             style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981)),

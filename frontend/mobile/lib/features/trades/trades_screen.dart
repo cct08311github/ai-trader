@@ -105,7 +105,7 @@ class _TradeTile extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: Colors.white)),
               if (trade.tsSubmit != null)
-                Text(trade.tsSubmit!.substring(0, 10),
+                Text(trade.tsSubmit!.length >= 10 ? trade.tsSubmit!.substring(0, 10) : trade.tsSubmit!,
                     style: const TextStyle(fontSize: 10, color: Colors.white24)),
             ],
           ),

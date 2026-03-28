@@ -20,7 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void initState() {
     super.initState();
     _urlController.text = 'https://mac-mini.tailde842d.ts.net:8080';
-    _loadSavedUrl();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSavedUrl());
   }
 
   Future<void> _loadSavedUrl() async {
@@ -51,7 +51,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       final storage = ref.read(storageProvider);
       await storage.setToken(token);
-      if (url.isNotEmpty) await storage.setBaseUrl(url);
+      if (url.isNotEmpty) {
+        await storage.setBaseUrl(url);
+        ref.read(baseUrlProvider.notifier).state = url;
+      }
       ref.read(authTokenProvider.notifier).state = token;
       widget.onLoginSuccess();
     } catch (e) {

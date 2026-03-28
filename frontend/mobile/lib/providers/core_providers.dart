@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/storage/secure_storage.dart';
 import '../core/network/dio_client.dart';
+import '../core/network/env.dart';
 import '../data/api/portfolio_api.dart';
 import '../data/api/strategy_api.dart';
 import '../data/api/control_api.dart';
@@ -8,10 +9,14 @@ import '../data/api/control_api.dart';
 /// Secure storage singleton.
 final storageProvider = Provider((_) => SecureStorage());
 
-/// Dio HTTP client with auth interceptor.
+/// Base URL — updated from SecureStorage on login/init.
+final baseUrlProvider = StateProvider<String>((_) => AppEnv.defaultBaseUrl);
+
+/// Dio HTTP client with auth interceptor + dynamic base URL.
 final dioProvider = Provider((ref) {
   final storage = ref.watch(storageProvider);
-  return createDio(storage);
+  final baseUrl = ref.watch(baseUrlProvider);
+  return createDio(storage, baseUrl: baseUrl);
 });
 
 /// API clients.

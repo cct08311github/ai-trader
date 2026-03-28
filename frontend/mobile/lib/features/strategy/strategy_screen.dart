@@ -238,7 +238,7 @@ class _ProposalTile extends StatelessWidget {
                 ),
               Expanded(
                 child: Text(
-                  '${proposal.targetRule ?? "unknown"} — ${proposal.proposalId.substring(0, 8)}',
+                  '${proposal.targetRule ?? "unknown"} — ${proposal.proposalId.length >= 8 ? proposal.proposalId.substring(0, 8) : proposal.proposalId}',
                   style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
