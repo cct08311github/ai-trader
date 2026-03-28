@@ -131,14 +131,7 @@ def _load_sim_nav() -> float:
 def _get_realized_pnl_today(conn: sqlite3.Connection) -> float:
     """查詢今日（UTC+8）已實現損益。"""
     try:
-        row = conn.execute(
-            """SELECT COALESCE(SUM(f.price * f.qty - f.fee - f.tax), 0.0)
-               FROM fills f
-               JOIN orders o ON f.order_id = o.order_id
-               WHERE date(o.ts_submit, '+8 hours') = date('now', '+8 hours')
-                 AND o.side = 'sell'"""
-        ).fetchone()
-        return float(row[0]) if row else 0.0
+        return OrderRepository(conn).get_realized_pnl_today()
     except sqlite3.Error as e:
         log.warning("_get_realized_pnl_today failed: %s", e)
         return 0.0
@@ -158,10 +151,7 @@ def _check_broker_connected(sj_instance) -> bool:
 def _get_orders_last_60s(conn: sqlite3.Connection) -> int:
     """計算最近 60 秒內的訂單數。"""
     try:
-        row = conn.execute(
-            "SELECT COUNT(*) FROM orders WHERE ts_submit >= datetime('now', '-1 minute')"
-        ).fetchone()
-        return int(row[0]) if row else 0
+        return OrderRepository(conn).count_orders_last_minute()
     except sqlite3.Error as e:
         log.warning("_get_orders_last_60s failed: %s", e)
         return 0
@@ -170,14 +160,7 @@ def _get_orders_last_60s(conn: sqlite3.Connection) -> int:
 def _get_today_buy_filled_symbols(conn: sqlite3.Connection) -> set:
     """返回今日（UTC+8）已有 fills 的 buy 訂單 symbol 集合，用於 wash sale 防護。"""
     try:
-        rows = conn.execute(
-            """SELECT DISTINCT o.symbol
-               FROM orders o
-               JOIN fills f ON f.order_id = o.order_id
-               WHERE o.side = 'buy'
-                 AND date(o.ts_submit, '+8 hours') = date('now', '+8 hours')"""
-        ).fetchall()
-        return {r[0] for r in rows}
+        return OrderRepository(conn).get_today_filled_symbols("buy")
     except sqlite3.Error as e:
         log.warning("_get_today_buy_filled_symbols failed: %s", e)
         return set()
@@ -189,14 +172,7 @@ def _get_today_sell_filled_symbols(conn: sqlite3.Connection) -> set:
     用於 wash sale 防護 #386：同日賣出後禁止買回。
     """
     try:
-        rows = conn.execute(
-            """SELECT DISTINCT o.symbol
-               FROM orders o
-               JOIN fills f ON f.order_id = o.order_id
-               WHERE o.side = 'sell'
-                 AND date(o.ts_submit, '+8 hours') = date('now', '+8 hours')"""
-        ).fetchall()
-        return {r[0] for r in rows}
+        return OrderRepository(conn).get_today_filled_symbols("sell")
     except sqlite3.Error as e:
         log.warning("_get_today_sell_filled_symbols failed: %s", e)
         return set()
