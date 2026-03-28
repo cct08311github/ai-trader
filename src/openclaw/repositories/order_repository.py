@@ -153,6 +153,27 @@ class OrderRepository:
         ).fetchone()
         return float(row[0]) if row else 0.0
 
+    def get_recent_sell_qty_by_symbol(self, since_iso: str) -> dict[str, int]:
+        """Return {symbol: total_qty} for sell orders since cutoff."""
+        rows = self._conn.execute(
+            """SELECT symbol, SUM(qty) AS total_qty FROM orders
+               WHERE side = 'sell' AND status IN ('submitted', 'filled')
+                 AND ts_submit > ?
+               GROUP BY symbol""",
+            (since_iso,),
+        ).fetchall()
+        return {r[0]: int(r[1]) for r in rows}
+
+    def count_daily_filled_sells(self) -> dict[str, int]:
+        """Return {symbol: count} of filled sell orders today."""
+        rows = self._conn.execute(
+            """SELECT symbol, COUNT(DISTINCT order_id) AS cnt FROM orders
+               WHERE side = 'sell' AND status = 'filled'
+                 AND date(ts_submit) = date('now')
+               GROUP BY symbol"""
+        ).fetchall()
+        return {r[0]: int(r[1]) for r in rows}
+
     def get_today_filled_symbols(self, side: str) -> set[str]:
         """Return set of symbols with fills today (UTC+8) for given side."""
         rows = self._conn.execute(

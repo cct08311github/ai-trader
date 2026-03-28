@@ -2,6 +2,8 @@
 
 掃描 proposal queue，回傳待執行的 sell intents，並用 execution journal
 確保重複執行可追蹤、可恢復、可去重。
+
+All SQL is delegated to ProposalRepository and PositionRepository.
 """
 
 from __future__ import annotations
@@ -13,6 +15,9 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from typing import Any
+
+from openclaw.repositories.position_repository import PositionRepository
+from openclaw.repositories.proposal_repository import ProposalRepository
 
 log = logging.getLogger(__name__)
 
@@ -69,13 +74,6 @@ def _build_execution_key(proposal_id: str, symbol: str, qty: int, price: float) 
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def _load_journal(conn: sqlite3.Connection, execution_key: str) -> sqlite3.Row | None:
-    return conn.execute(
-        "SELECT * FROM proposal_execution_journal WHERE execution_key=?",
-        (execution_key,),
-    ).fetchone()
-
-
 def _upsert_journal_prepared(
     conn: sqlite3.Connection,
     *,
@@ -86,20 +84,15 @@ def _upsert_journal_prepared(
     price: float,
 ) -> tuple[str, int]:
     ensure_execution_journal_schema(conn)
+    repo = ProposalRepository(conn)
     execution_key = _build_execution_key(proposal_id, symbol, qty, price)
-    row = _load_journal(conn, execution_key)
+    row = repo.load_journal(execution_key)
     now = _now_ms()
     if row is None:
-        conn.execute(
-            """
-            INSERT INTO proposal_execution_journal (
-                execution_key, proposal_id, target_rule, symbol, qty, price,
-                state, attempt_count, last_order_id, last_error, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 'prepared', 0, NULL, NULL, ?, ?)
-            """,
-            (execution_key, proposal_id, target_rule, symbol, qty, price, now, now),
+        repo.upsert_journal(
+            execution_key=execution_key, proposal_id=proposal_id,
+            target_rule=target_rule, symbol=symbol, qty=qty, price=price,
         )
-        conn.commit()
         return execution_key, 0
 
     state = str(_row_get(row, "state", 6))
@@ -107,18 +100,11 @@ def _upsert_journal_prepared(
     updated_at = int(_row_get(row, "updated_at", 11) or 0)
 
     if state == "executing" and now - updated_at > (_INTENT_STALE_SEC * 1000):
-        conn.execute(
-            """
-            UPDATE proposal_execution_journal
-               SET state='prepared', last_error=?, updated_at=?
-             WHERE execution_key=?
-            """,
-            ("stale executing attempt recovered", now, execution_key),
+        repo.update_journal_state(
+            execution_key, "prepared",
+            last_error="stale executing attempt recovered",
         )
-        conn.execute(
-            "UPDATE strategy_proposals SET status='queued', decided_at=NULL WHERE proposal_id=?",
-            (proposal_id,),
-        )
+        repo.update_status(proposal_id, "queued")
         conn.commit()
         return execution_key, attempt_count
 
@@ -128,13 +114,9 @@ def _upsert_journal_prepared(
 def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent], int]:
     """掃描 proposal queue，回傳待執行 intents。"""
     ensure_execution_journal_schema(conn)
-    rows = conn.execute(
-        """SELECT proposal_id, target_rule, proposal_json, status
-           FROM strategy_proposals
-           WHERE status IN ('approved', 'queued', 'executing')
-             AND (expires_at IS NULL OR expires_at > ?)""",
-        (int(time.time()),),
-    ).fetchall()
+    repo = ProposalRepository(conn)
+    pos_repo = PositionRepository(conn)
+    rows = repo.get_actionable_proposals()
 
     intents: list[SellIntent] = []
     n_noted = 0
@@ -160,10 +142,7 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                 ).fetchone()
                 if not pos or (pos[0] or 0) <= 0:
                     log.info("Proposal %s: no position in %s", proposal_id, symbol)
-                    conn.execute(
-                        "UPDATE strategy_proposals SET status='skipped', decided_at=? WHERE proposal_id=?",
-                        (_now_ms(), proposal_id),
-                    )
+                    repo.update_status(proposal_id, "skipped")
                     conn.commit()
                     continue
 
@@ -181,16 +160,13 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                     qty=qty_to_sell,
                     price=price,
                 )
-                journal = _load_journal(conn, execution_key)
+                journal = repo.load_journal(execution_key)
                 journal_state = str(_row_get(journal, "state", 6)) if journal else "prepared"
                 if journal_state in {"completed", "executing"}:
                     continue
 
                 if status == "approved":
-                    conn.execute(
-                        "UPDATE strategy_proposals SET status='queued' WHERE proposal_id=?",
-                        (proposal_id,),
-                    )
+                    repo.update_status(proposal_id, "queued")
                     conn.commit()
 
                 intents.append(
@@ -213,10 +189,7 @@ def execute_pending_proposals(conn: sqlite3.Connection) -> tuple[list[SellIntent
                 )
 
             elif target_rule == "STRATEGY_DIRECTION":
-                conn.execute(
-                    "UPDATE strategy_proposals SET status='noted', decided_at=? WHERE proposal_id=?",
-                    (_now_ms(), proposal_id),
-                )
+                repo.update_status(proposal_id, "noted")
                 conn.commit()
                 n_noted += 1
 
@@ -232,18 +205,9 @@ _NOTED_EXPIRY_MS = 48 * 60 * 60 * 1000
 
 def expire_stale_noted_proposals(conn: sqlite3.Connection) -> int:
     """Expire 'noted' proposals older than 48 hours. Returns count of expired rows."""
-    cutoff_ms = _now_ms() - _NOTED_EXPIRY_MS
     try:
-        cursor = conn.execute(
-            """UPDATE strategy_proposals
-               SET status = 'expired', decided_at = ?
-               WHERE status = 'noted'
-                 AND created_at < ?""",
-            (_now_ms(), cutoff_ms),
-        )
-        n = cursor.rowcount
+        n = ProposalRepository(conn).expire_stale_noted(_NOTED_EXPIRY_MS)
         if n > 0:
-            conn.commit()
             log.info("Expired %d stale noted proposals (older than 48h)", n)
         return n
     except sqlite3.Error as e:
@@ -253,21 +217,9 @@ def expire_stale_noted_proposals(conn: sqlite3.Connection) -> int:
 
 def mark_intent_executing(conn: sqlite3.Connection, proposal_id: str, execution_key: str) -> None:
     ensure_execution_journal_schema(conn)
-    now = _now_ms()
-    conn.execute(
-        """
-        UPDATE proposal_execution_journal
-           SET state='executing',
-               attempt_count=attempt_count + 1,
-               updated_at=?
-         WHERE execution_key=? AND proposal_id=?
-        """,
-        (now, execution_key, proposal_id),
-    )
-    conn.execute(
-        "UPDATE strategy_proposals SET status='executing' WHERE proposal_id=?",
-        (proposal_id,),
-    )
+    repo = ProposalRepository(conn)
+    repo.update_journal_state(execution_key, "executing", increment_attempt=True)
+    repo.update_status(proposal_id, "executing")
     conn.commit()
 
 
@@ -280,29 +232,20 @@ def mark_intent_executed(
 ) -> None:
     """Broker 成交後，標記 proposal 與 execution journal 完成。"""
     ensure_execution_journal_schema(conn)
-    now = _now_ms()
+    repo = ProposalRepository(conn)
     if execution_key:
-        conn.execute(
-            """
-            UPDATE proposal_execution_journal
-               SET state='completed', last_order_id=?, last_error=NULL, updated_at=?
-             WHERE execution_key=? AND proposal_id=?
-            """,
-            (order_id or None, now, execution_key, proposal_id),
+        repo.update_journal_state(
+            execution_key, "completed", last_order_id=order_id or None,
         )
     else:
+        # Fallback: update by proposal_id
         conn.execute(
-            """
-            UPDATE proposal_execution_journal
+            """UPDATE proposal_execution_journal
                SET state='completed', last_order_id=?, last_error=NULL, updated_at=?
-             WHERE proposal_id=?
-            """,
-            (order_id or None, now, proposal_id),
+               WHERE proposal_id=?""",
+            (order_id or None, _now_ms(), proposal_id),
         )
-    conn.execute(
-        "UPDATE strategy_proposals SET status='executed', decided_at=? WHERE proposal_id=?",
-        (now, proposal_id),
-    )
+    repo.update_status(proposal_id, "executed")
     conn.commit()
 
 
@@ -316,29 +259,21 @@ def mark_intent_failed(
 ) -> None:
     """Broker 拒絕或執行異常時標記 failed，保留 journal 供後續排查。"""
     ensure_execution_journal_schema(conn)
-    now = _now_ms()
+    repo = ProposalRepository(conn)
     if execution_key:
-        conn.execute(
-            """
-            UPDATE proposal_execution_journal
-               SET state='failed', last_error=?, last_order_id=?, updated_at=?
-             WHERE execution_key=? AND proposal_id=?
-            """,
-            (reason, order_id or None, now, execution_key, proposal_id),
+        repo.update_journal_state(
+            execution_key, "failed",
+            last_order_id=order_id or None, last_error=reason,
         )
     else:
         conn.execute(
-            """
-            UPDATE proposal_execution_journal
+            """UPDATE proposal_execution_journal
                SET state='failed', last_error=?, last_order_id=?, updated_at=?
-             WHERE proposal_id=?
-            """,
-            (reason, order_id or None, now, proposal_id),
+               WHERE proposal_id=?""",
+            (reason, order_id or None, _now_ms(), proposal_id),
         )
-    conn.execute(
-        "UPDATE strategy_proposals SET status='failed', decided_at=?, "
-        "supporting_evidence=COALESCE(supporting_evidence,'') || ? "
-        "WHERE proposal_id=?",
-        (now, f" | broker_reject: {reason}", proposal_id),
+    repo.update_status_with_evidence(
+        proposal_id, "failed",
+        evidence_append=f" | broker_reject: {reason}",
     )
     conn.commit()

@@ -6,6 +6,8 @@
   - 低於 25%：無動作
 
 #385: 閾值從 60%/40% 降至 40%/25%，修復 dedup 阻擋減倉的問題
+
+All SQL delegated to PositionRepository, OrderRepository, ProposalRepository.
 """
 import json
 import logging
@@ -13,6 +15,10 @@ import sqlite3
 import time
 import uuid
 from typing import TypedDict
+
+from openclaw.repositories.order_repository import OrderRepository
+from openclaw.repositories.position_repository import PositionRepository
+from openclaw.repositories.proposal_repository import ProposalRepository
 
 log = logging.getLogger(__name__)
 
@@ -43,48 +49,40 @@ def check_concentration(
     Returns:
         需要處理的 ConcentrationProposal 清單（含已寫入 DB 的提案資訊）
     """
+    pos_repo = PositionRepository(conn)
+    order_repo = OrderRepository(conn)
+    proposal_repo = ProposalRepository(conn)
+
     rows = conn.execute(
         "SELECT symbol, quantity, current_price FROM positions WHERE quantity > 0"
     ).fetchall()
-    if not rows:
+    active_rows = [(r[0], r[1], r[2]) for r in rows]
+    if not active_rows:
         return []
 
-    total_value = sum(r[1] * (r[2] or 0) for r in rows)
+    total_value = sum(qty * (price or 0) for _, qty, price in active_rows)
     if total_value <= 0:
         return []
 
-    # Dedup: check recent sell orders per symbol (submitted + filled),
-    # only skip if the pending/recent sell qty is sufficient to bring weight below target (#385)
-    # #483: include 'filled' status + extend window to 1 hour to prevent infinite loop in simulation
+    # Dedup: check recent sell orders per symbol (submitted + filled)
     stale_cutoff = time.strftime("%Y-%m-%dT%H:%M:%S",
                                  time.gmtime(time.time() - _STALE_ORDER_SEC))
-    pending_sell_qty: dict[str, int] = {}
     try:
-        for r in conn.execute(
-            """SELECT symbol, SUM(qty) FROM orders
-               WHERE side='sell' AND status IN ('submitted', 'filled') AND ts_submit > ?
-               GROUP BY symbol""",
-            (stale_cutoff,),
-        ).fetchall():
-            pending_sell_qty[r[0]] = int(r[1] or 0)
+        pending_sell_qty = order_repo.get_recent_sell_qty_by_symbol(stale_cutoff)
     except sqlite3.Error as e:
         log.error("Dedup query failed, proceeding WITHOUT dedup — "
                   "duplicate proposals may be generated: %s", e)
+        pending_sell_qty = {}
 
-    # #483: daily sell cap — count today's filled concentration sells per symbol
-    daily_sell_count: dict[str, int] = {}
+    # #483: daily sell cap
     try:
-        for r in conn.execute(
-            """SELECT symbol, COUNT(DISTINCT order_id) FROM orders
-               WHERE side='sell' AND status='filled' AND date(ts_submit) = date('now')
-               GROUP BY symbol""",
-        ).fetchall():
-            daily_sell_count[r[0]] = int(r[1] or 0)
+        daily_sell_count = order_repo.count_daily_filled_sells()
     except sqlite3.Error as e:
         log.warning("Daily sell count query failed: %s", e)
+        daily_sell_count = {}
 
     proposals: list[ConcentrationProposal] = []
-    for symbol, qty, price in rows:
+    for symbol, qty, price in active_rows:
         weight = (qty * (price or 0)) / total_value
         if weight < _WARN_THRESHOLD:
             continue
@@ -101,7 +99,7 @@ def check_concentration(
             log.info("Concentration %s: %.1f%% — pending sell %d insufficient (would be %.1f%%), generating additional proposal",
                      symbol, weight * 100, pending_qty, remaining_weight * 100)
 
-        # #483: daily cap — skip if already hit max daily sells for this symbol
+        # #483: daily cap
         sym_daily_sells = daily_sell_count.get(symbol, 0)
         if sym_daily_sells >= _MAX_DAILY_SELL_ORDERS:
             log.info("Concentration %s: %.1f%% — skipped (daily cap %d/%d reached)",
@@ -128,20 +126,18 @@ def check_concentration(
         proposals.append(proposal)
 
         status = "approved" if auto_approve else "pending"
-        proposal_id = str(uuid.uuid4())
-        conn.execute(
-            """INSERT OR IGNORE INTO strategy_proposals
-               (proposal_id, generated_by, target_rule, rule_category,
-                proposed_value, supporting_evidence, confidence,
-                requires_human_approval, status, proposal_json, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (proposal_id, "concentration_guard", "POSITION_REBALANCE", "portfolio",
-             f"降低 {symbol} 持倉至 {_TARGET_WEIGHT*100:.0f}% 以下",
-             f"{symbol} 目前佔組合 {weight:.1%}，超過警示門檻",
-             0.9, int(not auto_approve), status,
-             json.dumps({"symbol": symbol, "reduce_pct": reduce_pct,
-                         "type": "rebalance", "auto": auto_approve}),
-             int(time.time() * 1000))
+        proposal_repo.insert_proposal(
+            proposal_id=str(uuid.uuid4()),
+            generated_by="concentration_guard",
+            target_rule="POSITION_REBALANCE",
+            rule_category="portfolio",
+            proposed_value=f"降低 {symbol} 持倉至 {_TARGET_WEIGHT*100:.0f}% 以下",
+            supporting_evidence=f"{symbol} 目前佔組合 {weight:.1%}，超過警示門檻",
+            confidence=0.9,
+            requires_human_approval=not auto_approve,
+            status=status,
+            proposal_json=json.dumps({"symbol": symbol, "reduce_pct": reduce_pct,
+                                      "type": "rebalance", "auto": auto_approve}),
         )
         conn.commit()
         log.info("Concentration %s: %.1f%% → %s proposal (reduce_pct=%.1f%%)",
