@@ -1,8 +1,8 @@
-"""shadow_approval_logger.py — Strategy auto-approval shadow mode logger.
+"""shadow_approval_logger.py — Strategy auto-approval logic + shadow logger.
 
-Records what the NEW approval logic would decide (without executing),
-alongside the current logic's decision. Used to validate new thresholds
-over ~2 weeks before going live.
+Implements asymmetric confidence thresholds for auto-approval decisions.
+Shadow logging records all decisions to shadow_decisions table for
+ongoing calibration (T+5/T+20 tracking).
 
 Usage in strategy_committee.py:
     from openclaw.shadow_approval_logger import (
@@ -11,15 +11,11 @@ Usage in strategy_committee.py:
     )
 
     shadow_would_approve = _should_require_human_new_logic(...) == 0
-    if SHADOW_MODE:
-        log_shadow_decision(conn, proposal_id=..., ...)
-        requires_human_approval = 1   # keep current behaviour
-    else:
-        requires_human_approval = 0 if shadow_would_approve else 1
+    requires_human_approval = 0 if shadow_would_approve else 1
 
-Activation:
-    STRATEGY_SHADOW_MODE=true  (default while validating)
-    Set to "false" after two-week report shows win-rate ≥ 55%.
+Rollback:
+    STRATEGY_SHADOW_MODE=true  → reverts to always-require-human (emergency only)
+    Default: false (new logic active)
 """
 from __future__ import annotations
 
@@ -34,7 +30,7 @@ log = logging.getLogger(__name__)
 # Configuration
 # --------------------------------------------------------------------------- #
 
-SHADOW_MODE: bool = os.environ.get("STRATEGY_SHADOW_MODE", "true").lower() == "true"
+SHADOW_MODE: bool = os.environ.get("STRATEGY_SHADOW_MODE", "false").lower() == "true"
 
 # Asymmetric confidence floors — new logic (Phase 1 values, env-overridable)
 _AUTO_APPROVE_BUY_FLOOR: float = float(
@@ -344,8 +340,8 @@ def shadow_mode_report(conn: sqlite3.Connection) -> dict:
         "by_direction": by_direction,
         "ready_to_go_live": ready,
         "recommendation": (
-            "切換 STRATEGY_SHADOW_MODE=false 啟用新邏輯"
+            "新邏輯表現穩定，持續運行"
             if ready
-            else f"繼續觀察（T+5 勝率 {t5_win_rate or 'N/A'}，需 ≥ 0.55）"
+            else f"注意校準（T+5 勝率 {t5_win_rate or 'N/A'}，建議 ≥ 0.55）"
         ),
     }
