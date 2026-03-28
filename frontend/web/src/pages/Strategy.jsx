@@ -595,7 +595,7 @@ function SemanticMemoryTable({ data }) {
 }
 
 export default function StrategyPage() {
-  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, refreshProposals, refreshLogs, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
+  const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, batchAct, refreshProposals, refreshLogs, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
   const symbolNames = useSymbolNames()
 
@@ -604,6 +604,8 @@ export default function StrategyPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [pendingAct, setPendingAct] = useState(null)  // { type: 'approve'|'reject', proposal }
   const [copiedId, setCopiedId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [batchPending, setBatchPending] = useState(null) // { type: 'approve'|'reject' }
 
   const [memOrder, setMemOrder] = useState('desc')
 
@@ -685,6 +687,53 @@ export default function StrategyPage() {
     }
   }
 
+  // ── 批量選取邏輯 ──────────────────────────────────────────────────
+  const pendingRows = useMemo(() => rows.filter(r => String(r?.status || '').toLowerCase() === 'pending'), [rows])
+  const allPendingSelected = pendingRows.length > 0 && pendingRows.every(r => selectedIds.has(r.proposal_id))
+
+  const toggleSelect = (pid) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(pid) ? next.delete(pid) : next.add(pid)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    if (allPendingSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(pendingRows.map(r => r.proposal_id)))
+    }
+  }
+  const confirmBatch = async () => {
+    if (!batchPending) return
+    const ids = [...selectedIds]
+    const action = batchPending.type
+    setBatchPending(null)
+    try {
+      const result = await batchAct(action, ids, { actor: 'operator', reason: `batch ${action} via UI` })
+      if (result) {
+        toast.success(`批量${action === 'approve' ? '核准' : '拒絕'} ${result.succeeded?.length || 0} 筆完成`)
+        if (result.failed?.length) {
+          toast.warning(`${result.failed.length} 筆跳過（已處理或不存在）`)
+        }
+      }
+    } catch (e) {
+      toast.error(`批量操作失敗：${e?.message || e}`)
+    }
+    setSelectedIds(new Set())
+  }
+
+  // Clear selection when proposals refresh
+  useEffect(() => {
+    setSelectedIds(prev => {
+      if (prev.size === 0) return prev
+      const validIds = new Set((proposals || []).filter(p => p.status === 'pending').map(p => p.proposal_id))
+      const next = new Set([...prev].filter(id => validIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [proposals])
+
   function copyId(id) {
     navigator.clipboard.writeText(id).then(() => {
       setCopiedId(id)
@@ -706,10 +755,47 @@ export default function StrategyPage() {
 
         {error && <div className="mt-4 rounded-lg border border-rose-800 bg-rose-900/20 p-3 text-xs text-rose-300">{error}</div>}
 
+        {/* ── 批量操作列 ───────────────────────────────────────── */}
+        {selectedIds.size > 0 && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5">
+            <span className="text-xs text-slate-300">已選 <span className="font-semibold text-white">{selectedIds.size}</span> 筆</span>
+            <button
+              disabled={loading.act}
+              onClick={() => setBatchPending({ type: 'approve' })}
+              className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40 hover:bg-emerald-600"
+            >
+              批量核准
+            </button>
+            <button
+              disabled={loading.act}
+              onClick={() => setBatchPending({ type: 'reject' })}
+              className="rounded-lg bg-rose-700 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40 hover:bg-rose-600"
+            >
+              批量拒絕
+            </button>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="ml-auto text-[11px] text-slate-400 hover:text-slate-200"
+            >
+              取消選取
+            </button>
+          </div>
+        )}
+
         <div className="mt-5 overflow-auto rounded-xl border border-slate-800">
           <table className="min-w-full sm:min-w-[980px] w-full text-left text-xs">
             <thead className="bg-slate-950/40 text-slate-400">
               <tr>
+                <th className="px-3 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allPendingSelected && pendingRows.length > 0}
+                    onChange={toggleSelectAll}
+                    disabled={pendingRows.length === 0}
+                    className="accent-emerald-500 h-3.5 w-3.5"
+                    title="全選 / 取消全選 pending 提案"
+                  />
+                </th>
                 <th className="px-4 py-3">時間</th>
                 <th className="px-4 py-3">Proposal ID</th>
                 <th className="px-4 py-3">標的</th>
@@ -722,7 +808,7 @@ export default function StrategyPage() {
             <tbody className="divide-y divide-slate-800">
               {rows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-5 text-slate-500" colSpan={7}>
+                  <td className="px-4 py-5 text-slate-500" colSpan={8}>
                     {loading.proposals ? '讀取中...' : '目前無提案記錄'}
                   </td>
                 </tr>
@@ -732,6 +818,16 @@ export default function StrategyPage() {
                   const canAct = status === 'pending'
                   return (
                     <tr key={p.proposal_id} className="hover:bg-slate-950/30">
+                      <td className="px-3 py-3">
+                        {canAct && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(p.proposal_id)}
+                            onChange={() => toggleSelect(p.proposal_id)}
+                            className="accent-emerald-500 h-3.5 w-3.5"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-slate-300 whitespace-nowrap">{p._ts}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -828,6 +924,43 @@ export default function StrategyPage() {
 
       {/* ── PM LLM Trace ─────────────────────────────────────────────── */}
       <PmTracePanel />
+
+      {/* ── 批量確認 Dialog ───────────────────────────────────────────── */}
+      {batchPending && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={() => setBatchPending(null)}
+        >
+          <div
+            className="w-full max-w-xs rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <div className={`text-sm font-semibold mb-2 ${batchPending.type === 'approve' ? 'text-emerald-300' : 'text-rose-300'}`}>
+              批量{batchPending.type === 'approve' ? '核准' : '拒絕'} {selectedIds.size} 筆提案
+            </div>
+            <div className="text-xs text-slate-400 mb-4">
+              此操作無法撤銷，請確認已選取正確的提案。
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBatchPending(null)}
+                className="flex-1 rounded-xl border border-slate-700 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                autoFocus
+                onClick={confirmBatch}
+                className={`flex-1 rounded-xl py-2 text-sm font-semibold text-white transition-colors ${
+                  batchPending.type === 'approve' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'
+                }`}
+              >
+                確認{batchPending.type === 'approve' ? '核准' : '拒絕'} ({selectedIds.size})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Approve / Reject 確認 Dialog ──────────────────────────────── */}
       {pendingAct && (

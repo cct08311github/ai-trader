@@ -6,7 +6,8 @@ import time
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 import app.db as db
@@ -39,6 +40,14 @@ def conn_dep():
 class DecideRequest(BaseModel):
     actor: str = "user"
     reason: str = ""
+
+
+class BatchDecideRequest(BaseModel):
+    proposal_ids: list[str]
+    actor: str = "user"
+    reason: str = ""
+
+_BATCH_MAX = 50
 
 
 def _now_iso() -> str:
@@ -212,6 +221,123 @@ def reject_strategy_proposal(
         raise HTTPException(status_code=500, detail=f"Failed to reject proposal: {e}")
 
 
+@router.post("/proposals/batch/{action}")
+def batch_decide(action: str, req: BatchDecideRequest):
+    """批量核准或拒絕多筆 pending 提案。
+
+    action: "approve" | "reject"
+    最多 50 筆/次。每筆獨立寫 version_audit_log。
+    已非 pending 的提案放入 failed（不中斷流程）。
+    """
+    action = action.strip().lower()
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
+    if not req.proposal_ids:
+        raise HTTPException(status_code=422, detail="proposal_ids must not be empty")
+    if len(req.proposal_ids) > _BATCH_MAX:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many proposals: {len(req.proposal_ids)} (max {_BATCH_MAX})",
+        )
+
+    succeeded: list[dict] = []
+    failed: list[dict] = []
+
+    try:
+        with db.get_conn_rw() as conn:
+            _ensure_tables(conn)
+            for pid in req.proposal_ids:
+                row = conn.execute(
+                    "SELECT proposal_id, status FROM strategy_proposals WHERE proposal_id = ?",
+                    (pid,),
+                ).fetchone()
+                if not row:
+                    failed.append({"proposal_id": pid, "reason": "not_found"})
+                    continue
+                if str(row["status"] or "").lower() != "pending":
+                    failed.append({"proposal_id": pid, "reason": f"already_{row['status']}"})
+                    continue
+                try:
+                    updated = _update_proposal_status(
+                        conn,
+                        proposal_id=pid,
+                        new_status=action + ("d" if action == "approve" else "ed"),
+                        actor=req.actor,
+                        reason=req.reason or f"batch_{action}",
+                    )
+                    succeeded.append({"proposal_id": pid, "status": updated.get("status", action)})
+                except Exception as exc:
+                    failed.append({"proposal_id": pid, "reason": str(exc)})
+            conn.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Batch {action} failed: {e}")
+
+    return {
+        "status": "ok",
+        "action": action,
+        "total": len(req.proposal_ids),
+        "succeeded": succeeded,
+        "failed": failed,
+    }
+
+
+@router.get("/proposals/batch-approve-all", response_class=HTMLResponse)
+def batch_approve_all_url(token: str = Query(...)):
+    """一鍵核准所有 pending 提案（Telegram URL button 用）。"""
+    import os
+    if token != os.environ.get("AUTH_TOKEN", ""):
+        return HTMLResponse("<h2>❌ 無效 token</h2>", status_code=403)
+
+    approved_ids: list[str] = []
+    with db.get_conn_rw() as conn:
+        _ensure_tables(conn)
+        rows = conn.execute(
+            "SELECT proposal_id, target_rule FROM strategy_proposals WHERE status = 'pending'"
+        ).fetchall()
+        now_ts = int(time.time())
+        for row in rows:
+            pid = row["proposal_id"]
+            conn.execute(
+                "UPDATE strategy_proposals SET status='approved', decided_at=? WHERE proposal_id=?",
+                (now_ts, pid),
+            )
+            conn.execute(
+                """INSERT INTO version_audit_log(version_id, action, performed_by, details, performed_at)
+                   VALUES(?, ?, ?, ?, ?)""",
+                (
+                    pid,
+                    "strategy_proposal_approved",
+                    "telegram_batch",
+                    json.dumps({"proposal_id": pid, "from": "pending", "to": "approved",
+                                "reason": "batch_approve_all"}, ensure_ascii=False),
+                    _now_iso(),
+                ),
+            )
+            approved_ids.append(pid[:8])
+        conn.commit()
+
+    n = len(approved_ids)
+    if n == 0:
+        return HTMLResponse("<h2>⚠️ 目前無待審提案</h2><p>可關閉此頁面。</p>")
+
+    try:
+        from openclaw.tg_notify import send_message
+        send_message(
+            f"✅ <b>批量核准完成</b> — 共 {n} 筆提案已核准\n"
+            f"IDs: {', '.join(approved_ids)}…",
+            chat_id=os.environ.get("TELEGRAM_CHAT_ID", "-1003772422881"),
+        )
+    except Exception:
+        pass
+
+    ids_html = "".join(f"<li>{pid}…</li>" for pid in approved_ids)
+    return HTMLResponse(
+        f"<h2>✅ 批量核准完成 — {n} 筆</h2><ul>{ids_html}</ul><p>可關閉此頁面。</p>"
+    )
+
+
 @router.get("/market-rating")
 def get_market_rating(conn: sqlite3.Connection = Depends(conn_dep)):
     """Return latest market rating from episodic_memory or working_memory."""
@@ -350,9 +476,6 @@ def get_debates(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-from fastapi import Query
-from fastapi.responses import HTMLResponse
 
 @router.get("/proposals/{proposal_id}/approve", response_class=HTMLResponse)
 def approve_proposal_url(proposal_id: str, token: str = Query(...)):

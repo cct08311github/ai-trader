@@ -246,6 +246,20 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
     if sent > 0:
         _wm_set(conn, "notified_ids", list(notified))
 
+        # ── 批量摘要：2 筆以上附「一鍵全部核准」按鈕 ──────────────────
+        if sent >= 2:
+            base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net:8080")
+            auth = os.environ.get("AUTH_TOKEN", "")
+            try:
+                send_message_with_buttons(
+                    f"📋 本批次共 <b>{sent}</b> 筆待審提案",
+                    [[{"text": f"✅ 一鍵全部核准 ({sent})",
+                       "url": f"{base}/api/strategy/proposals/batch-approve-all?token={auth}"}]],
+                    chat_id=_chat_id(),
+                )
+            except Exception as _e:
+                log.warning("[tg_approver] batch summary notification failed: %s", _e)
+
     return sent
 
 

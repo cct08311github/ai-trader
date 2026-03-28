@@ -89,6 +89,13 @@ export function createStrategyClient(API_BASE) {
         { retries: 0, timeoutMs: 8000 }
       )
     },
+    async batchDecide(action, proposalIds, { actor = 'user', reason = '' } = {}) {
+      return await callApiWithRetry(
+        `${API_BASE}/proposals/batch/${action}`,
+        { method: 'POST', body: JSON.stringify({ proposal_ids: proposalIds, actor, reason }) },
+        { retries: 0, timeoutMs: 15000 }
+      )
+    },
     async marketRating({ timeoutMs = 5000 } = {}) {
       return await callApiWithRetry(
         `${API_BASE}/market-rating`,
@@ -239,6 +246,24 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
     },
     [client, refreshProposals]
   )
+
+  const batchAct = useCallback(
+    async (action, proposalIds, { actor = 'user', reason = '' } = {}) => {
+      setLoading(p => ({ ...p, act: true }))
+      try {
+        const result = await client.batchDecide(action, proposalIds, { actor, reason })
+        await refreshProposals()
+        return result
+      } catch (err) {
+        setError(`批量操作失敗: ${err.message}`)
+        return null
+      } finally {
+        setLoading(p => ({ ...p, act: false }))
+      }
+    },
+    [client, refreshProposals]
+  )
+
   return {
     API_BASE,
     proposals,
@@ -253,6 +278,7 @@ export function useStrategyData({ pollMs = 8000 } = {}) {
     refreshMarketRating,
     refreshSemanticMemory,
     refreshDebates,
-    act
+    act,
+    batchAct
   }
 }
