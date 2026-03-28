@@ -371,56 +371,29 @@ def _load_manual_watchlist() -> List[str]:
 
 
 
-# ── 行情取得 (Shioaji 或 mock random walk) ──────────────────────────────────
+# ── 行情取得 (delegate to MarketDataService) ────────────────────────────────
+from openclaw.market_data_service import (  # noqa: E402
+    MarketDataService,
+    SnapshotUnavailableError,
+)
+
 _BASE_PRICE: Dict[str, float] = _BASE_PRICE_DEFAULT
-
-
-class SnapshotUnavailableError(RuntimeError):
-    """Raised when a live broker snapshot cannot be used safely."""
+# Module-level MarketDataService instance (set in run_watcher; used by helpers)
+_market_data: MarketDataService = MarketDataService(base_prices=_BASE_PRICE)
 
 
 def _mock_snapshot(symbol: str) -> dict:
-    """Generate a deterministic-enough mock snapshot around the base price."""
-    import random
-
-    base = _BASE_PRICE.get(symbol, 100.0)
-    close = round(base * (1 + random.uniform(-0.003, 0.003)), 1)
-    return {
-        "close": close,
-        "bid": round(close * 0.999, 1),
-        "ask": round(close * 1.001, 1),
-        "reference": base,
-        "volume": random.randint(500, 5000),
-        "source": "mock",
-    }
+    """Generate a mock snapshot — delegates to MarketDataService."""
+    return _market_data.mock_snapshot(symbol)
 
 
 def _get_snapshot(api, symbol: str, *, allow_mock_fallback: bool = True) -> dict:
-    """取得 bid/ask/close/reference/volume。優先 Shioaji，不可用時 mock。"""
-    if api is not None:
-        try:
-            contract = api.Contracts.Stocks[symbol]
-            snaps = api.snapshots([contract])
-            if not snaps:
-                raise SnapshotUnavailableError("empty snapshot payload")
-            s = snaps[0]
-            close = float(getattr(s, "close", 0) or 0)
-            if close <= 0:
-                raise SnapshotUnavailableError("snapshot close <= 0")
-            bid = float(getattr(s, "buy_price", 0) or close * 0.999)
-            ask = float(getattr(s, "sell_price", 0) or close * 1.001)
-            ref = float(getattr(s, "reference", close) or close)
-            vol = int(getattr(s, "volume", 1000) or 1000)
-            return {"close": close, "bid": bid, "ask": ask, "reference": ref, "volume": vol}
-        except SnapshotUnavailableError:
-            if not allow_mock_fallback:
-                raise
-        except Exception as e:  # noqa: BLE001 — broker API; can't predict exceptions
-            if not allow_mock_fallback:
-                raise SnapshotUnavailableError(str(e)) from e
-            log.warning("Shioaji snapshot [%s]: %s — using mock", symbol, e)
-
-    return _mock_snapshot(symbol)
+    """取得 bid/ask/close/reference/volume — delegates to MarketDataService."""
+    # Use module-level service if api matches, otherwise create ad-hoc
+    if _market_data.has_live_api or api is None:
+        return _market_data.get_snapshot(symbol, allow_mock_fallback=allow_mock_fallback)
+    svc = MarketDataService(api=api, base_prices=_BASE_PRICE)
+    return svc.get_snapshot(symbol, allow_mock_fallback=allow_mock_fallback)
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
