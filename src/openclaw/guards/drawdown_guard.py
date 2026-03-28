@@ -1,4 +1,4 @@
-"""drawdown_guard.py — Drawdown and deep suspend guard adapter."""
+"""drawdown_guard.py — Drawdown and deep suspend guard adapters."""
 from __future__ import annotations
 
 from openclaw.drawdown_guard import (
@@ -15,7 +15,8 @@ class DrawdownGuard(Guard):
     def evaluate(self, ctx: GuardContext) -> GuardResult:
         drawdown_decision = evaluate_drawdown_guard(ctx.conn, ctx.drawdown_policy)
         return GuardResult(
-            passed=True,  # Drawdown is passed to sentinel, doesn't reject here
+            passed=True,
+            metadata={"check_type": "drawdown"},
             context_updates={"drawdown_decision": drawdown_decision},
         )
 
@@ -31,5 +32,9 @@ class DeepSuspendGuard(Guard):
                 passed=False,
                 reject_code=deep_decision.reason_code,
                 reason="deep_suspend: consecutive monthly losses",
+                metadata={"check_type": "deep_suspend_guard"},
             )
-        return GuardResult(passed=True)
+        return GuardResult(
+            passed=True,
+            metadata={"check_type": "deep_suspend_guard"},
+        )

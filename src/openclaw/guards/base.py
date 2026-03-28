@@ -83,9 +83,13 @@ class GuardChain:
 
         Returns (approved, reject_code_or_APPROVED, final_context).
         Context is updated with each guard's context_updates.
+        Guard results are collected in ``self.last_results``.
         """
+        self.last_results: List[Tuple[Guard, GuardResult]] = []
+
         for guard in self._guards:
             result = guard.evaluate(ctx)
+            self.last_results.append((guard, result))
 
             # Apply context updates from this guard
             for key, value in result.context_updates.items():
