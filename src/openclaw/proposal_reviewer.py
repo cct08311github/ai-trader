@@ -417,12 +417,26 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
                 proposed_value = str(proposal.get("proposed_value", "")).strip()
                 symbol = str(proposal.get("symbol", "")).strip()
 
-                result = _strategy_direction_review(
-                    direction=direction,
-                    proposed_value=proposed_value,
-                    evidence=evidence or "",
-                    position_summary=position_summary,
-                )
+                # ── Volatility Gate：買入方向在極端市況下自動拒絕 ──────────
+                from openclaw.guards.volatility_guard import check_volatility_gate
+                vg_result = check_volatility_gate(conn, direction)
+                if not vg_result.passed:
+                    result = {
+                        "decision": "reject",
+                        "confidence": 0.0,
+                        "reason": vg_result.reason,
+                    }
+                    log.info(
+                        "[proposal_reviewer] %s volatility gate blocked: %s",
+                        proposal_id[:8], vg_result.reason,
+                    )
+                else:
+                    result = _strategy_direction_review(
+                        direction=direction,
+                        proposed_value=proposed_value,
+                        evidence=evidence or "",
+                        position_summary=position_summary,
+                    )
                 decision_label = "核准策略" if result.get("decision") == "approve" else "拒絕"
                 detail_line = f"方向：{direction}"
                 weight = 0.0
