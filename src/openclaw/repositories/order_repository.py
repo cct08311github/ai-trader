@@ -141,3 +141,26 @@ class OrderRepository:
             (order_id,),
         ).fetchone()
         return (float(row[0]), float(row[1])) if row else (0.0, 0.0)
+
+    def get_realized_pnl_today(self) -> float:
+        """Return today's realized PnL from sell fills (UTC+8)."""
+        row = self._conn.execute(
+            """SELECT COALESCE(SUM(f.price * f.qty - f.fee - f.tax), 0.0)
+               FROM fills f
+               JOIN orders o ON f.order_id = o.order_id
+               WHERE date(o.ts_submit, '+8 hours') = date('now', '+8 hours')
+                 AND o.side = 'sell'"""
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+
+    def get_today_filled_symbols(self, side: str) -> set[str]:
+        """Return set of symbols with fills today (UTC+8) for given side."""
+        rows = self._conn.execute(
+            """SELECT DISTINCT o.symbol
+               FROM orders o
+               JOIN fills f ON f.order_id = o.order_id
+               WHERE o.side = ?
+                 AND date(o.ts_submit, '+8 hours') = date('now', '+8 hours')""",
+            (side,),
+        ).fetchall()
+        return {r[0] for r in rows}
