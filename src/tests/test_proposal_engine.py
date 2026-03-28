@@ -282,7 +282,8 @@ class TestCheckAutoApproveEligibility:
             assert _check_auto_approve_eligibility(cat, 0.99, 2.0, 1.0) is False
 
     def test_low_confidence_returns_false(self):
-        assert _check_auto_approve_eligibility("entry_threshold", 0.7, 2.0, 1.0) is False
+        # Threshold lowered to 0.60 (from 0.85) in Phase 1; use value below 0.60
+        assert _check_auto_approve_eligibility("entry_threshold", 0.5, 2.0, 1.0) is False
 
     def test_no_improvement_returns_false(self):
         # sharpe_after <= sharpe_before

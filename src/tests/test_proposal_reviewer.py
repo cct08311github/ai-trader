@@ -51,21 +51,21 @@ def test_auto_review_skips_non_rebalance_proposal(monkeypatch):
         (
             "p-strategy",
             "strategy_committee",
-            "STRATEGY_DIRECTION",
-            "strategy",
-            "DEFENSIVE",
+            "RISK_PARAMETER_CHANGE",
+            "risk",
+            "adjust stop_loss_pct",
             "generic strategy note",
             0.8,
             1,
             "pending",
-            json.dumps({"type": "suggest", "proposed_value": "DEFENSIVE"}),
+            json.dumps({"type": "suggest", "proposed_value": "adjust"}),
             9999999999999,
         ),
     )
     conn.commit()
 
     def _boom(*args, **kwargs):
-        raise AssertionError("LLM should not be called for STRATEGY_DIRECTION")
+        raise AssertionError("LLM should not be called for non-reviewable rules")
 
     sent_messages = []
     monkeypatch.setattr("openclaw.proposal_reviewer._gemini_review", _boom)
@@ -157,7 +157,7 @@ def test_auto_review_uses_live_weight_for_rebalance(monkeypatch):
     calls = []
     sent_messages = []
 
-    def _fake_review(symbol, weight, reduce_pct, evidence, position_summary):
+    def _fake_review(conn, symbol, weight, reduce_pct, evidence, position_summary):
         calls.append(
             {
                 "symbol": symbol,
