@@ -51,6 +51,26 @@ class ProposalRepository:
             (target_rule, *statuses),
         ).fetchall()
 
+    def get_proposal(self, proposal_id: str) -> Optional[sqlite3.Row]:
+        """Return a single proposal by ID."""
+        return self._conn.execute(
+            "SELECT * FROM strategy_proposals WHERE proposal_id = ?",
+            (proposal_id,),
+        ).fetchone()
+
+    def get_all_pending(self) -> List[sqlite3.Row]:
+        """Return all pending proposals ordered by created_at DESC."""
+        return self._conn.execute(
+            "SELECT * FROM strategy_proposals WHERE status = 'pending' ORDER BY created_at DESC"
+        ).fetchall()
+
+    def get_history(self, limit: int = 50) -> List[sqlite3.Row]:
+        """Return non-pending proposals ordered by decided_at DESC."""
+        return self._conn.execute(
+            "SELECT * FROM strategy_proposals WHERE status != 'pending' ORDER BY decided_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
     def get_recent_by_rule(
         self,
         target_rule: str,
@@ -93,28 +113,71 @@ class ProposalRepository:
         expires_at: Optional[int] = None,
     ) -> None:
         now = _now_ms()
+        cols = [
+            "proposal_id", "generated_by", "target_rule", "rule_category",
+            "proposed_value", "supporting_evidence", "confidence",
+            "requires_human_approval", "status", "proposal_json", "created_at",
+        ]
+        vals: list = [
+            proposal_id, generated_by, target_rule, rule_category,
+            proposed_value, supporting_evidence, confidence,
+            int(requires_human_approval), status, proposal_json or "{}", now,
+        ]
+        if expires_at is not None:
+            cols.append("expires_at")
+            vals.append(expires_at)
+        placeholders = ", ".join("?" * len(cols))
         self._conn.execute(
-            """INSERT INTO strategy_proposals
-               (proposal_id, generated_by, target_rule, rule_category,
-                proposed_value, supporting_evidence, confidence,
-                requires_human_approval, status, proposal_json,
-                created_at, expires_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                proposal_id,
-                generated_by,
-                target_rule,
-                rule_category,
-                proposed_value,
-                supporting_evidence,
-                confidence,
-                int(requires_human_approval),
-                status,
-                proposal_json or "{}",
-                now,
-                expires_at,
-            ),
+            f"INSERT OR IGNORE INTO strategy_proposals ({', '.join(cols)}) VALUES ({placeholders})",
+            vals,
         )
+
+    def update_decision(
+        self,
+        proposal_id: str,
+        status: str,
+        decided_by: str,
+        decision_reason: str,
+        decided_at: Optional[int] = None,
+    ) -> None:
+        """Update proposal with approval/rejection decision."""
+        ts = decided_at or _now_ms()
+        self._conn.execute(
+            """UPDATE strategy_proposals
+               SET status = ?, decided_at = ?, decided_by = ?, decision_reason = ?
+               WHERE proposal_id = ?""",
+            (status, ts, decided_by, decision_reason, proposal_id),
+        )
+
+    def update_status_with_evidence(
+        self,
+        proposal_id: str,
+        status: str,
+        evidence_append: str,
+        decided_at: Optional[int] = None,
+    ) -> None:
+        """Update status and append text to supporting_evidence."""
+        ts = decided_at or _now_ms()
+        self._conn.execute(
+            """UPDATE strategy_proposals
+               SET status = ?, decided_at = ?,
+                   supporting_evidence = COALESCE(supporting_evidence, '') || ?
+               WHERE proposal_id = ?""",
+            (status, ts, evidence_append, proposal_id),
+        )
+
+    def expire_pending_proposals(self, cutoff_ts: int) -> int:
+        """Expire pending proposals with expires_at < cutoff_ts. Returns count."""
+        cursor = self._conn.execute(
+            """UPDATE strategy_proposals
+               SET status = 'expired', decided_at = ?, decision_reason = 'Auto-expired'
+               WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?""",
+            (_now_ms(), cutoff_ts),
+        )
+        n = cursor.rowcount
+        if n > 0:
+            self._conn.commit()
+        return n
 
     def expire_stale_noted(self, max_age_ms: int = 48 * 60 * 60 * 1000) -> int:
         """Expire 'noted' proposals older than max_age_ms. Returns count."""
