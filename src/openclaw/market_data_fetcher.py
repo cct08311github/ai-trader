@@ -252,21 +252,34 @@ def save_margin_data(
 
 # ── Yahoo Finance fallback ────────────────────────────────────────────────────
 
-_YAHOO_CHART_URL = (
+_YAHOO_CHART_URL_TWSE = (
     "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.TW"
+    "?interval=1d&range=5d"
+)
+_YAHOO_CHART_URL_TPEX = (
+    "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.TWO"
     "?interval=1d&range=5d"
 )
 
 
-def fetch_ohlcv_yahoo(symbols: List[str], sleep_sec: float = 1.0) -> Dict[str, List[Dict]]:
+def fetch_ohlcv_yahoo(
+    symbols: List[str],
+    sleep_sec: float = 1.0,
+    market_map: Optional[Dict[str, str]] = None,
+) -> Dict[str, List[Dict]]:
     """
     Fetch recent OHLCV from Yahoo Finance as fallback when TWSE API is unavailable.
+
+    *market_map* maps symbol → 'TWSE' or 'TPEx'. TPEx symbols use `.TWO` suffix;
+    all others use `.TW`. If market_map is None, defaults to `.TW`.
 
     Returns {symbol: [{trade_date, open, high, low, close, volume}, ...]}
     """
     result: Dict[str, List[Dict]] = {}
     for sym in symbols:
-        url = _YAHOO_CHART_URL.format(symbol=sym)
+        is_tpex = (market_map or {}).get(sym, "TWSE") == "TPEx"
+        tmpl = _YAHOO_CHART_URL_TPEX if is_tpex else _YAHOO_CHART_URL_TWSE
+        url = tmpl.format(symbol=sym)
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
         })
@@ -449,8 +462,20 @@ def run_daily_fetch(
         twse_failed_symbols: List[str] = []
         today = datetime.date.today()
 
-        # Try TWSE STOCK_DAY first (current month only)
-        for sym in ohlcv_symbols:
+        # Build symbol → market lookup from existing eod_prices data
+        market_rows = conn.execute(
+            """SELECT DISTINCT symbol, market FROM eod_prices
+               WHERE symbol IN ({})""".format(",".join("?" for _ in ohlcv_symbols)),
+            [s.upper() for s in ohlcv_symbols],
+        ).fetchall()
+        market_map: Dict[str, str] = {r[0]: r[1] for r in market_rows}
+
+        # Separate TWSE vs TPEx symbols — STOCK_DAY API only works for TWSE
+        twse_symbols = [s for s in ohlcv_symbols if market_map.get(s.upper(), "TWSE") == "TWSE"]
+        tpex_symbols = [s for s in ohlcv_symbols if market_map.get(s.upper()) == "TPEx"]
+
+        # Try TWSE STOCK_DAY first (current month only, TWSE symbols only)
+        for sym in twse_symbols:
             try:
                 rows = fetch_ohlcv_month(sym, today.year, today.month)
                 if rows:
@@ -473,14 +498,16 @@ def run_daily_fetch(
                 twse_failed_symbols.append(sym)
             time.sleep(3)  # Conservative delay — one request per 3 seconds
 
-        # Fallback to Yahoo Finance for symbols that TWSE failed
-        if twse_failed_symbols:
+        # Fallback to Yahoo Finance for failed TWSE + all TPEx symbols
+        yahoo_symbols = twse_failed_symbols + tpex_symbols
+        if yahoo_symbols:
             log.info(
-                "[market_data_fetcher] TWSE failed for %d symbols, trying Yahoo Finance",
-                len(twse_failed_symbols),
+                "[market_data_fetcher] Yahoo fallback for %d symbols (%d TWSE failed + %d TPEx)",
+                len(yahoo_symbols), len(twse_failed_symbols), len(tpex_symbols),
             )
-            yahoo_data = fetch_ohlcv_yahoo(twse_failed_symbols)
+            yahoo_data = fetch_ohlcv_yahoo(yahoo_symbols, market_map=market_map)
             for sym, rows in yahoo_data.items():
+                mkt = market_map.get(sym.upper(), "TWSE")
                 if rows:
                     conn.executemany(
                         """
@@ -488,10 +515,10 @@ def run_daily_fetch(
                             (trade_date, market, symbol, name, open, high, low, close, volume,
                              source_url, ingested_at)
                         VALUES
-                            (:trade_date, 'TWSE', :symbol, NULL, :open, :high, :low, :close, :volume,
+                            (:trade_date, :market, :symbol, NULL, :open, :high, :low, :close, :volume,
                              'Yahoo Finance', datetime('now'))
                         """,
-                        [{"symbol": sym.upper(), **r} for r in rows],
+                        [{"symbol": sym.upper(), "market": mkt, **r} for r in rows],
                     )
                     conn.commit()
                     ohlcv_count += len(rows)

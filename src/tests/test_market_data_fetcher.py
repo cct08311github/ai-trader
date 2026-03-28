@@ -20,6 +20,7 @@ from openclaw.market_data_fetcher import (
     ensure_schema,
     fetch_institution_flows,
     fetch_margin_data,
+    fetch_ohlcv_yahoo,
     run_daily_fetch,
     save_institution_flows,
     save_margin_data,
@@ -542,3 +543,136 @@ class TestRunDailyFetch:
 
         assert result["institution_flows"] == 0
         assert result["margin_data"] == 0
+
+
+# ── Regression: TPEx market preservation in Yahoo fallback (#481) ──────────
+
+
+class TestTPExYahooFallback:
+    """TPEx symbols must use .TWO suffix and preserve market='TPEx' on insert."""
+
+    @pytest.fixture
+    def conn_with_tpex(self):
+        c = sqlite3.connect(":memory:")
+        c.row_factory = sqlite3.Row
+        ensure_schema(c)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS eod_prices (
+                trade_date TEXT NOT NULL,
+                market TEXT NOT NULL DEFAULT 'TWSE',
+                symbol TEXT NOT NULL,
+                name TEXT,
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER DEFAULT 0,
+                source_url TEXT,
+                ingested_at TEXT,
+                PRIMARY KEY (trade_date, symbol)
+            )
+        """)
+        c.execute(
+            """INSERT INTO eod_prices
+               (trade_date, market, symbol, open, high, low, close, volume)
+               VALUES ('2026-03-27', 'TPEx', '6515', 100, 110, 95, 105, 1000)"""
+        )
+        c.commit()
+        return c
+
+    def test_yahoo_url_uses_two_suffix_for_tpex(self):
+        """fetch_ohlcv_yahoo must call .TWO URL for TPEx symbols."""
+        yahoo_resp = {
+            "chart": {
+                "result": [{
+                    "timestamp": [1711500000],
+                    "indicators": {"quote": [{"open": [100], "high": [110], "low": [95], "close": [105], "volume": [1000]}]},
+                }]
+            }
+        }
+        urls_called = []
+
+        def fake_urlopen(req, **kwargs):
+            urls_called.append(req.full_url)
+            return _fake_response(yahoo_resp)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             patch("time.sleep"):
+            fetch_ohlcv_yahoo(["6515"], market_map={"6515": "TPEx"})
+
+        assert len(urls_called) == 1
+        assert ".TWO" in urls_called[0], f"Expected .TWO in URL but got: {urls_called[0]}"
+
+    def test_yahoo_url_uses_tw_suffix_for_twse(self):
+        """fetch_ohlcv_yahoo must call .TW URL for TWSE symbols."""
+        yahoo_resp = {
+            "chart": {
+                "result": [{
+                    "timestamp": [1711500000],
+                    "indicators": {"quote": [{"open": [500], "high": [510], "low": [490], "close": [505], "volume": [5000]}]},
+                }]
+            }
+        }
+        urls_called = []
+
+        def fake_urlopen(req, **kwargs):
+            urls_called.append(req.full_url)
+            return _fake_response(yahoo_resp)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             patch("time.sleep"):
+            fetch_ohlcv_yahoo(["2330"], market_map={"2330": "TWSE"})
+
+        assert len(urls_called) == 1
+        assert ".TW?" in urls_called[0], f"Expected .TW in URL but got: {urls_called[0]}"
+
+    def test_run_daily_fetch_preserves_tpex_market(self, conn_with_tpex):
+        """Yahoo fallback for TPEx symbol must write market='TPEx', not 'TWSE'."""
+        yahoo_resp = {
+            "chart": {
+                "result": [{
+                    "timestamp": [1711500000],
+                    "indicators": {"quote": [{"open": [100], "high": [110], "low": [95], "close": [108], "volume": [2000]}]},
+                }]
+            }
+        }
+        twse_err = urllib.error.HTTPError(
+            "http://twse", 404, "Not Found", {}, BytesIO(b"")
+        )
+
+        def fake_urlopen(req, **kwargs):
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "twse" in url.lower() or "tse.com" in url.lower():
+                raise twse_err
+            return _fake_response(yahoo_resp)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             patch("time.sleep"):
+            result = run_daily_fetch("2026-03-28", conn_with_tpex, ohlcv_symbols=["6515"])
+
+        assert result["ohlcv"] >= 1
+        row = conn_with_tpex.execute(
+            "SELECT market FROM eod_prices WHERE symbol='6515' ORDER BY trade_date DESC LIMIT 1"
+        ).fetchone()
+        assert row["market"] == "TPEx", f"Expected TPEx but got {row['market']}"
+
+    def test_tpex_symbols_skip_twse_stock_day(self, conn_with_tpex):
+        """TPEx symbols should NOT attempt TWSE STOCK_DAY — go directly to Yahoo."""
+        yahoo_resp = {
+            "chart": {
+                "result": [{
+                    "timestamp": [1711500000],
+                    "indicators": {"quote": [{"open": [100], "high": [110], "low": [95], "close": [108], "volume": [2000]}]},
+                }]
+            }
+        }
+        stock_day_called = []
+
+        def fake_urlopen(req, **kwargs):
+            url = req.full_url if hasattr(req, "full_url") else str(req)
+            if "STOCK_DAY" in url:
+                stock_day_called.append(url)
+            return _fake_response(yahoo_resp)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen), \
+             patch("time.sleep"):
+            run_daily_fetch("2026-03-28", conn_with_tpex, ohlcv_symbols=["6515"])
+
+        assert stock_day_called == [], f"STOCK_DAY should not be called for TPEx, but was: {stock_day_called}"
