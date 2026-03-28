@@ -18,6 +18,8 @@ import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Optional
 
+from openclaw.config_manager import get_config
+
 _log = logging.getLogger("daily_pm_review")
 
 _STATE_PATH = os.path.join(os.path.dirname(__file__), "../../config/daily_pm_state.json")
@@ -38,22 +40,7 @@ def _today() -> str:
 
 def get_daily_pm_approval() -> bool:
     """Return today's PM approval status. Safe default: False (blocked)."""
-    try:
-        with open(_STATE_PATH, "r") as f:
-            state = json.load(f)
-        return state.get("date") == _today() and bool(state.get("approved", False))
-    except FileNotFoundError:
-        _log.debug("Config file not found: %s, using defaults", _STATE_PATH)
-        return False
-    except json.JSONDecodeError as e:
-        _log.warning("Corrupted config file: %s — %s", _STATE_PATH, e)
-        return False
-    except PermissionError:
-        _log.error("Permission denied reading: %s", _STATE_PATH)
-        return False
-    except Exception as e:
-        _log.warning("Unexpected error reading %s: %s", _STATE_PATH, e)
-        return False
+    return get_config().is_pm_approved_today()
 
 
 def get_daily_pm_state() -> Dict[str, Any]:

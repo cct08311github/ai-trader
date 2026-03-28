@@ -39,12 +39,8 @@ def _get_emergency_stop_path() -> Path:
 
 def _get_system_state() -> dict:
     """讀取 config/system_state.json，失敗時回傳預設值。"""
-    state_path = get_repo_root() / "config" / "system_state.json"
-    try:
-        return json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
-        log.warning("tg_kill_switch: 無法讀取 system_state.json: %s", e)
-        return {}
+    from openclaw.config_manager import get_config
+    return get_config().system_state()
 
 
 def _tg_request(token: str, method: str, params: dict) -> Optional[dict]:

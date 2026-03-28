@@ -473,18 +473,28 @@ class TestOrchestratorHelpers:
     def test_pm_review_event_detected(self, tmp_path):
         import json as _j
         from openclaw.agent_orchestrator import _pm_review_just_completed
-        f = tmp_path / "state.json"
-        f.write_text(_j.dumps({"reviewed_at": "2026-03-02T08:25:00"}))
-        result = _pm_review_just_completed(str(f), last_seen=None)
-        assert result == "2026-03-02T08:25:00"
+        from openclaw.config_manager import get_config, reset_config
+        (tmp_path / "daily_pm_state.json").write_text(_j.dumps({"reviewed_at": "2026-03-02T08:25:00"}))
+        reset_config()
+        get_config(config_dir=tmp_path)
+        try:
+            result = _pm_review_just_completed(last_seen=None)
+            assert result == "2026-03-02T08:25:00"
+        finally:
+            reset_config()
 
     def test_pm_review_no_event_when_same(self, tmp_path):
         import json as _j
         from openclaw.agent_orchestrator import _pm_review_just_completed
-        f = tmp_path / "state.json"
-        f.write_text(_j.dumps({"reviewed_at": "2026-03-02T08:25:00"}))
-        result = _pm_review_just_completed(str(f), last_seen="2026-03-02T08:25:00")
-        assert result is None
+        from openclaw.config_manager import get_config, reset_config
+        (tmp_path / "daily_pm_state.json").write_text(_j.dumps({"reviewed_at": "2026-03-02T08:25:00"}))
+        reset_config()
+        get_config(config_dir=tmp_path)
+        try:
+            result = _pm_review_just_completed(last_seen="2026-03-02T08:25:00")
+            assert result is None
+        finally:
+            reset_config()
 
     def test_watcher_no_fills_3days(self, mem_db):
         from openclaw.agent_orchestrator import _watcher_no_fills_3days

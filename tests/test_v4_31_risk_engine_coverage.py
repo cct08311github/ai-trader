@@ -425,38 +425,54 @@ def test_default_limits_has_required_keys():
 def test_is_symbol_locked_returns_false_when_no_file(tmp_path, monkeypatch):
     """_is_symbol_locked reads locked_symbols.json; missing file → not locked (fail-safe)."""
     import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_LOCKED_SYMBOLS_PATH",
-                        str(tmp_path / "nonexistent.json"))
-    assert re_mod._is_symbol_locked("2330") is False
+    from openclaw.config_manager import get_config, reset_config
+    reset_config()
+    get_config(config_dir=tmp_path)  # no locked_symbols.json
+    try:
+        assert re_mod._is_symbol_locked("2330") is False
+    finally:
+        reset_config()
 
 
 def test_is_symbol_locked_true_when_in_file(tmp_path, monkeypatch):
     import json
     import openclaw.risk_engine as re_mod
-    locked_file = tmp_path / "locked.json"
-    locked_file.write_text(json.dumps({"locked": ["2330", "2317"]}))
-    monkeypatch.setattr(re_mod, "_LOCKED_SYMBOLS_PATH", str(locked_file))
-    assert re_mod._is_symbol_locked("2330") is True
-    assert re_mod._is_symbol_locked("0050") is False
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "locked_symbols.json").write_text(json.dumps({"locked": ["2330", "2317"]}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert re_mod._is_symbol_locked("2330") is True
+        assert re_mod._is_symbol_locked("0050") is False
+    finally:
+        reset_config()
 
 
 def test_get_daily_pm_approval_false_when_no_file(tmp_path, monkeypatch):
     import openclaw.risk_engine as re_mod
-    monkeypatch.setattr(re_mod, "_DAILY_PM_PATH",
-                        str(tmp_path / "nonexistent.json"))
-    assert re_mod._get_daily_pm_approval() is False
+    from openclaw.config_manager import get_config, reset_config
+    reset_config()
+    get_config(config_dir=tmp_path)  # no daily_pm_state.json
+    try:
+        assert re_mod._get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
 def test_get_daily_pm_approval_true_when_approved(tmp_path, monkeypatch):
     import json
     from datetime import datetime, timezone, timedelta
     import openclaw.risk_engine as re_mod
+    from openclaw.config_manager import get_config, reset_config
     _tz_twn = timezone(timedelta(hours=8))
     today_twn = datetime.now(tz=_tz_twn).strftime("%Y-%m-%d")
-    state_file = tmp_path / "state.json"
-    state_file.write_text(json.dumps({"date": today_twn, "approved": True}))
-    monkeypatch.setattr(re_mod, "_DAILY_PM_PATH", str(state_file))
-    assert re_mod._get_daily_pm_approval() is True
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"date": today_twn, "approved": True}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert re_mod._get_daily_pm_approval() is True
+    finally:
+        reset_config()
 
 
 def test_reject_liquidity_when_auto_reduce_disabled(monkeypatch):

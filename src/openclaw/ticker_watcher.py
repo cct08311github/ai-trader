@@ -56,6 +56,7 @@ def _interruptible_sleep(seconds: int) -> bool:
         time.sleep(max(0, min(1, deadline - time.monotonic())))
     return False
 
+from openclaw.config_manager import get_config
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
 
 
@@ -122,12 +123,7 @@ _SIM_NAV_FALLBACK: float = 1_000_000.0
 
 def _load_sim_nav() -> float:
     """讀取 config/capital.json 的 total_capital_twd，缺檔時回傳 fallback 1_000_000。"""
-    try:
-        data = json.loads(_CAPITAL_CFG.read_text(encoding="utf-8"))
-        return float(data["total_capital_twd"])
-    except (OSError, KeyError, ValueError, TypeError) as e:
-        log.warning("_load_sim_nav: capital.json read failed (%s) — using fallback %.0f", e, _SIM_NAV_FALLBACK)
-        return _SIM_NAV_FALLBACK
+    return get_config().capital().total_capital_twd
 
 
 def _get_realized_pnl_today(conn: sqlite3.Connection) -> float:
@@ -364,17 +360,12 @@ _BASE_PRICE_DEFAULT: Dict[str, float] = {
 
 def _load_manual_watchlist() -> List[str]:
     """讀取 config/watchlist.json，回傳手動追蹤清單。讀取失敗時用 fallback。"""
-    try:
-        cfg = json.loads(_WATCHLIST_CFG.read_text(encoding="utf-8"))
-        # 優先讀 manual_watchlist，向後相容 universe
-        wl = cfg.get("manual_watchlist") or cfg.get("universe") or []
-        result = [str(s).strip() for s in wl if str(s).strip()]
-        if not result:
-            raise ValueError("manual_watchlist is empty")
-        return result
-    except (OSError, ValueError) as e:
-        log.warning("watchlist.json read failed (%s) — using fallback %s", e, _FALLBACK_UNIVERSE)
+    wl_cfg = get_config().watchlist()
+    result = [str(s).strip() for s in wl_cfg.manual_watchlist if str(s).strip()]
+    if not result:
+        log.warning("manual_watchlist is empty — using fallback %s", _FALLBACK_UNIVERSE)
         return list(_FALLBACK_UNIVERSE)
+    return result
 
 
 

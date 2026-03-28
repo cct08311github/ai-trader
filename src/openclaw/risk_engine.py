@@ -6,51 +6,21 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from openclaw.config_manager import get_config
 from openclaw.position_sizing import calculate_position_qty
 from openclaw.tw_session_rules import apply_tw_session_risk_adjustments
 
 logger = logging.getLogger(__name__)
 
-_LOCKED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), "../../config/locked_symbols.json")
-
 
 def _is_symbol_locked(symbol: str) -> bool:
     """Check if a symbol is locked (sell-forbidden). Fails safe: returns False on error."""
-    try:
-        with open(_LOCKED_SYMBOLS_PATH, "r") as f:
-            return symbol.upper() in {s.upper() for s in json.load(f).get("locked", [])}
-    except FileNotFoundError:
-        logger.debug("Config file not found: %s, using defaults", _LOCKED_SYMBOLS_PATH)
-        return False
-    except json.JSONDecodeError as e:
-        logger.warning("Corrupted config file: %s — %s", _LOCKED_SYMBOLS_PATH, e)
-        return False
-    except OSError as e:
-        logger.error("OS error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
-        return False
-
-
-_DAILY_PM_PATH = os.path.join(os.path.dirname(__file__), "../../config/daily_pm_state.json")
+    return symbol.upper() in get_config().locked_symbols()
 
 
 def _get_daily_pm_approval() -> bool:
     """Check today's PM approval. Fails safe: returns False (blocked) on error."""
-    try:
-        from datetime import datetime, timezone, timedelta
-        _tz_twn = timezone(timedelta(hours=8))
-        today = datetime.now(tz=_tz_twn).strftime("%Y-%m-%d")
-        with open(_DAILY_PM_PATH, "r") as f:
-            state = json.load(f)
-        return state.get("date") == today and bool(state.get("approved", False))
-    except FileNotFoundError:
-        logger.debug("Config file not found: %s, using defaults", _DAILY_PM_PATH)
-        return False
-    except json.JSONDecodeError as e:
-        logger.warning("Corrupted config file: %s — %s", _DAILY_PM_PATH, e)
-        return False
-    except OSError as e:
-        logger.warning("Unexpected error reading %s: %s", _DAILY_PM_PATH, e)
-        return False
+    return get_config().is_pm_approved_today()
 
 
 @dataclass

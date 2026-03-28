@@ -98,46 +98,72 @@ def test_should_run_now_no_match():
 def test_pm_review_just_completed_new_event(tmp_path):
     """Lines 62-63: new reviewed_at differs from last_seen → returns it."""
     from openclaw.agent_orchestrator import _pm_review_just_completed
-    state_file = tmp_path / "pm_state.json"
-    state_file.write_text(json.dumps({"reviewed_at": "2025-01-06T14:30:00"}))
-    result = _pm_review_just_completed(str(state_file), last_seen=None)
-    assert result == "2025-01-06T14:30:00"
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"reviewed_at": "2025-01-06T14:30:00"}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        result = _pm_review_just_completed(last_seen=None)
+        assert result == "2025-01-06T14:30:00"
+    finally:
+        reset_config()
 
 
 def test_pm_review_just_completed_same_event(tmp_path):
     """Lines 62-63: reviewed_at == last_seen → returns None."""
     from openclaw.agent_orchestrator import _pm_review_just_completed
-    state_file = tmp_path / "pm_state.json"
-    state_file.write_text(json.dumps({"reviewed_at": "2025-01-06T14:30:00"}))
-    result = _pm_review_just_completed(
-        str(state_file), last_seen="2025-01-06T14:30:00"
-    )
-    assert result is None
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"reviewed_at": "2025-01-06T14:30:00"}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        result = _pm_review_just_completed(
+            last_seen="2025-01-06T14:30:00"
+        )
+        assert result is None
+    finally:
+        reset_config()
 
 
 def test_pm_review_just_completed_no_reviewed_at(tmp_path):
     """Lines 62-63: state has no reviewed_at → returns None."""
     from openclaw.agent_orchestrator import _pm_review_just_completed
-    state_file = tmp_path / "pm_state.json"
-    state_file.write_text(json.dumps({"approved": False}))
-    result = _pm_review_just_completed(str(state_file), last_seen=None)
-    assert result is None
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps({"approved": False}))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        result = _pm_review_just_completed(last_seen=None)
+        assert result is None
+    finally:
+        reset_config()
 
 
-def test_pm_review_just_completed_file_missing():
-    """Lines 62-63: file doesn't exist → exception caught → returns None."""
+def test_pm_review_just_completed_file_missing(tmp_path):
+    """Lines 62-63: file doesn't exist → ConfigManager returns default → returns None."""
     from openclaw.agent_orchestrator import _pm_review_just_completed
-    result = _pm_review_just_completed("/nonexistent/path.json", last_seen=None)
-    assert result is None
+    from openclaw.config_manager import get_config, reset_config
+    reset_config()
+    get_config(config_dir=tmp_path)  # no daily_pm_state.json
+    try:
+        result = _pm_review_just_completed(last_seen=None)
+        assert result is None
+    finally:
+        reset_config()
 
 
 def test_pm_review_just_completed_invalid_json(tmp_path):
-    """Lines 62-63: invalid JSON → exception caught → returns None."""
+    """Lines 62-63: invalid JSON → ConfigManager returns default → returns None."""
     from openclaw.agent_orchestrator import _pm_review_just_completed
-    state_file = tmp_path / "pm_state.json"
-    state_file.write_text("NOT JSON")
-    result = _pm_review_just_completed(str(state_file), last_seen=None)
-    assert result is None
+    from openclaw.config_manager import get_config, reset_config
+    (tmp_path / "daily_pm_state.json").write_text("NOT JSON")
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        result = _pm_review_just_completed(last_seen=None)
+        assert result is None
+    finally:
+        reset_config()
 
 
 # ── _watcher_no_fills_3days (lines 74-75) ────────────────────────────────────

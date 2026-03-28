@@ -6,31 +6,16 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence
 
+from openclaw.config_manager import get_config
 from openclaw.drawdown_guard import DrawdownDecision
 from openclaw.risk_engine import OrderCandidate, SystemState
 
 logger = logging.getLogger(__name__)
 
-_LOCKED_SYMBOLS_PATH = os.path.join(os.path.dirname(__file__), "../../config/locked_symbols.json")
-
 
 def _locked_symbols() -> set:
     """Read locked symbols from config. Returns empty set on error."""
-    try:
-        with open(_LOCKED_SYMBOLS_PATH, "r") as f:
-            return {s.upper() for s in json.load(f).get("locked", [])}
-    except FileNotFoundError:
-        logger.debug("Config file not found: %s, using defaults", _LOCKED_SYMBOLS_PATH)
-        return set()
-    except json.JSONDecodeError as e:
-        logger.warning("Corrupted config file: %s — %s", _LOCKED_SYMBOLS_PATH, e)
-        return set()
-    except PermissionError:
-        logger.error("Permission denied reading: %s", _LOCKED_SYMBOLS_PATH)
-        return set()
-    except Exception as e:
-        logger.warning("Unexpected error reading %s: %s", _LOCKED_SYMBOLS_PATH, e)
-        return set()
+    return get_config().locked_symbols()
 
 
 @dataclass(frozen=True)

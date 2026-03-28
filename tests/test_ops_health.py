@@ -101,25 +101,30 @@ class TestGetPm2Processes:
 # ── load_alert_thresholds ─────────────────────────────────────────────────────
 
 class TestLoadAlertThresholds:
-    def test_defaults_when_no_config(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "openclaw.ops_health.get_repo_root",
-            lambda: tmp_path,
-        )
-        thresholds = load_alert_thresholds()
-        assert thresholds["cpu_percent_warn"] == 80
-        assert thresholds["cpu_percent_critical"] == 95
+    def test_defaults_when_no_config(self, tmp_path):
+        from openclaw.config_manager import get_config, reset_config
+        reset_config()
+        get_config(config_dir=tmp_path)  # no alert_policy.json
+        try:
+            thresholds = load_alert_thresholds()
+            assert thresholds["cpu_percent_warn"] == 80
+            assert thresholds["cpu_percent_critical"] == 95
+        finally:
+            reset_config()
 
     def test_override_from_config(self, tmp_path):
-        config_dir = tmp_path / "config"
-        config_dir.mkdir()
-        (config_dir / "alert_policy.json").write_text(json.dumps({
+        from openclaw.config_manager import get_config, reset_config
+        (tmp_path / "alert_policy.json").write_text(json.dumps({
             "cpu_percent_warn": 70,
         }))
-        with patch("openclaw.ops_health.get_repo_root", return_value=tmp_path):
+        reset_config()
+        get_config(config_dir=tmp_path)
+        try:
             thresholds = load_alert_thresholds()
-        assert thresholds["cpu_percent_warn"] == 70
-        assert thresholds["cpu_percent_critical"] == 95  # unchanged default
+            assert thresholds["cpu_percent_warn"] == 70
+            assert thresholds["cpu_percent_critical"] == 95  # unchanged default
+        finally:
+            reset_config()
 
 
 # ── check_resource_alerts ─────────────────────────────────────────────────────

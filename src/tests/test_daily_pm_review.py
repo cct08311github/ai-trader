@@ -19,6 +19,9 @@ import openclaw.daily_pm_review as dpr
 # Helpers
 # ---------------------------------------------------------------------------
 
+from openclaw.config_manager import get_config, reset_config
+
+
 def _make_state_file(tmp_path, content: dict) -> str:
     p = tmp_path / "daily_pm_state.json"
     p.write_text(json.dumps(content, ensure_ascii=False))
@@ -44,34 +47,56 @@ def test_today_returns_twn_date():
 # get_daily_pm_approval()
 # ---------------------------------------------------------------------------
 
-def test_get_daily_pm_approval_true_when_today_and_approved(tmp_path, monkeypatch):
+def test_get_daily_pm_approval_true_when_today_and_approved(tmp_path):
     state = {"date": dpr._today(), "approved": True}
-    _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
-    assert dpr.get_daily_pm_approval() is True
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps(state, ensure_ascii=False))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert dpr.get_daily_pm_approval() is True
+    finally:
+        reset_config()
 
 
-def test_get_daily_pm_approval_false_when_old_date(tmp_path, monkeypatch):
+def test_get_daily_pm_approval_false_when_old_date(tmp_path):
     state = {"date": "2000-01-01", "approved": True}
-    _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
-    assert dpr.get_daily_pm_approval() is False
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps(state, ensure_ascii=False))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert dpr.get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
-def test_get_daily_pm_approval_false_when_not_approved(tmp_path, monkeypatch):
+def test_get_daily_pm_approval_false_when_not_approved(tmp_path):
     state = {"date": dpr._today(), "approved": False}
-    _patch_state_path(monkeypatch, _make_state_file(tmp_path, state))
-    assert dpr.get_daily_pm_approval() is False
+    (tmp_path / "daily_pm_state.json").write_text(json.dumps(state, ensure_ascii=False))
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert dpr.get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
-def test_get_daily_pm_approval_false_on_missing_file(monkeypatch):
-    monkeypatch.setattr(dpr, "_STATE_PATH", "/nonexistent/path/state.json")
-    assert dpr.get_daily_pm_approval() is False
+def test_get_daily_pm_approval_false_on_missing_file(tmp_path):
+    reset_config()
+    get_config(config_dir=tmp_path)  # no daily_pm_state.json
+    try:
+        assert dpr.get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
-def test_get_daily_pm_approval_false_on_invalid_json(tmp_path, monkeypatch):
-    p = tmp_path / "bad.json"
-    p.write_text("NOT JSON")
-    monkeypatch.setattr(dpr, "_STATE_PATH", str(p))
-    assert dpr.get_daily_pm_approval() is False
+def test_get_daily_pm_approval_false_on_invalid_json(tmp_path):
+    (tmp_path / "daily_pm_state.json").write_text("NOT JSON")
+    reset_config()
+    get_config(config_dir=tmp_path)
+    try:
+        assert dpr.get_daily_pm_approval() is False
+    finally:
+        reset_config()
 
 
 # ---------------------------------------------------------------------------
