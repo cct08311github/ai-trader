@@ -133,26 +133,36 @@ def create_proposal(
     return proposal
 
 
+import os as _os
+_ELIGIBILITY_CONFIDENCE: float = float(
+    _os.environ.get("AUTO_APPROVE_CONFIDENCE", "0.60")
+)
+
+
 def _check_auto_approve_eligibility(
     rule_category: str,
     confidence: Optional[float],
     backtest_sharpe_after: Optional[float],
     backtest_sharpe_before: Optional[float]
 ) -> bool:
-    """Check if proposal is eligible for auto-approval."""
+    """Check if proposal is eligible for auto-approval.
+
+    Threshold lowered from 0.85 → 0.60 (env: AUTO_APPROVE_CONFIDENCE).
+    LEVEL3 categories remain permanently ineligible regardless of confidence.
+    """
     # Cannot auto-approve Level 3 forbidden categories
     if rule_category in LEVEL3_FORBIDDEN_CATEGORIES:
         return False
-    
-    # Confidence threshold
-    if confidence is not None and confidence < 0.85:
+
+    # Confidence threshold (env-configurable, default 0.60)
+    if confidence is not None and confidence < _ELIGIBILITY_CONFIDENCE:
         return False
-    
+
     # Must show improvement
     if backtest_sharpe_after is not None and backtest_sharpe_before is not None:
         if backtest_sharpe_after <= backtest_sharpe_before:
             return False
-    
+
     return True
 
 

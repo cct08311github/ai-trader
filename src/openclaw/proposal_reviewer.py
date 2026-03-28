@@ -50,6 +50,30 @@ _REVIEW_PROMPT_TMPL = """你是一位台股 Portfolio Manager，請快速審查�
 - 不要有其他文字，只回傳 JSON
 """
 
+_STRATEGY_REVIEW_PROMPT_TMPL = """你是台股 Portfolio Manager，審查以下策略建議。
+
+【策略資訊】
+方向：{direction}
+建議：{proposed_value}
+佐證：{evidence}
+
+【持倉概況】
+{position_summary}
+
+【審查要求】
+- 評估策略方向是否符合當前市場情況
+- 回傳嚴格的 JSON，欄位：
+  {{
+    "decision": "approve" 或 "reject",
+    "confidence": 0.0–1.0,
+    "reason": "一句話說明理由（繁體中文）"
+  }}
+- 不要有其他文字，只回傳 JSON
+"""
+
+# Rules eligible for LLM review
+_REVIEWABLE_RULES = {"POSITION_REBALANCE", "STRATEGY_DIRECTION"}
+
 
 def _count_reviews_today(conn: sqlite3.Connection) -> int:
     """計算今日（台北時間）已完成的 LLM 審查次數。
@@ -142,12 +166,28 @@ def _build_position_summary(conn: sqlite3.Connection) -> str:
 
 def _gemini_review(symbol: str, weight: float, reduce_pct: float,
                    evidence: str, position_summary: str) -> dict:
-    """呼叫 MiniMax M2.5 審查提案，回傳 {decision, confidence, reason}。"""
+    """呼叫 MiniMax M2.7 審查 POSITION_REBALANCE 提案，回傳 {decision, confidence, reason}。"""
     from openclaw.llm_minimax import minimax_call
 
     prompt = _REVIEW_PROMPT_TMPL.format(
         symbol=symbol, weight=weight, reduce_pct=reduce_pct,
         evidence=evidence, position_summary=position_summary,
+    )
+    result = minimax_call(_MODEL, prompt)
+    return {k: v for k, v in result.items() if not k.startswith("_")}
+
+
+def _strategy_direction_review(
+    direction: str, proposed_value: str, evidence: str, position_summary: str
+) -> dict:
+    """呼叫 MiniMax M2.7 審查 STRATEGY_DIRECTION 提案，回傳 {decision, confidence, reason}。"""
+    from openclaw.llm_minimax import minimax_call
+
+    prompt = _STRATEGY_REVIEW_PROMPT_TMPL.format(
+        direction=direction,
+        proposed_value=proposed_value or "(無說明)",
+        evidence=evidence or "(無佐證)",
+        position_summary=position_summary,
     )
     result = minimax_call(_MODEL, prompt)
     return {k: v for k, v in result.items() if not k.startswith("_")}
@@ -204,45 +244,63 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
 
         try:
             proposal = json.loads(proposal_json_str or "{}")
-            if target_rule != "POSITION_REBALANCE":
+
+            # Skip rules not in reviewable set
+            if target_rule not in _REVIEWABLE_RULES:
                 log.info(
-                    "[proposal_reviewer] skip non-rebalance proposal %s (%s/%s)",
-                    proposal_id[:8],
-                    generated_by,
-                    target_rule,
+                    "[proposal_reviewer] skip non-reviewable proposal %s (%s/%s)",
+                    proposal_id[:8], generated_by, target_rule,
                 )
                 continue
 
-            symbol = str(proposal.get("symbol", "")).strip()
-            reduce_pct = float(proposal.get("reduce_pct", 0))
-            weight = float(
-                proposal.get(
-                    "current_weight",
-                    proposal.get("weight", live_weights.get(symbol, 0)),
+            if target_rule == "POSITION_REBALANCE":
+                symbol = str(proposal.get("symbol", "")).strip()
+                reduce_pct = float(proposal.get("reduce_pct", 0))
+                weight = float(
+                    proposal.get(
+                        "current_weight",
+                        proposal.get("weight", live_weights.get(symbol, 0)),
+                    )
                 )
-            )
 
-            if not symbol or reduce_pct <= 0 or weight <= 0:
-                conn.execute(
-                    "UPDATE strategy_proposals SET status=?, decided_at=? "
-                    "WHERE proposal_id=?",
-                    ("skipped", int(time.time() * 1000), proposal_id),
-                )
-                conn.commit()
-                log.info(
-                    "[proposal_reviewer] skipped invalid proposal %s "
-                    "(symbol=%r reduce_pct=%.4f weight=%.4f)",
-                    proposal_id[:8],
-                    symbol,
-                    reduce_pct,
-                    weight,
-                )
-                continue
+                if not symbol or reduce_pct <= 0 or weight <= 0:
+                    conn.execute(
+                        "UPDATE strategy_proposals SET status=?, decided_at=? "
+                        "WHERE proposal_id=?",
+                        ("skipped", int(time.time() * 1000), proposal_id),
+                    )
+                    conn.commit()
+                    log.info(
+                        "[proposal_reviewer] skipped invalid proposal %s "
+                        "(symbol=%r reduce_pct=%.4f weight=%.4f)",
+                        proposal_id[:8], symbol, reduce_pct, weight,
+                    )
+                    continue
 
-            result = _gemini_review(
-                symbol=symbol, weight=weight, reduce_pct=reduce_pct,
-                evidence=evidence or "", position_summary=position_summary,
-            )
+                result = _gemini_review(
+                    symbol=symbol, weight=weight, reduce_pct=reduce_pct,
+                    evidence=evidence or "", position_summary=position_summary,
+                )
+                decision_label = "核准減倉" if result.get("decision") == "approve" else "拒絕"
+                detail_line = f"建議減倉：{reduce_pct:.1%}　目前比重：{weight:.1%}"
+
+            else:  # STRATEGY_DIRECTION
+                committee_ctx = proposal.get("committee_context", {})
+                arbiter = committee_ctx.get("arbiter", {})
+                direction = str(arbiter.get("direction", proposal.get("direction", ""))).strip()
+                proposed_value = str(proposal.get("proposed_value", "")).strip()
+                symbol = str(proposal.get("symbol", "")).strip()
+
+                result = _strategy_direction_review(
+                    direction=direction,
+                    proposed_value=proposed_value,
+                    evidence=evidence or "",
+                    position_summary=position_summary,
+                )
+                decision_label = "核准策略" if result.get("decision") == "approve" else "拒絕"
+                detail_line = f"方向：{direction}"
+                weight = 0.0
+                reduce_pct = 0.0
 
             decision = result.get("decision", "reject").lower()
             confidence = float(result.get("confidence", 0))
@@ -258,14 +316,14 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
 
             # Telegram 通知
             from openclaw.tg_approver import _fmt_symbol
-            sym_display = _fmt_symbol(conn, symbol)
+            sym_display = _fmt_symbol(conn, symbol) if symbol else target_rule
             icon = "✅" if new_status == "approved" else "🚫"
             msg = (
                 f"{icon} <b>[盤中策略審查]</b>\n"
-                f"標的：<b>{sym_display}</b> | 規則：{target_rule}\n"
-                f"決定：<b>{'核准減倉' if new_status == 'approved' else '拒絕'}</b>"
-                f"（信心 {confidence:.0%}）\n"
-                f"建議減倉：{reduce_pct:.1%}　目前比重：{weight:.1%}\n"
+                f"{'標的：<b>' + sym_display + '</b> | ' if symbol else ''}"
+                f"規則：{target_rule}\n"
+                f"決定：<b>{decision_label}</b>（信心 {confidence:.0%}）\n"
+                f"{detail_line}\n"
                 f"理由：{reason}"
             )
             send_message(msg)
