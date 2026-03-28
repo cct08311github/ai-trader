@@ -70,10 +70,10 @@ class TestShouldRequireHumanNewLogic:
         # Arbiter rejects but direction is sell → auto (sell has priority)
         assert self._fn({"stance": "reject"}, 0.80, "sell") == 0
 
-    def test_no_direction_uses_sell_floor(self):
-        # direction="" → not a buy → uses sell floor 0.50
-        assert self._fn({}, 0.55, "") == 0
-        assert self._fn({}, 0.45, "") == 1
+    def test_no_direction_requires_human(self):
+        # direction="" → unknown/neutral → always require human
+        assert self._fn({}, 0.55, "") == 1
+        assert self._fn({}, 0.95, "") == 1
 
 
 # ---------------------------------------------------------------------------

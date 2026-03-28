@@ -41,7 +41,7 @@ def _confidence_weighted_qty(base_qty: int, confidence: float) -> int:
         factor = 0.75
     else:
         factor = 0.50
-    return max(min(int(base_qty * factor), base_qty), 1000)
+    return min(max(int(base_qty * factor), 1000), base_qty)
 
 
 @dataclass

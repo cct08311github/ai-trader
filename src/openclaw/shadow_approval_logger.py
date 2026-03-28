@@ -45,6 +45,10 @@ _AUTO_APPROVE_SELL_FLOOR: float = float(
 # New approval logic (no side-effects — pure function)
 # --------------------------------------------------------------------------- #
 
+_BUY_KEYWORDS = frozenset({"buy", "increase", "offensive", "bullish", "加碼", "買入", "多頭"})
+_SELL_KEYWORDS = frozenset({"sell", "reduce", "defensive", "bearish", "decrease", "減少", "減碼", "賣出", "空頭"})
+
+
 def _should_require_human_new_logic(
     arbiter_result: dict,
     confidence: float,
@@ -52,15 +56,22 @@ def _should_require_human_new_logic(
 ) -> int:
     """New auto-approval logic with asymmetric confidence thresholds.
 
-    Design philosophy: default auto-approve. Only require human review for:
-    1. Buy direction with confidence < BUY_FLOOR (0.65)
-    2. Sell direction with confidence < SELL_FLOOR (0.50)
-    3. Arbiter strongly against + buy direction (contradictory decision)
+    Design philosophy: auto-approve only when direction is clear.
+    1. Unknown/neutral direction → always require human
+    2. Buy direction with confidence < BUY_FLOOR (0.65) → require human
+    3. Sell direction with confidence < SELL_FLOOR (0.50) → require human
+    4. Arbiter strongly against + buy direction → require human
 
-    All sells with conf >= 0.50 auto-approve.
     LEVEL3 categories are blocked independently by proposal_engine.
     """
-    is_buy = "buy" in direction.lower() or "increase" in direction.lower()
+    d_lower = direction.lower()
+    is_buy = any(kw in d_lower for kw in _BUY_KEYWORDS)
+    is_sell = any(kw in d_lower for kw in _SELL_KEYWORDS)
+
+    # Unknown/neutral direction → always require human review
+    if not is_buy and not is_sell:
+        return 1
+
     floor = _AUTO_APPROVE_BUY_FLOOR if is_buy else _AUTO_APPROVE_SELL_FLOOR
 
     if confidence < floor:
