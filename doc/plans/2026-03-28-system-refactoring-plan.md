@@ -468,3 +468,18 @@ Phase 5 (日誌) ← 可獨立執行，建議穿插在各 Phase 之間
 | 5 | 1 (log_utils.py) | ~10 | ~50 新 + ~100 改 |
 
 **Total**: ~14 新檔案, ~22 修改檔案, ~2,250 行新增, ~2,200 行搬移/修改
+
+---
+
+## 7. 實作結果（2026-03-28）
+
+| Phase | Commit | 新增 | 修改 | 測試結果 |
+|-------|--------|------|------|---------|
+| 1 | `695bd60` | config_manager.py + test | 8 modules + 10 test files | 2450 passed, 6 pre-existing failures |
+| 2 | `34af6f6` | 5 repositories + 3 test files | ticker_watcher.py | 2466 passed |
+| 3 | `9348a83` | market_data_service.py, watcher_lifecycle.py | ticker_watcher.py | 2466 passed |
+| 4 | `3b5a593` | guards/ (6 files) + test | — | 2473 passed |
+| 5 | `36352fc` | log_utils.py + test | — | 2476 passed |
+
+**最終結果**：2476 passed, 6 pre-existing failures, 0 new failures。
+新增 47 個測試（2429 → 2476），全部通過。
