@@ -287,12 +287,39 @@ def _strategy_direction_review(
     return {k: v for k, v in result.items() if not k.startswith("_")}
 
 
+_RULE_PRIORITY = {"POSITION_REBALANCE": 0, "STRATEGY_DIRECTION": 1}
+_HIGH_PENDING_THRESHOLD: int = 20
+_DYNAMIC_LIMIT_MULTIPLIER: float = 1.5
+
+
+def _effective_daily_limit(pending_count: int) -> int:
+    """當積壓超過閾值時，動態提高每日 LLM 上限。"""
+    if pending_count > _HIGH_PENDING_THRESHOLD:
+        return int(_LLM_DAILY_LIMIT * _DYNAMIC_LIMIT_MULTIPLIER)
+    return _LLM_DAILY_LIMIT
+
+
+def _sort_key(row: tuple) -> tuple:
+    """排序鍵：先按規則優先級（POSITION_REBALANCE=0, STRATEGY_DIRECTION=1），
+    再按 confidence 降序（高信心優先）。"""
+    _, _, target_rule, _, proposal_json_str = row
+    rule_pri = _RULE_PRIORITY.get(target_rule, 99)
+    try:
+        conf = float(json.loads(proposal_json_str or "{}").get("confidence", 0))
+    except Exception:
+        conf = 0.0
+    return (rule_pri, -conf)
+
+
 def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
     """審查所有 pending proposals，核准/拒絕並傳送 Telegram 通知。
 
     每日 LLM 呼叫次數受 _LLM_DAILY_LIMIT 限制（預設 50，可由
-    LLM_DAILY_CALL_LIMIT 環境變數覆蓋）。超出後停止審查、寫入
-    incidents 表並透過 Telegram 通知積壓狀況。
+    LLM_DAILY_CALL_LIMIT 環境變數覆蓋）。積壓超過 20 筆時自動提升
+    1.5× 上限。超出後停止審查、寫入 incidents 表並透過 Telegram 通知積壓狀況。
+
+    排序邏輯：POSITION_REBALANCE 優先於 STRATEGY_DIRECTION，同規則內
+    以 confidence 降序排列（高信心提案先審）。
 
     Returns:
         本次審查完成的 proposal 數量
@@ -309,6 +336,10 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
     if not rows:
         return 0
 
+    # 優先級排序：POSITION_REBALANCE 先，同規則內高信心優先
+    rows = sorted(rows, key=_sort_key)
+    daily_limit = _effective_daily_limit(len(rows))
+
     from openclaw.tg_notify import send_message
     position_summary = _build_position_summary(conn)
     live_weights = _position_weights(conn)
@@ -317,18 +348,18 @@ def auto_review_pending_proposals(conn: sqlite3.Connection) -> int:
     for proposal_id, generated_by, target_rule, evidence, proposal_json_str in rows:
         # ── 費用守衛：每筆審查前先檢查今日已用量 ──────────────────────────
         reviewed_today = _count_reviews_today(conn)
-        if reviewed_today >= _LLM_DAILY_LIMIT:
+        if reviewed_today >= daily_limit:
             remaining = len(rows) - reviewed
             log.warning(
                 "[proposal_reviewer] 今日 LLM 審查已達上限 %d，%d 筆 pending proposals 積壓",
-                _LLM_DAILY_LIMIT, remaining,
+                daily_limit, remaining,
             )
             _record_cost_guard_incident(
                 conn, reviewed_today=reviewed_today, pending_remaining=remaining
             )
             try:
                 send_message(
-                    f"⚠️ <b>[費用守衛]</b> 今日 LLM 審查已達上限 {_LLM_DAILY_LIMIT} 次。\n"
+                    f"⚠️ <b>[費用守衛]</b> 今日 LLM 審查已達上限 {daily_limit} 次。\n"
                     f"尚有 {remaining} 筆 pending proposals 待審，將於明日自動恢復。\n"
                     f"如需立即審查，請至 Strategy 頁面手動處理。"
                 )
