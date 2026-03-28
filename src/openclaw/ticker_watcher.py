@@ -58,6 +58,8 @@ def _interruptible_sleep(seconds: int) -> bool:
 
 from openclaw.config_manager import get_config
 from openclaw.pnl_engine import on_sell_filled, sync_positions_table
+from openclaw.repositories.order_repository import FillRecord, OrderRecord, OrderRepository
+from openclaw.repositories.decision_repository import DecisionRepository
 
 
 def _get_latest_committee_stance(conn: sqlite3.Connection) -> str:
@@ -574,31 +576,23 @@ def _generate_signal(
     return "buy" if close < ref * (1 - _BUY_SIGNAL_PCT) else "flat"
 
 
-# ── DB 寫入 helpers ───────────────────────────────────────────────────────────
+# ── DB 寫入 helpers (delegate to repositories) ───────────────────────────────
 def _persist_decision(conn: sqlite3.Connection, *, decision_id: str, symbol: str,
                        signal: str, now_iso: str,
                        signal_source: str = "technical") -> None:
-    conn.execute(
-        """INSERT OR IGNORE INTO decisions
-           (decision_id, ts, symbol, strategy_id, strategy_version,
-            signal_side, signal_score, signal_ttl_ms, llm_ref, reason_json,
-            signal_source)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (decision_id, now_iso, symbol, STRATEGY_ID, STRATEGY_VERSION,
-         signal, 0.7 if signal != "flat" else 0.0, 30000, None,
-         json.dumps({"source": "ticker_watcher"}, ensure_ascii=True),
-         signal_source),
+    DecisionRepository(conn).insert_decision(
+        decision_id=decision_id, symbol=symbol, signal_side=signal,
+        now_iso=now_iso, strategy_id=STRATEGY_ID, strategy_version=STRATEGY_VERSION,
+        signal_score=0.7 if signal != "flat" else 0.0,
+        signal_source=signal_source,
     )
 
 
 def _persist_risk_check(conn: sqlite3.Connection, *, decision_id: str, passed: bool,
                          reject_code: Optional[str], metrics: dict) -> None:
-    conn.execute(
-        """INSERT INTO risk_checks
-           (check_id, decision_id, ts, passed, reject_code, metrics_json)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), decision_id, _utc_now_iso(),
-         int(passed), reject_code, json.dumps(metrics, ensure_ascii=True)),
+    DecisionRepository(conn).insert_risk_check(
+        decision_id=decision_id, passed=passed,
+        reject_code=reject_code, metrics=metrics,
     )
 
 
@@ -607,37 +601,28 @@ def _persist_order(conn: sqlite3.Connection, *, order_id: str, decision_id: str,
                     price: float, status: str = "submitted",
                     settlement_date: Optional[str] = None,
                     account_mode: str = "simulation") -> None:
-    conn.execute(
-        """INSERT INTO orders
-           (order_id, decision_id, broker_order_id, ts_submit,
-            symbol, side, qty, price, order_type, tif, status, strategy_version,
-            settlement_date, account_mode)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (order_id, decision_id, broker_order_id, _utc_now_iso(),
-         symbol, side, qty, price, "limit", "IOC", status, STRATEGY_VERSION,
-         settlement_date, account_mode),
-    )
+    OrderRepository(conn).insert_order(OrderRecord(
+        order_id=order_id, decision_id=decision_id, broker_order_id=broker_order_id,
+        symbol=symbol, side=side, qty=qty, price=price, status=status,
+        strategy_version=STRATEGY_VERSION, settlement_date=settlement_date,
+        account_mode=account_mode,
+    ))
 
 
 def _persist_fill(conn: sqlite3.Connection, *, order_id: str, qty: int,
                    price: float, fee: float = 0.0, tax: float = 0.0) -> None:
-    conn.execute(
-        """INSERT INTO fills (fill_id, order_id, ts_fill, qty, price, fee, tax)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), order_id, _utc_now_iso(), qty, price, fee, tax),
-    )
+    OrderRepository(conn).insert_fill(FillRecord(
+        order_id=order_id, qty=qty, price=price, fee=fee, tax=tax,
+    ))
 
 
 def _insert_order_event(conn: sqlite3.Connection, *, order_id: str, event_type: str,
                          from_status: Optional[str], to_status: Optional[str],
                          source: str, reason_code: Optional[str], payload: dict) -> None:
-    conn.execute(
-        """INSERT INTO order_events
-           (event_id, ts, order_id, event_type, from_status, to_status,
-            source, reason_code, payload_json)
-           VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)""",
-        (str(uuid.uuid4()), order_id, event_type, from_status, to_status,
-         source, reason_code, json.dumps(payload, ensure_ascii=True)),
+    OrderRepository(conn).insert_order_event(
+        order_id=order_id, event_type=event_type,
+        from_status=from_status, to_status=to_status,
+        source=source, reason_code=reason_code, payload=payload,
     )
 
 
