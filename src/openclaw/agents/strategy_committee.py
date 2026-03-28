@@ -457,6 +457,21 @@ def run_strategy_committee(
                     },
                 },
             }
+            from openclaw.shadow_approval_logger import (
+                SHADOW_MODE,
+                _should_require_human_new_logic,
+                log_shadow_decision,
+            )
+            _confidence = float(p.get("confidence", 0.5))
+            _direction = str(arbiter_resp.get("direction", ""))
+            _shadow_would_approve = _should_require_human_new_logic(
+                arbiter_resp, _confidence, _direction
+            ) == 0
+
+            # Phase 0: shadow mode — log new logic decision, keep current behaviour
+            # Phase 1: when SHADOW_MODE=false, new logic takes effect
+            _requires_human = 1 if SHADOW_MODE else (0 if _shadow_would_approve else 1)
+
             proposal_id = write_proposal(
                 _conn,
                 generated_by="strategy_committee",
@@ -464,11 +479,26 @@ def run_strategy_committee(
                 rule_category=p.get("rule_category", "strategy"),
                 proposed_value=proposed_value,
                 supporting_evidence=supporting_evidence,
-                confidence=float(p.get("confidence", 0.5)),
-                requires_human_approval=1,   # 策略小組建議必須人工確認
+                confidence=_confidence,
+                requires_human_approval=_requires_human,
                 proposal_type="suggest",
                 proposal_payload=proposal_payload,
             )
+
+            # Log shadow decision for later validation (non-blocking)
+            try:
+                _symbol = str(p.get("symbol", ""))
+                log_shadow_decision(
+                    _conn,
+                    proposal_id=proposal_id,
+                    symbol=_symbol,
+                    direction=_direction,
+                    confidence=_confidence,
+                    would_approve=_shadow_would_approve,
+                    current_requires_human=_requires_human,
+                )
+            except Exception as _shadow_exc:  # noqa: BLE001
+                log.warning("[strategy_committee] shadow logging failed: %s", _shadow_exc)
             persisted_proposals.append(p)
 
             # 非阻斷地開 GitHub Issue（失敗不影響主流程）- 已停用

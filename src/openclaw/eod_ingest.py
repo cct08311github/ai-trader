@@ -423,6 +423,22 @@ def main() -> None:
                 file=__import__("sys").stderr,
             )
 
+        # ── Shadow approval logger backfill（T+5 / T+20 回填）──────────
+        try:
+            from openclaw.shadow_approval_logger import backfill_shadow_decisions_eod
+            conn.row_factory = None
+            _shadow_updated = backfill_shadow_decisions_eod(conn)
+            if _shadow_updated:
+                print(
+                    f"[eod_ingest] shadow_decisions backfilled: {_shadow_updated} rows",
+                    file=__import__("sys").stderr,
+                )
+        except Exception as _shadow_exc:
+            print(
+                f"[eod_ingest] shadow backfill skipped: {_shadow_exc}",
+                file=__import__("sys").stderr,
+            )
+
         try:
             print(
                 json.dumps(
