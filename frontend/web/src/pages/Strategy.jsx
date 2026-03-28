@@ -608,6 +608,8 @@ export default function StrategyPage() {
   const [batchPending, setBatchPending] = useState(null) // { type: 'approve'|'reject' }
 
   const [memOrder, setMemOrder] = useState('desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 50
 
   // SSE 整合：監聽 llm_traces 新事件 → 自動刷新提案列表（debounce 500ms）
   useEffect(() => {
@@ -655,6 +657,20 @@ export default function StrategyPage() {
     })
   }, [proposals, symbolNames])
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  const pagedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE
+    return rows.slice(start, start + PAGE_SIZE)
+  }, [rows, currentPage])
+
+  // Reset to page 1 when proposals change significantly
+  useEffect(() => {
+    setCurrentPage(p => {
+      const maxPage = Math.max(1, Math.ceil((proposals || []).length / PAGE_SIZE))
+      return p > maxPage ? 1 : p
+    })
+  }, [proposals])
+
   const openDetail = p => {
     setSelected(p)
     setModalOpen(true)
@@ -688,7 +704,7 @@ export default function StrategyPage() {
   }
 
   // ── 批量選取邏輯 ──────────────────────────────────────────────────
-  const pendingRows = useMemo(() => rows.filter(r => String(r?.status || '').toLowerCase() === 'pending'), [rows])
+  const pendingRows = useMemo(() => pagedRows.filter(r => String(r?.status || '').toLowerCase() === 'pending'), [pagedRows])
   const allPendingSelected = pendingRows.length > 0 && pendingRows.every(r => selectedIds.has(r.proposal_id))
 
   const toggleSelect = (pid) => {
@@ -806,14 +822,14 @@ export default function StrategyPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {rows.length === 0 ? (
+              {pagedRows.length === 0 ? (
                 <tr>
                   <td className="px-4 py-5 text-slate-500" colSpan={8}>
                     {loading.proposals ? '讀取中...' : '目前無提案記錄'}
                   </td>
                 </tr>
               ) : (
-                rows.map(p => {
+                pagedRows.map(p => {
                   const status = String(p?.status || '').toLowerCase()
                   const canAct = status === 'pending'
                   return (
@@ -877,8 +893,68 @@ export default function StrategyPage() {
           </table>
         </div>
 
-        <div className="mt-3 text-[11px] text-slate-500">
-          點擊 Proposal ID 開啟詳情 · approve/reject 需要 OPS TOKEN · 由 SSE llm_traces 事件自動刷新（每 10s 輪詢兜底）
+        {/* ── 分頁控制 ──────────────────────────────────────────────── */}
+        <div className="mt-3 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500">
+            共 {rows.length} 筆，第 {currentPage}/{totalPages} 頁
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(1)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+              >
+                ««
+              </button>
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => p - 1)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+              >
+                «
+              </button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let page
+                if (totalPages <= 5) {
+                  page = i + 1
+                } else if (currentPage <= 3) {
+                  page = i + 1
+                } else if (currentPage >= totalPages - 2) {
+                  page = totalPages - 4 + i
+                } else {
+                  page = currentPage - 2 + i
+                }
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                      page === currentPage
+                        ? 'bg-slate-700 text-white'
+                        : 'border border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              })}
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => p + 1)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+              >
+                »
+              </button>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(totalPages)}
+                className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-400 hover:bg-slate-800 disabled:opacity-30"
+              >
+                »»
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
