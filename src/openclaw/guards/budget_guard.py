@@ -18,9 +18,9 @@ class BudgetGuard(Guard):
         if budget_tier and budget_tier.threshold_pct <= budget_used_pct:
             emit_budget_event(ctx.conn, tier=budget_tier, used_pct=budget_used_pct)
 
-        # Pass budget info downstream via context_updates
         return GuardResult(
-            passed=True,  # Budget guard doesn't reject, just informs
+            passed=True,
+            metadata={"check_type": "budget"},
             context_updates={
                 "budget_status": budget_status,
                 "budget_used_pct": budget_used_pct,

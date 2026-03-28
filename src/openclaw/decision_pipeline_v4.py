@@ -113,6 +113,28 @@ def _insert_risk_check(
     )
 
 
+def _default_guard_chain():
+    """Build the default guard chain matching the original v4 pipeline order."""
+    from openclaw.guards.base import GuardChain
+    from openclaw.guards.system_switch_guard import SystemSwitchGuard
+    from openclaw.guards.budget_guard import BudgetGuard
+    from openclaw.guards.drawdown_guard import DrawdownGuard, DeepSuspendGuard
+    from openclaw.guards.sentinel_guard import (
+        SentinelPreTradeGuard,
+        PMVetoGuard,
+        SentinelPostRiskGuard,
+    )
+    return GuardChain([
+        SystemSwitchGuard(),       # Step 0: master switch
+        BudgetGuard(),             # Step 1: budget evaluation
+        DrawdownGuard(),           # Step 2: drawdown risk mode
+        DeepSuspendGuard(),        # Step 2b: deep suspend
+        SentinelPreTradeGuard(),   # Step 3-4: hard circuit-breakers
+        PMVetoGuard(),             # Step 5: PM veto (soft)
+        SentinelPostRiskGuard(),   # Step 6: post-risk check
+    ])
+
+
 def run_decision_with_sentinel(
     conn: sqlite3.Connection,
     *,
@@ -124,151 +146,66 @@ def run_decision_with_sentinel(
     pm_approved: bool = False,
     llm_call: LLMCaller,
     decision_id: Optional[str] = None,
+    guard_chain=None,
 ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
     """
     Complete decision pipeline with Sentinel integration (v4 #1).
-    
+
+    Uses a pluggable GuardChain (Chain of Responsibility pattern).
+    Each guard evaluates independently; the first rejection short-circuits.
+
     Returns: (allowed, reason_code, decision_record)
     """
-    
-    # Generate decision ID if not provided
+    from openclaw.guards.base import GuardContext
+
     if decision_id is None:
         decision_id = f"dec_{uuid.uuid4().hex[:16]}"
-    
-    # Step 0: Master switch check (highest priority safety)
-    import os
 
-    system_state_path = os.path.join(os.path.dirname(__file__), "../../config/system_state.json")
-    allowed, reason = check_system_switch(system_state_path)
-    ts = datetime.now(timezone.utc).isoformat()
-    logger.warning(
-        "master_switch_check decision_id=%s ts=%s allowed=%s reason=%s",
-        decision_id,
-        ts,
-        allowed,
-        reason or "",
-    )
-    if not allowed:
-        _insert_risk_check(conn, decision_id, "master_switch", False, reason or "disabled")
-        # No decision record needed as this is before any order candidate
-        return False, "MASTER_SWITCH_OFF", None
-    _insert_risk_check(conn, decision_id, "master_switch", True, "Auto-trading enabled")
-    
-    # Step 1: Load budget policy and evaluate budget status
-    budget_policy = load_budget_policy(budget_policy_path)
-    budget_status, budget_used_pct, budget_tier = evaluate_budget(conn, budget_policy)
-    
-    # Record budget event if at threshold
-    if budget_tier and budget_tier.threshold_pct <= budget_used_pct:
-        emit_budget_event(conn, tier=budget_tier, used_pct=budget_used_pct)
-    
-    # Step 2: Evaluate drawdown guard
-    drawdown_decision = evaluate_drawdown_guard(conn, drawdown_policy)
+    chain = guard_chain or _default_guard_chain()
 
-    # Step 2b: Deep suspend guard — consecutive monthly losses (#398)
-    deep_decision = evaluate_deep_suspend_guard(conn, drawdown_policy)
-    if deep_decision.risk_mode == "deep_suspend":
-        apply_drawdown_actions(conn, deep_decision)
-        _insert_risk_check(conn, decision_id, "deep_suspend_guard", False, deep_decision.reason_code)
-        return PipelineResult(approved=False, reject_code=deep_decision.reason_code)
-
-    # Step 3: Sentinel pre-trade check (hard circuit-breakers)
-    sentinel_verdict = sentinel_pre_trade_check(
+    ctx = GuardContext(
+        conn=conn,
         system_state=system_state,
-        drawdown=drawdown_decision if drawdown_decision.risk_mode == "suspended" else None,
-        budget_status=budget_status,
-        budget_used_pct=budget_used_pct,
-        max_db_write_p99_ms=200
+        order_candidate=order_candidate,
+        budget_policy_path=budget_policy_path,
+        drawdown_policy=drawdown_policy,
+        pm_context=pm_context,
+        pm_approved=pm_approved,
+        llm_call=llm_call,
+        decision_id=decision_id,
     )
-    
-    # Record sentinel check
-    _insert_risk_check(
-        conn,
-        decision_id,
-        "sentinel_pre_trade",
-        sentinel_verdict.allowed and not sentinel_verdict.hard_blocked,
-        json.dumps({
-            "reason_code": sentinel_verdict.reason_code,
-            "hard_blocked": sentinel_verdict.hard_blocked,
-            "detail": sentinel_verdict.detail
-        })
+
+    approved, reject_code, ctx = chain.evaluate(ctx)
+
+    # ── Audit trail: write risk_check records from collected results ─
+    for guard, result in getattr(chain, "last_results", []):
+        check_type = result.metadata.get("check_type", guard.name)
+        _insert_risk_check(conn, decision_id, check_type, result.passed,
+                           json.dumps(result.metadata))
+
+    # ── Decision record (audit trail) ──────────────────────────────
+    sentinel_verdict = getattr(ctx, "sentinel_verdict", None) or SentinelVerdict(
+        allowed=approved, hard_blocked=False, reason_code=reject_code, detail={},
     )
-    
-    # Step 4: If hard blocked by Sentinel, stop immediately
-    if is_hard_block(sentinel_verdict) or not sentinel_verdict.allowed:
-        # Still insert decision record for audit trail
-        if order_candidate:
-            _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.side,
-                order_candidate.qty, order_candidate.price,
-                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
-                sentinel_verdict, budget_status, budget_used_pct,
-                drawdown_decision, pm_approved
-            )
-        return False, sentinel_verdict.reason_code, None
-    
-    # Step 5: PM veto check (soft layer)
-    pm_verdict = pm_veto(pm_approved=pm_approved)
-    _insert_risk_check(
-        conn,
-        decision_id,
-        "pm_veto",
-        pm_verdict.allowed,
-        json.dumps({"reason_code": pm_verdict.reason_code})
+    drawdown_decision = getattr(ctx, "drawdown_decision", None) or DrawdownDecision(
+        risk_mode="normal", reason_code="NORMAL", drawdown=0.0, losing_streak_days=0,
     )
-    
-    if not pm_verdict.allowed:
-        # PM veto overrides, but not a hard block
-        if order_candidate:
-            _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.side,
-                order_candidate.qty, order_candidate.price,
-                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
-                sentinel_verdict, budget_status, budget_used_pct,
-                drawdown_decision, pm_approved
-            )
-        return False, pm_verdict.reason_code, None
-    
-    # Step 6: Sentinel post-risk check (after candidate exists)
-    if order_candidate:
-        post_verdict = sentinel_post_risk_check(
-            system_state=system_state,
-            candidate=order_candidate
-        )
-        
-        _insert_risk_check(
-            conn,
-            decision_id,
-            "sentinel_post_risk",
-            post_verdict.allowed and not post_verdict.hard_blocked,
-            json.dumps({
-                "reason_code": post_verdict.reason_code,
-                "hard_blocked": post_verdict.hard_blocked,
-                "detail": post_verdict.detail
-            })
-        )
-        
-        if is_hard_block(post_verdict) or not post_verdict.allowed:
-            _insert_decision_record(
-                conn, decision_id, order_candidate.symbol, order_candidate.side,
-                order_candidate.qty, order_candidate.price,
-                getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
-                sentinel_verdict, budget_status, budget_used_pct,
-                drawdown_decision, pm_approved
-            )
-            return False, post_verdict.reason_code, None
-    
-    # Step 7: All checks passed, insert decision record
+    budget_status = getattr(ctx, "budget_status", "ok")
+    budget_used_pct = getattr(ctx, "budget_used_pct", 0.0)
+
     if order_candidate:
         _insert_decision_record(
             conn, decision_id, order_candidate.symbol, order_candidate.side,
             order_candidate.qty, order_candidate.price,
-            getattr(order_candidate, "stop_loss", 0.0), getattr(order_candidate, "take_profit", 0.0),
+            getattr(order_candidate, "stop_loss", 0.0),
+            getattr(order_candidate, "take_profit", 0.0),
             sentinel_verdict, budget_status, budget_used_pct,
-            drawdown_decision, pm_approved
+            drawdown_decision, pm_approved,
         )
-    
-    # Step 8: Return success
+
+    if not approved:
+        return False, reject_code, None
+
     decision_record = {
         "decision_id": decision_id,
         "allowed": True,
@@ -277,9 +214,9 @@ def run_decision_with_sentinel(
         "budget_used_pct": budget_used_pct,
         "drawdown_decision": drawdown_decision,
         "pm_approved": pm_approved,
-        "order_candidate": order_candidate.__dict__ if order_candidate else None
+        "order_candidate": order_candidate.__dict__ if order_candidate else None,
     }
-    
+
     return True, "DECISION_APPROVED", decision_record
 
 

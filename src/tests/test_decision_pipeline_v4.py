@@ -296,19 +296,21 @@ class TestRunDecisionWithSentinel:
         def mock_llm(model, prompt):
             return {"result": "ok"}
 
-        with patch("openclaw.decision_pipeline_v4.check_system_switch",
+        with patch("openclaw.guards.system_switch_guard.check_system_switch",
                    return_value=(trading_enabled, None if trading_enabled else "disabled")), \
-             patch("openclaw.decision_pipeline_v4.load_budget_policy") as mock_lbp, \
-             patch("openclaw.decision_pipeline_v4.evaluate_budget",
+             patch("openclaw.guards.budget_guard.load_budget_policy") as mock_lbp, \
+             patch("openclaw.guards.budget_guard.evaluate_budget",
                    return_value=("ok", budget_used_pct, None)), \
-             patch("openclaw.decision_pipeline_v4.emit_budget_event"), \
-             patch("openclaw.decision_pipeline_v4.evaluate_drawdown_guard",
+             patch("openclaw.guards.budget_guard.emit_budget_event"), \
+             patch("openclaw.guards.drawdown_guard.evaluate_drawdown_guard",
                    return_value=dd), \
-             patch("openclaw.decision_pipeline_v4.sentinel_pre_trade_check",
+             patch("openclaw.guards.drawdown_guard.evaluate_deep_suspend_guard",
+                   return_value=_make_drawdown_decision("normal")), \
+             patch("openclaw.guards.sentinel_guard.sentinel_pre_trade_check",
                    return_value=pre_verdict), \
-             patch("openclaw.decision_pipeline_v4.sentinel_post_risk_check",
+             patch("openclaw.guards.sentinel_guard.sentinel_post_risk_check",
                    return_value=post_verdict), \
-             patch("openclaw.decision_pipeline_v4.pm_veto") as mock_pm_veto:
+             patch("openclaw.guards.sentinel_guard.pm_veto") as mock_pm_veto:
 
             from openclaw.token_budget import BudgetPolicy
             mock_lbp.return_value = MagicMock(spec=BudgetPolicy)
@@ -455,19 +457,21 @@ class TestRunDecisionWithSentinel:
         post_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
         pm_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
 
-        with patch("openclaw.decision_pipeline_v4.check_system_switch",
+        with patch("openclaw.guards.system_switch_guard.check_system_switch",
                    return_value=(True, None)), \
-             patch("openclaw.decision_pipeline_v4.load_budget_policy") as mock_lbp, \
-             patch("openclaw.decision_pipeline_v4.evaluate_budget",
+             patch("openclaw.guards.budget_guard.load_budget_policy") as mock_lbp, \
+             patch("openclaw.guards.budget_guard.evaluate_budget",
                    return_value=("warn", 0.85, tier)), \
-             patch("openclaw.decision_pipeline_v4.emit_budget_event") as mock_emit, \
-             patch("openclaw.decision_pipeline_v4.evaluate_drawdown_guard",
+             patch("openclaw.guards.budget_guard.emit_budget_event") as mock_emit, \
+             patch("openclaw.guards.drawdown_guard.evaluate_drawdown_guard",
                    return_value=dd), \
-             patch("openclaw.decision_pipeline_v4.sentinel_pre_trade_check",
+             patch("openclaw.guards.drawdown_guard.evaluate_deep_suspend_guard",
+                   return_value=_make_drawdown_decision("normal")), \
+             patch("openclaw.guards.sentinel_guard.sentinel_pre_trade_check",
                    return_value=pre_verdict), \
-             patch("openclaw.decision_pipeline_v4.sentinel_post_risk_check",
+             patch("openclaw.guards.sentinel_guard.sentinel_post_risk_check",
                    return_value=post_verdict), \
-             patch("openclaw.decision_pipeline_v4.pm_veto",
+             patch("openclaw.guards.sentinel_guard.pm_veto",
                    return_value=pm_verdict):
 
             mock_lbp.return_value = MagicMock()
@@ -496,17 +500,19 @@ class TestRunDecisionWithSentinel:
         post_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
         pm_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
 
-        with patch("openclaw.decision_pipeline_v4.check_system_switch",
+        with patch("openclaw.guards.system_switch_guard.check_system_switch",
                    return_value=(True, None)), \
-             patch("openclaw.decision_pipeline_v4.load_budget_policy") as mock_lbp, \
-             patch("openclaw.decision_pipeline_v4.evaluate_budget",
+             patch("openclaw.guards.budget_guard.load_budget_policy") as mock_lbp, \
+             patch("openclaw.guards.budget_guard.evaluate_budget",
                    return_value=("ok", 0.1, None)), \
-             patch("openclaw.decision_pipeline_v4.evaluate_drawdown_guard",
+             patch("openclaw.guards.drawdown_guard.evaluate_drawdown_guard",
                    return_value=dd), \
-             patch("openclaw.decision_pipeline_v4.sentinel_pre_trade_check") as mock_pre, \
-             patch("openclaw.decision_pipeline_v4.sentinel_post_risk_check",
+             patch("openclaw.guards.drawdown_guard.evaluate_deep_suspend_guard",
+                   return_value=_make_drawdown_decision("normal")), \
+             patch("openclaw.guards.sentinel_guard.sentinel_pre_trade_check") as mock_pre, \
+             patch("openclaw.guards.sentinel_guard.sentinel_post_risk_check",
                    return_value=post_verdict), \
-             patch("openclaw.decision_pipeline_v4.pm_veto",
+             patch("openclaw.guards.sentinel_guard.pm_veto",
                    return_value=pm_verdict):
 
             mock_lbp.return_value = MagicMock()
@@ -537,18 +543,20 @@ class TestRunDecisionWithSentinel:
         post_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
         pm_verdict = SentinelVerdict(allowed=True, hard_blocked=False, reason_code="OK", detail={})
 
-        with patch("openclaw.decision_pipeline_v4.check_system_switch",
+        with patch("openclaw.guards.system_switch_guard.check_system_switch",
                    return_value=(True, None)), \
-             patch("openclaw.decision_pipeline_v4.load_budget_policy") as mock_lbp, \
-             patch("openclaw.decision_pipeline_v4.evaluate_budget",
+             patch("openclaw.guards.budget_guard.load_budget_policy") as mock_lbp, \
+             patch("openclaw.guards.budget_guard.evaluate_budget",
                    return_value=("ok", 0.1, None)), \
-             patch("openclaw.decision_pipeline_v4.evaluate_drawdown_guard",
+             patch("openclaw.guards.drawdown_guard.evaluate_drawdown_guard",
                    return_value=dd), \
-             patch("openclaw.decision_pipeline_v4.sentinel_pre_trade_check",
+             patch("openclaw.guards.drawdown_guard.evaluate_deep_suspend_guard",
+                   return_value=_make_drawdown_decision("normal")), \
+             patch("openclaw.guards.sentinel_guard.sentinel_pre_trade_check",
                    return_value=pre_verdict), \
-             patch("openclaw.decision_pipeline_v4.sentinel_post_risk_check",
+             patch("openclaw.guards.sentinel_guard.sentinel_post_risk_check",
                    return_value=post_verdict), \
-             patch("openclaw.decision_pipeline_v4.pm_veto",
+             patch("openclaw.guards.sentinel_guard.pm_veto",
                    return_value=pm_verdict):
 
             mock_lbp.return_value = MagicMock()
