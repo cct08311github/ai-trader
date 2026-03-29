@@ -5,6 +5,7 @@ import os
 import sqlite3
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -962,36 +963,47 @@ def inventory_list(source: str = "shioaji", simulation: bool = True):
 def get_quote_snapshot(symbol: str):
     """一次性 snapshot：收盤價、漲跌幅、成交量、金額、買1/賣1。"""
     symbol = symbol.strip().upper()
+    snaps = None
     try:
         from app.services.shioaji_service import _get_api
-        api = _get_api(simulation=True)
-        contract = api.Contracts.Stocks[symbol]
-        snaps = api.snapshots([contract])
-        if snaps:
-            s = snaps[0]
-            close     = float(getattr(s, "close",        0) or 0)
-            reference = float(getattr(s, "reference",    0) or 0)
-            volume    = int(getattr(s, "total_volume",   0) or 0)
-            total_amt = int(
-                getattr(s, "total_amount", None) or getattr(s, "amount", 0) or 0
-            )
-            bid1 = float(getattr(s, "bid_price",  0) or 0)
-            ask1 = float(
-                getattr(s, "sell_price", None) or getattr(s, "ask_price", 0) or 0
-            )
-            chg_price = round(close - reference, 2) if reference else 0.0
-            chg_rate  = round((close - reference) / reference * 100, 2) if reference else 0.0
-            return {
-                "status": "ok", "symbol": symbol, "source": "shioaji",
-                "data": {
-                    "close": close, "reference": reference,
-                    "change_price": chg_price, "change_rate": chg_rate,
-                    "volume": volume, "total_amount": total_amt,
-                    "bid_price": bid1, "ask_price": ask1,
-                },
-            }
+
+        def _fetch_snapshot():
+            api = _get_api(simulation=True)
+            contract = api.Contracts.Stocks[symbol]
+            return api.snapshots([contract])
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_fetch_snapshot)
+            try:
+                snaps = future.result(timeout=3)
+            except FuturesTimeoutError:
+                snaps = None
     except Exception:  # noqa: BLE001 — broker API; can't predict exceptions
         pass
+
+    if snaps:
+        s = snaps[0]
+        close     = float(getattr(s, "close",        0) or 0)
+        reference = float(getattr(s, "reference",    0) or 0)
+        volume    = int(getattr(s, "total_volume",   0) or 0)
+        total_amt = int(
+            getattr(s, "total_amount", None) or getattr(s, "amount", 0) or 0
+        )
+        bid1 = float(getattr(s, "bid_price",  0) or 0)
+        ask1 = float(
+            getattr(s, "sell_price", None) or getattr(s, "ask_price", 0) or 0
+        )
+        chg_price = round(close - reference, 2) if reference else 0.0
+        chg_rate  = round((close - reference) / reference * 100, 2) if reference else 0.0
+        return {
+            "status": "ok", "symbol": symbol, "source": "shioaji",
+            "data": {
+                "close": close, "reference": reference,
+                "change_price": chg_price, "change_rate": chg_rate,
+                "volume": volume, "total_amount": total_amt,
+                "bid_price": bid1, "ask_price": ask1,
+            },
+        }
     # Fallback: last EOD close from eod_prices
     try:
         with get_conn() as conn:
