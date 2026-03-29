@@ -48,6 +48,8 @@ _PROMPT_TEMPLATE = """\
     {{
       "target_rule": "POSITION_REBALANCE",
       "rule_category": "portfolio",
+      "symbol": "2382",
+      "reduce_pct": 0.43,
       "proposed_value": "...",
       "supporting_evidence": "...",
       "confidence": 0.7,
@@ -57,6 +59,7 @@ _PROMPT_TEMPLATE = """\
 }}
 ```
 若無需再平衡，proposals 為空列表。
+注意：POSITION_REBALANCE 提案必須包含 `symbol`（標的代號）和 `reduce_pct`（0–1 的減持比例），否則無法自動執行。
 """
 
 
@@ -94,15 +97,24 @@ def run_portfolio_review(
 
         result = to_agent_result(result_dict)
         for p in result.proposals:
+            target_rule = p.get("target_rule", "PORTFOLIO")
+            # Build proposal_payload for POSITION_REBALANCE (requires symbol + reduce_pct)
+            payload = {}
+            if target_rule == "POSITION_REBALANCE":
+                sym = p.get("symbol")
+                red = p.get("reduce_pct")
+                if sym and red is not None:
+                    payload = {"symbol": sym, "reduce_pct": float(red)}
             write_proposal(
                 _conn,
                 generated_by="portfolio_review",
-                target_rule=p.get("target_rule", "PORTFOLIO"),
+                target_rule=target_rule,
                 rule_category=p.get("rule_category", "portfolio"),
                 proposed_value=str(p.get("proposed_value", "")),
                 supporting_evidence=str(p.get("supporting_evidence", "")),
                 confidence=float(p.get("confidence", 0.5)),
                 requires_human_approval=int(p.get("requires_human_approval", 0)),
+                proposal_payload=payload or None,
             )
         return result
     finally:
