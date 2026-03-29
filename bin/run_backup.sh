@@ -18,10 +18,16 @@ if [ -f "$OPENCLAW_ENV" ]; then
     set +a
 fi
 
+_ORIG_DB_PATH="${DB_PATH:-}"
 if [ -f "$REPO/frontend/backend/.env" ]; then
     set -a
     source "$REPO/frontend/backend/.env"
     set +a
+fi
+if [ -n "$_ORIG_DB_PATH" ]; then
+    DB_PATH="$_ORIG_DB_PATH"
+elif [ -z "${DB_PATH:-}" ]; then
+    unset DB_PATH
 fi
 
 DB_PATH="${DB_PATH:-$REPO/data/sqlite/trades.db}"
