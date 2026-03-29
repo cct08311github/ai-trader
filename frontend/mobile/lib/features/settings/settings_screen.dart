@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/core_providers.dart';
+import 'debug_log_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   final VoidCallback onLogout;
@@ -23,6 +24,15 @@ class SettingsScreen extends ConsumerWidget {
             icon: Icons.info_outline,
             label: 'AI Trader Mobile v1.0.0',
             subtitle: 'Flutter + Riverpod',
+          ),
+          _SettingsTile(
+            icon: Icons.bug_report,
+            label: 'Debug Logs',
+            subtitle: '查看 API 請求記錄',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DebugLogScreen()),
+            ),
           ),
           const Divider(color: Color(0xFF334155), height: 32),
           _SettingsTile(
