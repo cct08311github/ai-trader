@@ -8,8 +8,20 @@ from openclaw.risk_engine import SystemState
 
 def test_decision_pipeline_stops_when_master_switch_off(monkeypatch):
     import openclaw.decision_pipeline_v4 as mod
+    from openclaw.guards.base import GuardResult
 
     monkeypatch.setattr(mod, "check_system_switch", lambda *args, **kwargs: (False, "disabled"))
+    # Monkeypatch SystemSwitchGuard.evaluate to return MASTER_SWITCH_OFF
+    import openclaw.guards.system_switch_guard as ssg_mod
+    monkeypatch.setattr(ssg_mod.SystemSwitchGuard, "evaluate",
+        lambda self, ctx: GuardResult(passed=False, reject_code="MASTER_SWITCH_OFF", reason="disabled", metadata={"check_type": "master_switch"}))
+    # budget_guard is locally imported in run_decision_with_sentinel, patch it there
+    import openclaw.guards.budget_guard as bg_mod
+    import openclaw.guards.drawdown_guard as dg_mod
+    monkeypatch.setattr(bg_mod.BudgetGuard, "evaluate",
+        lambda self, ctx: GuardResult(passed=True, reason="budget_skipped", metadata={}))
+    monkeypatch.setattr(dg_mod.DrawdownGuard, "evaluate",
+        lambda self, ctx: GuardResult(passed=True, reason="drawdown_skipped", metadata={}))
 
     conn = sqlite3.connect(":memory:")
     ok, reason_code, record = run_decision_with_sentinel(

@@ -27,7 +27,8 @@ class BudgetPolicy:
     tiers: Dict[str, BudgetTier]
 
 
-def load_budget_policy(path: Path) -> BudgetPolicy:
+def load_budget_policy(path: Path | str) -> BudgetPolicy:
+    path = Path(path) if isinstance(path, str) else path
     data = json.loads(path.read_text(encoding="utf-8"))
     tiers: Dict[str, BudgetTier] = {}
     for name, tier in (data.get("tiers") or {}).items():
