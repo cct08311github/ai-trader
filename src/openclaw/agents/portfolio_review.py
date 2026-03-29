@@ -6,6 +6,7 @@
 from __future__ import annotations
 from openclaw.path_utils import get_repo_root
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from openclaw.agents.base import (
 )
 
 _REPO_ROOT = get_repo_root()
+logger = logging.getLogger(__name__)
 
 _PROMPT_TEMPLATE = """\
 你是 AI Trader 系統的 PortfolioReviewAgent（Portfolio 審查員）。
@@ -105,6 +107,13 @@ def run_portfolio_review(
                 red = p.get("reduce_pct")
                 if sym and red is not None:
                     payload = {"symbol": sym, "reduce_pct": float(red)}
+                else:
+                    logger.warning(
+                        "POSITION_REBALANCE proposal missing required fields: "
+                        "symbol=%s, reduce_pct=%s — storing with human_approval=1",
+                        sym, red,
+                    )
+                    p["requires_human_approval"] = 1
             write_proposal(
                 _conn,
                 generated_by="portfolio_review",
