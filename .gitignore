@@ -1,5 +1,7 @@
-# Local env
+# Local env (real secrets — never commit)
 .env
+.env.local
+.env.*.local
 
 # Python
 __pycache__/
@@ -18,10 +20,13 @@ scripts/
 bin/
 database/__pycache__/
 
-# Temp
+# Temp / editor backups
 *.backup
 *.bak
 *.bak2
+*.py.bak
+*~
+.*.swp
 Gemini.md*
 *.db
 *.sqlite
@@ -69,3 +74,9 @@ config/market_monitor_state.json
 _tmp/
 test_crash.py
 frontend/backend/package-lock.json
+
+# Local dev artifacts (not part of CI)
+.serena/
+.claude/plan/
+openclaw_demo.db*
+
