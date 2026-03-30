@@ -31,6 +31,7 @@ export default function ChatButton() {
           >
             <div
               className="absolute inset-0 bg-black/60"
+              aria-hidden="true"
               onClick={() => setOpen(false)}
             />
             <div
@@ -46,6 +47,7 @@ export default function ChatButton() {
           >
             <div
               className="absolute inset-0 bg-black/40"
+              aria-hidden="true"
               onClick={() => setOpen(false)}
             />
             <div
