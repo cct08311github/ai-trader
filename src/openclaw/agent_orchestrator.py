@@ -50,14 +50,31 @@ def _is_monday_twn(now_twn: Optional[datetime] = None) -> bool:
 
 # ── 事件偵測 ──────────────────────────────────────────────────────────────────
 
+_LAST_STRATEGY_COMMITEE_TRIGGER: Optional[datetime] = None
+
+
 def _pm_review_just_completed(
     state_path: str = _STATE_PATH,
     last_seen: Optional[str] = None,
 ) -> Optional[str]:
-    """回傳新的 reviewed_at，或 None（無新事件）。"""
+    """回傳新的 reviewed_at，或 None（無新事件）。10 分鐘內不重複觸發。"""
+    global _LAST_STRATEGY_COMMITEE_TRIGGER
     state = get_config().daily_pm_state()
     reviewed_at = state.reviewed_at
     if reviewed_at and reviewed_at != last_seen:
+        # 10 分鐘冷卻：防止同一個 PM review 完成事件重複觸發多個 StrategyCommitteeAgent
+        now = datetime.now(tz=_TZ_TWN)
+        if (
+            _LAST_STRATEGY_COMMITEE_TRIGGER
+            and (now - _LAST_STRATEGY_COMMITEE_TRIGGER) < timedelta(minutes=10)
+        ):
+            log.info(
+                "[ORCHESTRATOR] StrategyCommitteeAgent cooldown active "
+                "(%.0f min since last trigger) — skipping duplicate PM review event",
+                (now - _LAST_STRATEGY_COMMITEE_TRIGGER).total_seconds() / 60,
+            )
+            return None
+        _LAST_STRATEGY_COMMITEE_TRIGGER = now
         return reviewed_at
     return None
 
