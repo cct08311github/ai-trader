@@ -14,8 +14,8 @@ Usage in strategy_committee.py:
     requires_human_approval = 0 if shadow_would_approve else 1
 
 Rollback:
-    STRATEGY_SHADOW_MODE=true  → reverts to always-require-human (emergency only)
-    Default: false (new logic active)
+    STRATEGY_SHADOW_MODE=false  → disable shadow, new logic always requires human (emergency only)
+    Default: true (shadow mode ON — observe for 2 weeks before going live per Phase 0 spec)
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 # Configuration
 # --------------------------------------------------------------------------- #
 
-SHADOW_MODE: bool = os.environ.get("STRATEGY_SHADOW_MODE", "false").lower() == "true"
+SHADOW_MODE: bool = os.environ.get("STRATEGY_SHADOW_MODE", "true").lower() == "true"
 
 # Asymmetric confidence floors — new logic (Phase 1 values, env-overridable)
 _AUTO_APPROVE_BUY_FLOOR: float = float(
