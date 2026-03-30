@@ -64,9 +64,20 @@ export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([])
     const idRef = useRef(0)
 
+    const MAX_TOASTS = 8
+
     const push = useCallback((type, message, duration = 4000) => {
         const id = ++idRef.current
-        setToasts(prev => [...prev.slice(-4), { id, type, message }]) // max 5 toasts
+        setToasts(prev => {
+            if (prev.length >= MAX_TOASTS) {
+                // Show overflow notice, then add new toast
+                const overflow = prev.length - MAX_TOASTS + 1
+                const overflowToast = { id: -(overflow + 100), type: 'info', message: `還有 ${overflow} 則通知被折疊`, isOverflow: true }
+                const trimmed = prev.slice(-(MAX_TOASTS - 1))
+                return [...trimmed, { id, type, message }, overflowToast]
+            }
+            return [...prev, { id, type, message }]
+        })
         if (duration > 0) {
             setTimeout(() => dismiss(id), duration)
         }
@@ -77,12 +88,17 @@ export function ToastProvider({ children }) {
         setToasts(prev => prev.filter(t => t.id !== id))
     }
 
+    function dismissAll() {
+        setToasts([])
+    }
+
     const api = {
-        success: (msg, dur) => push('success', msg, dur),
-        error: (msg, dur) => push('error', msg, dur ?? 6000),
-        warn: (msg, dur) => push('warn', msg, dur),
+        success: (msg, dur) => push('success', msg, dur ?? 4000),
+        error: (msg) => push('error', msg, 0), // Critical/error — no auto-dismiss
+        warn: (msg, dur) => push('warn', msg, dur ?? 0), // warn — no auto-dismiss either
         info: (msg, dur) => push('info', msg, dur),
         dismiss,
+        dismissAll,
     }
 
     // Expose globally so auth.js and other non-React code can call it
