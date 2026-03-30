@@ -7,7 +7,7 @@ export default function ChatButton() {
 
   return (
     <>
-      {/* Floating toggle button — offset to avoid FloatingLogout */}
+      {/* Floating toggle button */}
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
