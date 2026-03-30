@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState, Fragment } from 'react'
 import { useStreamApiBase, useStrategyData } from '../lib/strategyApi'
-import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu, Copy, Check } from 'lucide-react'
+import { CheckCircle2, XCircle, Clock, ChevronDown, ChevronRight, MessageSquare, Target, Save, FileSignature, ShieldAlert, Cpu, Copy, Check, FileText, Lightbulb } from 'lucide-react'
 import { authFetch, getApiBase, getToken } from '../lib/auth'
 import { useToast } from '../components/ToastProvider'
 import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
+import EmptyState from '../components/EmptyState'
+import LoadingSpinner from '../components/LoadingSpinner'
+import ErrorState from '../components/ErrorState'
 
 function formatUnixSec(sec) {
   const n = Number(sec)
@@ -102,9 +105,15 @@ function PmTracePanel() {
       </div>
 
       {loading ? (
-        <div className="text-xs text-slate-500 py-6 text-center">載入中…</div>
+        <div className="py-6"><LoadingSpinner label="讀取審核記錄中..." /></div>
       ) : traces.length === 0 ? (
-        <div className="text-xs text-slate-500 py-8 text-center">無記錄（點擊 Portfolio 頁面的「AI 審核」按鈕後才會出現）</div>
+        <div className="py-8">
+          <EmptyState
+            icon={FileText}
+            title="尚無審核記錄"
+            description="點擊 Portfolio 頁面的「AI 審核」按鈕後才會出現"
+          />
+        </div>
       ) : (
         <div className="space-y-3">
           {traces.map(t => (
@@ -212,9 +221,15 @@ function DebatePanel() {
       </div>
 
       {loading ? (
-        <div className="text-xs text-slate-500 py-6 text-center">載入中…</div>
+        <div className="py-6"><LoadingSpinner label="讀取辯論記錄中..." /></div>
       ) : parsed.length === 0 ? (
-        <div className="text-xs text-slate-500 py-8 text-center">當日無辯論記錄（按 Portfolio 頁面的「AI 審核」觸發）</div>
+        <div className="py-8">
+          <EmptyState
+            icon={Lightbulb}
+            title="當日無辯論記錄"
+            description="按 Portfolio 頁面的「AI 審核」觸發"
+          />
+        </div>
       ) : (
         <div className="space-y-4">
           {parsed.map((d, i) => (
@@ -824,8 +839,16 @@ export default function StrategyPage() {
             <tbody className="divide-y divide-slate-800">
               {pagedRows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-5 text-slate-500" colSpan={8}>
-                    {loading.proposals ? '讀取中...' : '目前無提案記錄'}
+                  <td className="px-4 py-8" colSpan={8}>
+                    {loading.proposals ? (
+                      <LoadingSpinner label="讀取提案資料中..." />
+                    ) : (
+                      <EmptyState
+                        icon={Target}
+                        title="尚無策略提案"
+                        description="系統將在下次交易時段自動產生策略提案"
+                      />
+                    )}
                   </td>
                 </tr>
               ) : (

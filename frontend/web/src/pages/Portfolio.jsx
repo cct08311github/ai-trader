@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Lock, TrendingDown } from 'lucide-react'
+import { Lock, TrendingDown, Briefcase } from 'lucide-react'
 import { useToast } from '../components/ToastProvider'
 import PmStatusCard from '../components/PmStatusCard'
 import KpiCard from '../components/KpiCard'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import PnlLineChart from '../components/charts/PnlLineChart'
 import PositionDetailDrawer from '../components/PositionDetailDrawer'
+import EmptyState from '../components/EmptyState'
+import LoadingSpinner from '../components/LoadingSpinner'
+import ErrorState from '../components/ErrorState'
 import { mockPositions, fetchPortfolioPositions, fetchEquityCurve, buildAllocationData, calcPortfolioKpis, fetchPortfolioKpis, fetchLockedSymbols, lockSymbol, unlockSymbol, closePosition } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 
@@ -291,7 +294,12 @@ export default function PortfolioPage() {
           {allocation.length ? (
             <AllocationWithWarning data={allocation} />
           ) : (
-            <div className="py-16 text-center text-sm text-[rgb(var(--muted))]">No allocation data.</div>
+            <EmptyState
+              icon={Briefcase}
+              title="尚無持倉"
+              description="無持倉資料可顯示"
+              className="my-4"
+            />
           )}
         </Panel>
 
@@ -305,7 +313,7 @@ export default function PortfolioPage() {
         <div className="flex items-center justify-between border-b border-[rgb(var(--border))] px-4 py-3">
           <div className="text-sm font-semibold">持倉列表</div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-[rgb(var(--muted))]">{positions.length} positions</span>
+            <span className="text-xs text-[rgb(var(--muted))]">{loading ? '...' : `${positions.length} positions`}</span>
             <span className="text-xs text-emerald-400/70 hidden sm:block">← 點擊任一行查看詳情</span>
           </div>
         </div>
@@ -325,7 +333,29 @@ export default function PortfolioPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgb(var(--border))]">
-              {positions.map((p) => {
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12">
+                    <LoadingSpinner label="讀取持倉資料中..." />
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8">
+                    <ErrorState message="讀取持倉失敗" onRetry={() => load(preferApi)} />
+                  </td>
+                </tr>
+              ) : positions.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8">
+                    <EmptyState
+                      icon={Briefcase}
+                      title="目前無持倉"
+                      description="系統將在下次交易時段自動建倉"
+                    />
+                  </td>
+                </tr>
+              ) : positions.map((p) => {
                 const qty = Number(p.qty || 0)
                 const last = Number(p.lastPrice || p.last_price || 0)
                 const avg = Number(p.avgCost || p.avg_price)
@@ -385,14 +415,6 @@ export default function PortfolioPage() {
                   </tr>
                 )
               })}
-
-              {positions.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[rgb(var(--muted))]">
-                    No positions.
-                  </td>
-                </tr>
-              ) : null}
             </tbody>
           </table>
         </div>
