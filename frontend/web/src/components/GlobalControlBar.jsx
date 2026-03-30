@@ -22,20 +22,50 @@ function Pill({ tone = 'slate', dotClassName = '', className = '', children, tit
 /** Styled confirmation dialog — replaces window.confirm / window.prompt */
 function ConfirmDialog({ open, title, message, dangerous, inputLabel, inputDefault, onConfirm, onCancel }) {
   const [val, setVal] = useState(inputDefault || '')
+  const dialogRef = React.useRef(null)
+
+  // Escape key = cancel
+  React.useEffect(() => {
+    if (!open) return
+    function onKey(e) { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onCancel])
+
+  // Focus trap + focus input (if present) or confirm button when opens
+  React.useEffect(() => {
+    if (!open || !dialogRef.current) return
+    const focusable = dialogRef.current.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    if (!focusable.length) return
+    // If there's an input, focus it; otherwise focus the last button (primary action)
+    const target = inputLabel
+      ? focusable[0] // input is first
+      : focusable[focusable.length - 1] // confirm is last
+    target.focus()
+  }, [open, inputLabel])
+
   if (!open) return null
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onMouseDown={onCancel}
+      onClick={onCancel}
+      role="presentation"
     >
       <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="dlg-title"
+        aria-describedby="dlg-msg"
         className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl"
-        onMouseDown={e => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
-        <div className={`mb-2 text-base font-semibold ${dangerous ? 'text-rose-300' : 'text-slate-100'}`}>
+        <div id="dlg-title" className={`mb-2 text-base font-semibold ${dangerous ? 'text-rose-300' : 'text-slate-100'}`}>
           {title}
         </div>
-        <p className="text-sm text-slate-400 leading-relaxed mb-5 whitespace-pre-wrap">{message}</p>
+        <p id="dlg-msg" className="text-sm text-slate-400 leading-relaxed mb-5 whitespace-pre-wrap">{message}</p>
 
         {inputLabel && (
           <div className="mb-5">

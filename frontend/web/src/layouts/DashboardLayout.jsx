@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Menu, X, LogOut } from 'lucide-react'
 import Sidebar from '../components/Sidebar'
@@ -10,6 +10,28 @@ import { logout } from '../lib/auth'
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const drawerRef = useRef(null)
+  const menuButtonRef = useRef(null)
+
+  // Escape key closes drawer
+  useEffect(() => {
+    if (!sidebarOpen) return
+    function onKey(e) { if (e.key === 'Escape') setSidebarOpen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [sidebarOpen])
+
+  // Focus trap + focus first nav link when drawer opens; return focus to menu button on close
+  useEffect(() => {
+    if (!sidebarOpen || !drawerRef.current) return
+    const focusable = drawerRef.current.querySelectorAll(
+      'a, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+    if (focusable.length) focusable[0].focus()
+    return () => {
+      if (menuButtonRef.current) menuButtonRef.current.focus()
+    }
+  }, [sidebarOpen])
 
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
@@ -27,7 +49,7 @@ export default function DashboardLayout() {
               aria-hidden="true"
               onClick={() => setSidebarOpen(false)}
             />
-            <div className="fixed inset-y-0 left-0 z-50 w-72 max-w-[90vw]">
+            <div ref={drawerRef} className="fixed inset-y-0 left-0 z-50 w-72 max-w-[90vw]">
               <Sidebar onNavigate={() => setSidebarOpen(false)} />
             </div>
           </div>
@@ -38,6 +60,7 @@ export default function DashboardLayout() {
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
                 <button
+                  ref={menuButtonRef}
                   type="button"
                   className="lg:hidden mt-1 inline-flex items-center justify-center rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))/0.35] p-2 hover:bg-[rgb(var(--surface))/0.5]"
                   aria-label={sidebarOpen ? '關閉側邊欄' : '開啟側邊欄'}
