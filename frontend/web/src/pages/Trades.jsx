@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { FileText } from 'lucide-react'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import { downloadTextFile, fetchTrades, fetchTradeCausalChain, mockTrades, tradesToCsv, tradesToExcelXml } from '../lib/trades'
 import { authFetch, getApiBase } from '../lib/auth'
 import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
+import EmptyState from '../components/EmptyState'
+import LoadingSpinner from '../components/LoadingSpinner'
+import ErrorState from '../components/ErrorState'
 
 function toIsoDate(d) {
   if (!d) return ''
@@ -73,7 +77,7 @@ function MonthlySummaryPanel() {
         />
       </div>
       {loading ? (
-        <div className="text-xs text-slate-500 py-2">載入中…</div>
+        <div className="py-4"><LoadingSpinner label="讀取交易資料中..." /></div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {stats.map(s => (
@@ -389,10 +393,26 @@ export default function TradesPage() {
                 )
               })}
 
-              {items.length === 0 ? (
+              {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-400">
-                    No trades.
+                  <td colSpan={7} className="px-4 py-12">
+                    <LoadingSpinner label="讀取交易資料中..." />
+                  </td>
+                </tr>
+              ) : error && items.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8">
+                    <ErrorState message="讀取交易紀錄失敗" description={error} onRetry={() => load()} />
+                  </td>
+                </tr>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10">
+                    <EmptyState
+                      icon={FileText}
+                      title="尚無交易紀錄"
+                      description="開始交易後成交紀錄將顯示在這裡"
+                    />
                   </td>
                 </tr>
               ) : null}

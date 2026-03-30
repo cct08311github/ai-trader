@@ -2,6 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { getToken, authFetch, getApiBase } from '../lib/auth'
 import { useSymbolNames, formatSymbol } from '../lib/symbolNames'
 import KlineChart from '../components/KlineChart'
+import { FileText } from 'lucide-react'
+import LoadingSpinner from '../components/LoadingSpinner'
+import EmptyState from '../components/EmptyState'
+import ErrorState from '../components/ErrorState'
 
 const TABS = ['今日市場概覽', '個股技術分析', '法人籌碼', 'AI 明日策略']
 
@@ -118,7 +122,7 @@ function StockChipsPanel({ symbol }) {
   }, [symbol])
 
   if (!symbol) return null
-  if (loading) return <div className="text-xs text-[rgb(var(--muted))]">載入籌碼中…</div>
+  if (loading) return <div className="py-8"><LoadingSpinner label="讀取籌碼資料中…" /></div>
   if (msg || !data) return (
     <div className="rounded-xl border border-slate-500/20 bg-slate-500/5 px-4 py-3 text-xs text-[rgb(var(--muted))]">
       {msg || '無籌碼資料'}
@@ -264,9 +268,9 @@ function ChipsTab({ report }) {
       .catch(() => { setError('無法載入籌碼資料'); setLoading(false) })
   }, [tradeDate])
 
-  if (loading) return <div className="text-sm text-[rgb(var(--muted))]">讀取籌碼資料中…</div>
-  if (error) return <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-[rgb(var(--muted))]">{error}</div>
-  if (!data?.data?.length) return <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-4 text-sm text-[rgb(var(--muted))]">本日尚無法人籌碼資料</div>
+  if (loading) return <div className="py-8"><LoadingSpinner label="讀取籌碼資料中…" /></div>
+  if (error) return <ErrorState message="讀取法人籌碼失敗" description={error} onRetry={fetch} />
+  if (!data?.data?.length) return <div className="py-6"><EmptyState icon={FileText} title="本日尚無法人籌碼資料" description="法人籌碼資料將在每日收盘后更新" /></div>
 
   const rows = data.data
   const hasMargin = rows.some(r => r.margin_balance != null)
@@ -424,7 +428,7 @@ export default function AnalysisPage() {
         )}
       </div>
 
-      {loading && <div className="text-sm text-[rgb(var(--muted))]">讀取中…</div>}
+      {loading && <div className="py-4"><LoadingSpinner label="讀取中…" /></div>}
       {noData && !loading && (
         <div className="rounded-xl border border-slate-500/30 bg-slate-500/10 p-6 text-center text-sm text-[rgb(var(--muted))]">
           📊 今日盤後分析尚未產生（每交易日 22:00 自動執行）
