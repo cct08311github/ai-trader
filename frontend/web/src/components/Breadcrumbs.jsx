@@ -5,7 +5,10 @@ const LABELS = {
   portfolio: 'Portfolio',
   trades: 'Trades',
   strategy: 'Strategy',
-  system: 'System'
+  system: 'System',
+  analysis: '盤後分析',
+  agents: 'AI Agents',
+  settings: '資金設定',
 }
 
 export default function Breadcrumbs() {
