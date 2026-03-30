@@ -7,7 +7,7 @@ export default function ChatButton() {
 
   return (
     <>
-      {/* Floating toggle button — sits to the left of FloatingLogout */}
+      {/* Floating toggle button — offset to avoid FloatingLogout */}
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -23,17 +23,51 @@ export default function ChatButton() {
         }
       </button>
 
-      {/* Compact floating chat window — no backdrop, no overlay */}
       {open && (
-        <div
-          className="fixed bottom-24 right-6 z-50 flex flex-col
-                     w-[360px] h-[480px] max-h-[calc(100vh-120px)]
-                     rounded-2xl border border-[rgb(var(--border))]
-                     bg-[rgb(var(--bg))] shadow-2xl shadow-black/50"
-          style={{ resize: 'none' }}
-        >
-          <ChatPanel onClose={() => setOpen(false)} />
-        </div>
+        <>
+          {/* Mobile: full-screen overlay */}
+          <div
+            className="fixed inset-0 z-50 flex sm:hidden"
+          >
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              className="relative flex w-full flex-col"
+            >
+              <ChatPanel onClose={() => setOpen(false)} />
+            </div>
+          </div>
+
+          {/* Tablet: bottom drawer (sm to lg) */}
+          <div
+            className="fixed bottom-0 right-0 z-50 hidden sm:flex lg:hidden"
+          >
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              className="relative mt-12 flex max-h-[60vh] w-full flex-col rounded-t-2xl border border-[rgb(var(--border))]
+                         bg-[rgb(var(--bg))] shadow-2xl"
+              style={{ resize: 'none' }}
+            >
+              <ChatPanel onClose={() => setOpen(false)} />
+            </div>
+          </div>
+
+          {/* Desktop: compact floating window */}
+          <div
+            className="fixed bottom-24 right-6 z-50 hidden lg:flex flex-col
+                       w-[360px] h-[480px] max-h-[calc(100vh-120px)]
+                       rounded-2xl border border-[rgb(var(--border))]
+                       bg-[rgb(var(--bg))] shadow-2xl shadow-black/50"
+            style={{ resize: 'none' }}
+          >
+            <ChatPanel onClose={() => setOpen(false)} />
+          </div>
+        </>
       )}
     </>
   )
