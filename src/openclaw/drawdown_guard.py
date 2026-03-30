@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+log = logging.getLogger(__name__)
+
+# Cooldown: prevent DEEP SUSPEND Telegram notification more than once per 10 minutes
+_LAST_DEEP_SUSPEND_NOTIFY: datetime | None = None
+_DEEP_SUSPEND_NOTIFY_COOLDOWN = timedelta(minutes=10)
 
 
 @dataclass
@@ -276,7 +284,16 @@ def apply_drawdown_actions(conn: sqlite3.Connection, decision: DrawdownDecision)
 
 
 def _notify_deep_suspend(decision: DrawdownDecision) -> None:
-    """Send Telegram alert with restart checklist when DEEP_SUSPEND is triggered."""
+    """Send Telegram alert with restart checklist when DEEP SUSPEND is triggered (10-min cooldown)."""
+    global _LAST_DEEP_SUSPEND_NOTIFY
+    now = datetime.now(timezone.utc)
+    if (
+        _LAST_DEEP_SUSPEND_NOTIFY
+        and (now - _LAST_DEEP_SUSPEND_NOTIFY) < _DEEP_SUSPEND_NOTIFY_COOLDOWN
+    ):
+        log.info("[DEEP SUSPEND] notification suppressed by 10-min cooldown")
+        return
+    _LAST_DEEP_SUSPEND_NOTIFY = now
     try:
         from openclaw.tg_notify import send_message  # lazy import
 
