@@ -17,9 +17,12 @@ class SignalParams:
     """可調參數 — backtest scanner 會 grid search 這些值。"""
     take_profit_pct: float = 0.02
     stop_loss_pct: float = 0.03
-    trailing_pct: float = 0.05
-    trailing_pct_tight: float = 0.03
-    trailing_profit_threshold: float = 0.50
+    trailing_pct: float = 0.05           # Tier 1: profit < 10%
+    trailing_pct_mid: float = 0.04       # Tier 2: profit 10-30%
+    trailing_pct_tight: float = 0.03     # Tier 3: profit > 30%
+    trailing_profit_threshold_mid: float = 0.10   # 10% triggers mid tier
+    trailing_profit_threshold_tight: float = 0.30  # 30% triggers tight tier
+    trailing_profit_threshold: float = 0.30  # kept for backward compat
     ma_short: int = 5
     ma_long: int = 20
     rsi_period: int = 14
@@ -52,10 +55,15 @@ def evaluate_exit(
 
     latest = closes[-1]
 
-    # 1. Trailing Stop
+    # 1. Trailing Stop (3-tier: 5% / 4% / 3%)
     if high_water_mark and avg_price > 0:
         profit_pct = (high_water_mark - avg_price) / avg_price
-        effective = params.trailing_pct_tight if profit_pct >= params.trailing_profit_threshold else params.trailing_pct
+        if profit_pct >= params.trailing_profit_threshold_tight:
+            effective = params.trailing_pct_tight      # ≥30% profit → 3%
+        elif profit_pct >= params.trailing_profit_threshold_mid:
+            effective = params.trailing_pct_mid         # 10-30% profit → 4%
+        else:
+            effective = params.trailing_pct             # <10% profit → 5%
         if latest < high_water_mark * (1 - effective):
             return SignalResult("sell", f"trailing_stop:hwm={high_water_mark:.2f},eff={effective:.2%}")
 

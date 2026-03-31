@@ -174,13 +174,17 @@ class ProposalRepository:
             (status, ts, evidence_append, proposal_id),
         )
 
-    def expire_pending_proposals(self, cutoff_ts: int) -> int:
-        """Expire pending proposals with expires_at < cutoff_ts. Returns count."""
+    def expire_pending_proposals(self, cutoff_ts: int, max_age_ms: int = 24 * 60 * 60 * 1000) -> int:
+        """Expire pending proposals past expires_at OR older than max_age_ms."""
+        now = _now_ms()
+        age_cutoff = now - max_age_ms
         cursor = self._conn.execute(
             """UPDATE strategy_proposals
-               SET status = 'expired', decided_at = ?, decision_reason = 'Auto-expired'
-               WHERE status = 'pending' AND expires_at IS NOT NULL AND expires_at < ?""",
-            (_now_ms(), cutoff_ts),
+               SET status = 'expired', decided_at = ?
+               WHERE status = 'pending'
+                 AND ((expires_at IS NOT NULL AND expires_at < ?)
+                      OR created_at < ?)""",
+            (now, cutoff_ts, age_cutoff),
         )
         n = cursor.rowcount
         if n > 0:
