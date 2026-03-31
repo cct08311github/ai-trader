@@ -470,10 +470,13 @@ class TestOrchestratorHelpers:
         t = datetime(2026, 3, 2, 9, 15, tzinfo=twn)
         assert _should_run_now("08:20", t) is False
 
-    def test_pm_review_event_detected(self, tmp_path):
+    def test_pm_review_event_detected(self, tmp_path, monkeypatch):
         import json as _j
         from openclaw.agent_orchestrator import _pm_review_just_completed
         from openclaw.config_manager import get_config, reset_config
+        import openclaw.agent_orchestrator as ao
+        # Reset module-level cooldown state so this test always passes in isolation
+        monkeypatch.setattr(ao, "_LAST_STRATEGY_COMMITEE_TRIGGER", None)
         (tmp_path / "daily_pm_state.json").write_text(_j.dumps({"reviewed_at": "2026-03-02T08:25:00"}))
         reset_config()
         get_config(config_dir=tmp_path)
