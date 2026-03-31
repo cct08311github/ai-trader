@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import tempfile
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -108,10 +109,11 @@ def test_get_trades_for_strategy_empty(tmp_path):
 
 def test_get_trades_for_strategy_with_trades(tmp_path):
     db = str(tmp_path / "trades.db")
+    today = date.today()
     _make_trades_db(db, [
-        {"agent_id": "strategy_a", "pnl": 100.0, "timestamp": "2026-03-01T00:00:00"},
-        {"agent_id": "strategy_a", "pnl": -50.0, "timestamp": "2026-03-02T00:00:00"},
-        {"agent_id": "strategy_b", "pnl": 200.0, "timestamp": "2026-03-01T00:00:00"},
+        {"agent_id": "strategy_a", "pnl": 100.0, "timestamp": f"{(today - timedelta(days=1)).isoformat()}T00:00:00"},
+        {"agent_id": "strategy_a", "pnl": -50.0, "timestamp": f"{(today - timedelta(days=2)).isoformat()}T00:00:00"},
+        {"agent_id": "strategy_b", "pnl": 200.0, "timestamp": f"{(today - timedelta(days=1)).isoformat()}T00:00:00"},
     ])
     result = get_trades_for_strategy(db, "strategy_a", days_back=30)
     assert len(result) == 2
@@ -123,7 +125,7 @@ def test_get_trades_for_strategy_with_trades(tmp_path):
 def test_get_trades_for_strategy_pnl_none_stays_none(tmp_path):
     """Trade with pnl=None should be returned with pnl=None (no conversion)."""
     db = str(tmp_path / "trades.db")
-    _make_trades_db(db, [{"agent_id": "strategy_x", "pnl": None, "timestamp": "2026-03-01T00:00:00"}])
+    _make_trades_db(db, [{"agent_id": "strategy_x", "pnl": None, "timestamp": f"{date.today().isoformat()}T00:00:00"}])
     result = get_trades_for_strategy(db, "strategy_x", days_back=30)
     assert len(result) == 1
     assert result[0]["pnl"] is None
@@ -147,9 +149,10 @@ def test_analyze_strategy_edge_no_trades(tmp_path):
 def test_analyze_strategy_edge_insufficient_trades(tmp_path):
     """Less than min_trades pnl values → insufficient branch."""
     db = str(tmp_path / "trades.db")
+    today = date.today()
     _make_trades_db(db, [
-        {"agent_id": "strategy_a", "pnl": 10.0, "timestamp": "2026-03-01T00:00:00"},
-        {"agent_id": "strategy_a", "pnl": -5.0, "timestamp": "2026-03-02T00:00:00"},
+        {"agent_id": "strategy_a", "pnl": 10.0, "timestamp": f"{(today - timedelta(days=1)).isoformat()}T00:00:00"},
+        {"agent_id": "strategy_a", "pnl": -5.0, "timestamp": f"{(today - timedelta(days=2)).isoformat()}T00:00:00"},
     ])
     result = analyze_strategy_edge(db, "strategy_a", min_trades=10)
     assert result.trade_count == 2

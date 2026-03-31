@@ -238,6 +238,9 @@ class TestApplyDrawdownActionsDeepSuspend:
         assert len(detail["monthly_losses"]) == 3
 
     def test_sends_telegram_notification(self, monkeypatch):
+        # Reset module-level cooldown state so this test always passes in isolation
+        import openclaw.drawdown_guard as dg
+        monkeypatch.setattr(dg, "_LAST_DEEP_SUSPEND_NOTIFY", None)
         conn = _make_db()
         decision = self._deep_suspend_decision()
         sent = []

@@ -807,14 +807,23 @@ class TestGraduationCheck:
         c, _, db_path = sys_client
         now_ms = int(__import__("time").time() * 1000)
         conn = sqlite3.connect(str(db_path))
+        # Use dynamic dates so the 28-day window always captures these rows.
+        from datetime import date, timedelta
+        today = date.today()
+        d1 = (today - timedelta(days=1)).isoformat()
+        d2 = (today - timedelta(days=2)).isoformat()
+        d3 = (today - timedelta(days=3)).isoformat()
         conn.execute(
-            "INSERT INTO daily_pnl_summary VALUES ('2026-03-01', 1000000, 1010000, 5000, 0, 5000, 0.005, 1010000, 0.02, 0, 'normal')"
+            "INSERT INTO daily_pnl_summary VALUES (?, 1000000, 1010000, 5000, 0, 5000, 0.005, 1010000, 0.02, 0, 'normal')",
+            (d1,)
         )
         conn.execute(
-            "INSERT INTO daily_pnl_summary VALUES ('2026-03-02', 1010000, 1020000, 6000, 0, 6000, 0.006, 1020000, 0.03, 0, 'normal')"
+            "INSERT INTO daily_pnl_summary VALUES (?, 1010000, 1020000, 6000, 0, 6000, 0.006, 1020000, 0.03, 0, 'normal')",
+            (d2,)
         )
         conn.execute(
-            "INSERT INTO daily_pnl_summary VALUES ('2026-03-03', 1020000, 1015000, -1000, 0, -1000, -0.001, 1020000, 0.03, 0, 'normal')"
+            "INSERT INTO daily_pnl_summary VALUES (?, 1020000, 1015000, -1000, 0, -1000, -0.001, 1020000, 0.03, 0, 'normal')",
+            (d3,)
         )
         conn.execute(
             "INSERT INTO positions (symbol, quantity, avg_price, current_price, chip_health_score, sector) VALUES ('2330', 100, 100.0, 100.0, NULL, NULL)"
