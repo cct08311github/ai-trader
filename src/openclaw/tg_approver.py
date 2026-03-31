@@ -230,7 +230,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         lines.append(f"\n信心度：{conf:.0%}　<i>ID：{pid[:8]}…</i>")
 
         # URL 按鈕：點擊開瀏覽器呼叫 api 端點，不產生 callback_query
-        base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net:8080")
+        base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
         auth = os.environ.get("AUTH_TOKEN", "")
         buttons = [[
             {"text": "✅ 核准", "url": f"{base}/api/strategy/proposals/{pid}/approve?token={auth}"},
@@ -248,7 +248,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
         # ── 批量摘要：2 筆以上附「一鍵全部核准」按鈕 ──────────────────
         if sent >= 2:
-            base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net:8080")
+            base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
             auth = os.environ.get("AUTH_TOKEN", "")
             try:
                 send_message_with_buttons(

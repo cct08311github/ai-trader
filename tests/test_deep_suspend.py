@@ -78,11 +78,18 @@ def _nav_sequence(
     months: list[tuple[str, float, float]]
 ) -> list[tuple[str, float]]:
     """Helper: build daily_nav rows from (YYYY-MM, nav_start, nav_end) specs.
-    Inserts first day at nav_start and last day at nav_end."""
+
+    Inserts 6 rows per month (days 01,05,10,15,20,28) with linear
+    interpolation from nav_start to nav_end.  This satisfies the
+    _MIN_TRADING_DAYS_PER_MONTH=5 threshold in _compute_monthly_returns.
+    """
+    days = [1, 5, 10, 15, 20, 28]
     rows = []
     for month, start, end in months:
-        rows.append((f"{month}-01", start))
-        rows.append((f"{month}-28", end))
+        n = len(days) - 1
+        for i, d in enumerate(days):
+            nav = start + (end - start) * i / n
+            rows.append((f"{month}-{d:02d}", round(nav, 2)))
     return rows
 
 
@@ -96,7 +103,7 @@ class TestComputeMonthlyReturns:
         assert _compute_monthly_returns(conn) == []
 
     def test_single_month_positive(self):
-        rows = [("2026-01-01", 1_000_000), ("2026-01-31", 1_050_000)]
+        rows = _nav_sequence([("2026-01", 1_000_000, 1_050_000)])
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert len(results) == 1
@@ -105,7 +112,7 @@ class TestComputeMonthlyReturns:
         assert abs(ret - 0.05) < 0.001   # +5%
 
     def test_single_month_negative(self):
-        rows = [("2026-02-01", 1_000_000), ("2026-02-28", 870_000)]
+        rows = _nav_sequence([("2026-02", 1_000_000, 870_000)])
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert len(results) == 1
@@ -113,11 +120,20 @@ class TestComputeMonthlyReturns:
         assert ret < 0   # negative return
 
     def test_ordered_oldest_first(self):
-        rows = [("2026-01-01", 1_000_000), ("2026-01-31", 900_000),
-                ("2026-02-01", 900_000), ("2026-02-28", 1_100_000)]
+        rows = _nav_sequence([
+            ("2026-01", 1_000_000, 900_000),
+            ("2026-02", 900_000, 1_100_000),
+        ])
         conn = _make_db(rows)
         results = _compute_monthly_returns(conn)
         assert results[0][0] < results[1][0]   # 2026-01 < 2026-02
+
+    def test_sparse_month_excluded(self):
+        """Month with < MIN_TRADING_DAYS rows is excluded (防止假數據觸發)."""
+        rows = [("2026-01-01", 1_000_000), ("2026-01-28", 850_000)]  # only 2 rows
+        conn = _make_db(rows)
+        results = _compute_monthly_returns(conn)
+        assert len(results) == 0  # excluded by HAVING COUNT(*) >= 5
 
     def test_missing_table_returns_empty(self):
         conn = sqlite3.connect(":memory:")  # no table created
@@ -249,6 +265,21 @@ class TestApplyDrawdownActionsDeepSuspend:
         assert len(sent) == 1
         assert "DEEP SUSPEND" in sent[0]
         assert "Checklist" in sent[0]
+
+    def test_notification_writes_audit_incident(self, monkeypatch):
+        """_notify_deep_suspend writes an audit incident before sending Telegram."""
+        import openclaw.drawdown_guard as dg
+        monkeypatch.setattr(dg, "_LAST_DEEP_SUSPEND_NOTIFY", None)
+        monkeypatch.setattr("openclaw.tg_notify.send_message", lambda msg: True)
+        conn = _make_db()
+        decision = self._deep_suspend_decision()
+        apply_drawdown_actions(conn, decision)
+        row = conn.execute(
+            "SELECT code, detail_json FROM incidents WHERE code='DEEP_SUSPEND_TELEGRAM_SENT'"
+        ).fetchone()
+        assert row is not None
+        detail = json.loads(row[1])
+        assert detail["consecutive_loss_months"] == 3
 
     def test_normal_decision_no_lock(self):
         conn = _make_db()
