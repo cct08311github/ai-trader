@@ -232,6 +232,14 @@ def fetch_tpex_rows(trade_date: str) -> List[EODRow]:
     return rows
 
 
+def _normalize_date(d: str) -> str:
+    """Ensure trade_date is always YYYY-MM-DD format."""
+    d = d.strip()
+    if re.match(r"^\d{8}$", d):
+        return f"{d[:4]}-{d[4:6]}-{d[6:8]}"
+    return d
+
+
 def upsert_eod_rows(conn: sqlite3.Connection, rows: List[EODRow]) -> int:
     sql = """
     INSERT INTO eod_prices (
@@ -255,7 +263,7 @@ def upsert_eod_rows(conn: sqlite3.Connection, rows: List[EODRow]) -> int:
         sql,
         [
             (
-                r.trade_date,
+                _normalize_date(r.trade_date),
                 r.market,
                 r.symbol,
                 r.name,
@@ -304,6 +312,8 @@ def main() -> None:
     parser.add_argument("--trade-date", default=datetime.now().strftime("%Y-%m-%d"))
     parser.add_argument("--apply-migration", action="store_true")
     args = parser.parse_args()
+
+    args.trade_date = _normalize_date(args.trade_date)
 
     db_path = Path(args.db).resolve()
     conn = sqlite3.connect(str(db_path))
@@ -407,6 +417,19 @@ def main() -> None:
                     file=__import__("sys").stderr,
                 )
 
+        # ── Positions current_price sync ──────────────────────────────────
+        positions_updated = 0
+        if status == "success":
+            try:
+                from openclaw.pnl_engine import refresh_current_prices
+                conn.row_factory = None
+                positions_updated = refresh_current_prices(conn)
+            except Exception as pos_exc:
+                print(
+                    f"[eod_ingest] positions price sync skipped: {pos_exc}",
+                    file=__import__("sys").stderr,
+                )
+
         # ── NAV 快照（daily_nav 表）─────────────────────────────────────
         nav_snapshot: dict = {}
         try:
@@ -467,6 +490,7 @@ def main() -> None:
                         "margin_data": margin_rows,
                         "institution_error": inst_error,
                         "optimizer_adjustments": optimizer_adjustments,
+                        "positions_updated": positions_updated,
                         "nav_snapshot": nav_snapshot,
                         "error": error_text,
                     },

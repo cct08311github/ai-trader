@@ -180,6 +180,30 @@ class PnLRepository:
         except sqlite3.Error as e:
             log.warning("backfill_high_water_mark failed: %s", e)
 
+    def refresh_current_prices(self) -> int:
+        """Update positions.current_price and unrealized_pnl from latest eod_prices."""
+        try:
+            cur = self._conn.execute(
+                """UPDATE positions SET
+                     current_price = (
+                       SELECT e.close FROM eod_prices e
+                       WHERE e.symbol = positions.symbol
+                       ORDER BY e.trade_date DESC LIMIT 1
+                     ),
+                     unrealized_pnl = ROUND(
+                       (SELECT e.close FROM eod_prices e
+                        WHERE e.symbol = positions.symbol
+                        ORDER BY e.trade_date DESC LIMIT 1)
+                       - positions.avg_price
+                     ) * positions.quantity
+                   WHERE quantity > 0"""
+            )
+            self._conn.commit()
+            return cur.rowcount
+        except sqlite3.Error as e:
+            log.warning("refresh_current_prices failed: %s", e)
+            return 0
+
     # ── API helpers ─────────────────────────────────────────────────────
 
     def get_today_pnl(self, trade_date: str) -> float:

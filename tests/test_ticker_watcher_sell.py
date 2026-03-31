@@ -246,9 +246,13 @@ class TestTrailingStop:
     def test_trailing_stop_wide_holds_on_moderate_profit(self):
         """獲利 < threshold → 使用 wide trailing → 不觸發。"""
         from openclaw.signal_logic import evaluate_exit, SignalParams
-        # avg=100, hwm=130 → profit 30% < threshold 50% → wide trailing 10%
+        # avg=100, hwm=130 → profit 30% < threshold_mid 50% → wide trailing 10%
         # 130 * (1-0.10) = 117 → close=126 should NOT trigger
-        params = SignalParams(trailing_pct=0.10, trailing_pct_tight=0.03, trailing_profit_threshold=0.50)
+        params = SignalParams(
+            trailing_pct=0.10, trailing_pct_mid=0.06, trailing_pct_tight=0.03,
+            trailing_profit_threshold_mid=0.50, trailing_profit_threshold_tight=0.70,
+            trailing_profit_threshold=0.70,
+        )
         closes = [100, 120, 130, 126]
         result = evaluate_exit(closes, avg_price=100.0, high_water_mark=130.0, params=params)
         assert result.signal == "flat" or "trailing" not in result.reason
@@ -258,7 +262,11 @@ class TestTrailingStop:
         from openclaw.signal_logic import evaluate_exit, SignalParams
         # avg=100, hwm=130 → profit 30% < 50% → wide trailing 10%
         # 130 * (1-0.10) = 117 → close=115 < 117 → should trigger
-        params = SignalParams(trailing_pct=0.10, trailing_pct_tight=0.03, trailing_profit_threshold=0.50)
+        params = SignalParams(
+            trailing_pct=0.10, trailing_pct_mid=0.06, trailing_pct_tight=0.03,
+            trailing_profit_threshold_mid=0.50, trailing_profit_threshold_tight=0.70,
+            trailing_profit_threshold=0.70,
+        )
         closes = [100, 120, 130, 115]
         result = evaluate_exit(closes, avg_price=100.0, high_water_mark=130.0, params=params)
         assert result.signal == "sell"

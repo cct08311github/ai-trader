@@ -33,10 +33,20 @@ class TestEvaluateExitTrailingStop:
         assert r.signal == "sell"
         assert "trailing_stop" in r.reason
 
-    def test_trailing_not_triggered_above_threshold(self):
-        # hwm=110, trailing=5% → threshold=104.5, close=105 > 104.5 → no trailing
-        # but 105 > 100*1.02=102 → take_profit
+    def test_trailing_mid_tier_triggers_at_moderate_profit(self):
+        # hwm=110, avg=100, profit=10% → mid tier 4% → threshold=110*0.96=105.6
+        # close=105 < 105.6 → trailing_stop fires (mid tier)
         r = evaluate_exit([105.0], avg_price=100.0, high_water_mark=110.0, params=P)
+        assert r.signal == "sell"
+        assert "trailing_stop" in r.reason
+        assert "4.00%" in r.reason
+
+    def test_trailing_not_triggered_above_threshold(self):
+        # hwm=105, avg=100, profit=5% < 10% → base 5% → threshold=105*0.95=99.75
+        # close=103 > 99.75 → no trailing → take_profit (103 > 100*1.02=102)
+        # Use explicit mid threshold=0.50 so profit=5% stays in base tier
+        P_explicit = SignalParams(trailing_profit_threshold_mid=0.50, trailing_profit_threshold_tight=0.70)
+        r = evaluate_exit([103.0], avg_price=100.0, high_water_mark=105.0, params=P_explicit)
         assert r.signal == "sell"
         assert "take_profit" in r.reason
 

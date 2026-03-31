@@ -99,6 +99,11 @@ def sync_positions_table(conn: sqlite3.Connection) -> None:
     PnLRepository(conn).sync_positions()
 
 
+def refresh_current_prices(conn: sqlite3.Connection) -> int:
+    """Update positions.current_price and unrealized_pnl from latest eod_prices."""
+    return PnLRepository(conn).refresh_current_prices()
+
+
 def _backfill_high_water_mark(conn: sqlite3.Connection) -> None:
     """Set high_water_mark from eod_prices max(close) since entry for positions missing it."""
     PnLRepository(conn).backfill_high_water_mark()

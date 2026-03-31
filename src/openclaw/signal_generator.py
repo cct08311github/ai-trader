@@ -18,8 +18,10 @@ _EOD_COMPLETE_MINUTE = 30
 _TAKE_PROFIT_PCT:          float = float(os.environ.get("TAKE_PROFIT_PCT",   "0.02"))
 _STOP_LOSS_PCT:            float = float(os.environ.get("STOP_LOSS_PCT",     "0.03"))
 _TRAILING_PCT_BASE:        float = float(os.environ.get("TRAILING_PCT",      "0.05"))
+_TRAILING_PCT_MID:         float = float(os.environ.get("TRAILING_PCT_MID",  "0.04"))
 _TRAILING_PCT_TIGHT:       float = float(os.environ.get("TRAILING_PCT_TIGHT","0.03"))
-_TRAILING_PROFIT_THRESHOLD: float = 0.50
+_TRAILING_PROFIT_THRESHOLD_MID:   float = float(os.environ.get("TRAILING_PROFIT_THRESHOLD_MID",   "0.10"))
+_TRAILING_PROFIT_THRESHOLD_TIGHT: float = float(os.environ.get("TRAILING_PROFIT_THRESHOLD_TIGHT", "0.30"))
 
 
 def _fetch_candles(
@@ -59,8 +61,11 @@ def _build_params(trailing_pct: float = _TRAILING_PCT_BASE) -> SignalParams:
         take_profit_pct=_TAKE_PROFIT_PCT,
         stop_loss_pct=_STOP_LOSS_PCT,
         trailing_pct=trailing_pct,
+        trailing_pct_mid=_TRAILING_PCT_MID,
         trailing_pct_tight=_TRAILING_PCT_TIGHT,
-        trailing_profit_threshold=_TRAILING_PROFIT_THRESHOLD,
+        trailing_profit_threshold_mid=_TRAILING_PROFIT_THRESHOLD_MID,
+        trailing_profit_threshold_tight=_TRAILING_PROFIT_THRESHOLD_TIGHT,
+        trailing_profit_threshold=_TRAILING_PROFIT_THRESHOLD_TIGHT,
     )
 
 
