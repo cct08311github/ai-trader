@@ -27,6 +27,7 @@ const proxyConfig = {
 
 export default defineConfig(({ mode }) => {
   return {
+    base: '/ai-trader/',
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
@@ -34,12 +35,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3012,
       strictPort: true,
-      host: '127.0.0.1',
+      host: '0.0.0.0',
       proxy: proxyConfig,
     },
     preview: {
       port: 3012,
-      host: '127.0.0.1',
+      host: '0.0.0.0',
       strictPort: true,
       proxy: proxyConfig,
       allowedHosts: [
@@ -47,6 +48,7 @@ export default defineConfig(({ mode }) => {
         '.tailde842d.ts.net',
         'localhost',
         '127.0.0.1',
+        'host.docker.internal',
       ],
     },
     build: {
