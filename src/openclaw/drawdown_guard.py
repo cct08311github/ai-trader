@@ -12,6 +12,10 @@ log = logging.getLogger(__name__)
 _LAST_DEEP_SUSPEND_NOTIFY: datetime | None = None
 _DEEP_SUSPEND_NOTIFY_COOLDOWN = timedelta(minutes=10)
 
+# Minimum trading days per month for _compute_monthly_returns to consider
+# a month valid.  Prevents fake/sparse data from triggering DEEP SUSPEND.
+_MIN_TRADING_DAYS_PER_MONTH: int = 5
+
 
 @dataclass
 class DrawdownPolicy:
@@ -137,10 +141,14 @@ def _compute_monthly_returns(conn: sqlite3.Connection) -> list[tuple[str, float]
                MAX(trade_date) AS last_date
         FROM daily_nav
         GROUP BY month
-        HAVING COUNT(*) >= 1
+        HAVING COUNT(*) >= ?
         ORDER BY month ASC
-        """
+        """,
+        (_MIN_TRADING_DAYS_PER_MONTH,),
     ).fetchall()
+
+    if not rows:
+        return []
 
     results: list[tuple[str, float]] = []
     for month, first_date, last_date in rows:
@@ -175,6 +183,10 @@ def evaluate_deep_suspend_guard(conn: sqlite3.Connection, policy: DrawdownPolicy
     threshold = -abs(policy.deep_suspend_monthly_loss_pct)
 
     if len(monthly) < n:
+        log.debug(
+            "[deep_suspend] insufficient data: %d months (need %d, min %d days/month)",
+            len(monthly), n, _MIN_TRADING_DAYS_PER_MONTH,
+        )
         return DrawdownDecision("normal", "RISK_DEEP_SUSPEND_INSUFFICIENT_DATA", 0.0, 0)
 
     last_n = monthly[-n:]
@@ -182,6 +194,10 @@ def evaluate_deep_suspend_guard(conn: sqlite3.Connection, policy: DrawdownPolicy
 
     if len(losing_months) == n:
         avg_loss = sum(r for _, r in losing_months) / n
+        log.warning(
+            "[deep_suspend] TRIGGERED: %d consecutive losing months, avg_loss=%.2f%%, months=%s",
+            n, avg_loss * 100, [(m, f"{r:.2%}") for m, r in last_n],
+        )
         return DrawdownDecision(
             "deep_suspend",
             "RISK_DEEP_SUSPEND_CONSECUTIVE_LOSS",
@@ -280,11 +296,15 @@ def apply_drawdown_actions(conn: sqlite3.Connection, decision: DrawdownDecision)
 
     # DEEP_SUSPEND: send Telegram notification with human review checklist
     if decision.risk_mode == "deep_suspend":
-        _notify_deep_suspend(decision)
+        _notify_deep_suspend(decision, conn=conn)
 
 
-def _notify_deep_suspend(decision: DrawdownDecision) -> None:
-    """Send Telegram alert with restart checklist when DEEP SUSPEND is triggered (10-min cooldown)."""
+def _notify_deep_suspend(decision: DrawdownDecision, conn: sqlite3.Connection | None = None) -> None:
+    """Send Telegram alert with restart checklist when DEEP SUSPEND is triggered (10-min cooldown).
+
+    Also writes an audit incident to the DB (if conn is provided) so the
+    notification is traceable even if Telegram logs are unavailable.
+    """
     global _LAST_DEEP_SUSPEND_NOTIFY
     now = datetime.now(timezone.utc)
     if (
@@ -294,6 +314,25 @@ def _notify_deep_suspend(decision: DrawdownDecision) -> None:
         log.info("[DEEP SUSPEND] notification suppressed by 10-min cooldown")
         return
     _LAST_DEEP_SUSPEND_NOTIFY = now
+
+    # Audit: write notification record to incidents table
+    if conn is not None:
+        try:
+            if _table_exists(conn, "incidents"):
+                conn.execute(
+                    """INSERT INTO incidents(incident_id, ts, severity, source, code, detail_json, resolved)
+                       VALUES (lower(hex(randomblob(16))), datetime('now'), 'critical',
+                               'deep_suspend_notify', 'DEEP_SUSPEND_TELEGRAM_SENT', ?, 0)""",
+                    (json.dumps({
+                        "monthly_losses": decision.monthly_losses,
+                        "consecutive_loss_months": decision.consecutive_loss_months,
+                        "drawdown": decision.drawdown,
+                    }, ensure_ascii=True),),
+                )
+                conn.commit()
+        except Exception:  # noqa: BLE001
+            log.warning("[deep_suspend] failed to write notification audit")
+
     try:
         from openclaw.tg_notify import send_message  # lazy import
 
@@ -310,5 +349,6 @@ def _notify_deep_suspend(decision: DrawdownDecision) -> None:
             f"{_DEEP_SUSPEND_CHECKLIST}"
         )
         send_message(msg)
+        log.info("[deep_suspend] Telegram notification sent")
     except Exception:  # noqa: BLE001
         pass  # 通知失敗不影響主流程；incident 已寫入 DB
