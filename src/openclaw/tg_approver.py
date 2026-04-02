@@ -27,7 +27,7 @@ import uuid
 log = logging.getLogger(__name__)
 
 _DEFAULT_CHAT_ID = "-1003772422881"
-_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS", "STRATEGY_DIRECTION"}
+_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS", "STRATEGY_DIRECTION", "PARAM_OPTIMIZATION"}
 
 
 # ── 內部工具 ──────────────────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
                   supporting_evidence, confidence, proposal_json
              FROM strategy_proposals
             WHERE status='pending'
-              AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS', 'STRATEGY_DIRECTION')
+              AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS', 'STRATEGY_DIRECTION', 'PARAM_OPTIMIZATION')
             ORDER BY created_at DESC""",
     ).fetchall()
 
@@ -198,7 +198,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         # 持倉現況
         pos_ctx = _get_position_context(conn, symbol) if symbol else ""
 
-        emoji = {"POSITION_REBALANCE": "🔄", "SECTOR_FOCUS": "🎯", "STRATEGY_DIRECTION": "📊"}.get(rule, "📋")
+        emoji = {"POSITION_REBALANCE": "🔄", "SECTOR_FOCUS": "🎯", "STRATEGY_DIRECTION": "📊", "PARAM_OPTIMIZATION": "⚙️"}.get(rule, "📋")
         lines = [
             f"{emoji} <b>策略提案審查</b>",
             f"<b>類型</b>：{rule}",

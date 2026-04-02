@@ -1,0 +1,13 @@
+{
+  "window_days": 28,
+  "quality_gate": {
+    "min_sharpe_improvement": 0.05,
+    "max_mdd_ratio": 1.1,
+    "min_profit_factor": 1.0,
+    "min_trades": 10
+  },
+  "excluded_params": [
+    "daily_loss_limit"
+  ],
+  "notes": "Phase 1: conservative thresholds, all proposals require human approval"
+}
