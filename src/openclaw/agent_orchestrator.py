@@ -128,6 +128,8 @@ async def run_orchestrator() -> None:
     from openclaw.agents.risk_monitor import run_risk_monitor
     from openclaw.agents.strategy_auto_optimizer import run_strategy_auto_optimizer
 
+    from openclaw.competitor_monitor import run_competitor_monitor
+
     log.info("Agent Orchestrator started | DB=%s", DB_PATH)
 
     last_pm_reviewed_at: Optional[str] = None
@@ -147,6 +149,11 @@ async def run_orchestrator() -> None:
             with get_readwrite_conn(DB_PATH) as conn:
                 # ── 定時任務 ──────────────────────────────────────────────────
                 if _is_weekday_twn(now_twn):
+                    # 每交易日 08:00 TWN → 競品監控（開盤前）
+                    if _should_run_now("08:00", now_twn):
+                        asyncio.create_task(
+                            _run_agent("CompetitorMonitorAgent", run_competitor_monitor))
+
                     if _should_run_now("08:20", now_twn):
                         asyncio.create_task(_run_agent("MarketResearchAgent", run_market_research))
 
