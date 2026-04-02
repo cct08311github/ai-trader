@@ -56,7 +56,12 @@ class TestEnumeratePm2:
 
 class TestEnumerateNginx:
     def test_empty_on_missing_dir(self):
-        assert enumerate_nginx("/nonexistent/path/") == []
+        # Uses an allowed dir that doesn't exist on this machine
+        assert enumerate_nginx("/etc/nginx/sites-enabled/") == []
+
+    def test_rejects_disallowed_dir(self):
+        with pytest.raises(ValueError, match="Disallowed nginx_config_path"):
+            enumerate_nginx("/nonexistent/path/")
 
 
 class TestEnumerateTailscale:

@@ -8,6 +8,27 @@ from typing import List
 
 from .finding_scorer import ServiceInfo
 
+ALLOWED_PM2_BINS = {"pm2", "/usr/local/bin/pm2", "/opt/homebrew/bin/pm2", "/usr/bin/pm2"}
+
+ALLOWED_NGINX_DIRS = {
+    "/etc/nginx/sites-enabled",
+    "/etc/nginx/conf.d",
+    "/opt/homebrew/etc/nginx/servers",
+}
+
+
+def _validate_pm2_binary(pm2_bin: str) -> None:
+    """Validate pm2_binary against allowlist to prevent arbitrary command execution."""
+    if pm2_bin not in ALLOWED_PM2_BINS:
+        raise ValueError(f"Disallowed pm2_binary: {pm2_bin}")
+
+
+def _validate_nginx_dir(nginx_dir: str) -> None:
+    """Validate nginx config path is under allowed directories."""
+    normalised = nginx_dir.rstrip("/")
+    if normalised not in ALLOWED_NGINX_DIRS:
+        raise ValueError(f"Disallowed nginx_config_path: {nginx_dir}")
+
 
 def _run(cmd: List[str], timeout: int = 10) -> str:
     """Run a command and return stdout; empty string on failure."""
@@ -25,6 +46,7 @@ def _run(cmd: List[str], timeout: int = 10) -> str:
 
 def enumerate_pm2(pm2_bin: str = "pm2") -> List[ServiceInfo]:
     """List services managed by pm2."""
+    _validate_pm2_binary(pm2_bin)
     raw = _run([pm2_bin, "jlist"])
     if not raw:
         return []
@@ -49,6 +71,7 @@ def enumerate_pm2(pm2_bin: str = "pm2") -> List[ServiceInfo]:
 
 def enumerate_nginx(config_dir: str = "/etc/nginx/sites-enabled/") -> List[ServiceInfo]:
     """Parse nginx configs to find upstream services."""
+    _validate_nginx_dir(config_dir)
     config_path = Path(config_dir)
     if not config_path.exists():
         return []

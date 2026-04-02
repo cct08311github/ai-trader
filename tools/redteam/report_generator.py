@@ -38,10 +38,11 @@ def _finding_section(idx: int, sf: ScoredFinding) -> str:
         "",
     ])
     if f.evidence:
+        safe_evidence = f.evidence.replace("```", "~~~")
         lines.extend([
             "**Evidence:**",
             f"```",
-            f.evidence,
+            safe_evidence,
             f"```",
             "",
         ])
@@ -190,7 +191,7 @@ def generate_report(
     content = "\n".join(sections)
 
     if output_path:
-        with open(output_path, "w") as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
 
     return content

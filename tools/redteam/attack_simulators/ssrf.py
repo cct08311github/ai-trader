@@ -2,12 +2,28 @@
 from __future__ import annotations
 
 from typing import List
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import urllib.request
 import urllib.error
 
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Block HTTP redirects to prevent the SSRF scanner itself becoming an SSRF vector."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_no_redirect_opener = urllib.request.build_opener(_NoRedirectHandler())
+
 from ..finding_scorer import Finding
+
+
+def _is_localhost(url: str) -> bool:
+    """Check if URL targets localhost using proper URL parsing."""
+    parsed = urlparse(url)
+    return parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
 # Internal IP payloads to test for SSRF
 _SSRF_PAYLOADS = [
@@ -30,7 +46,7 @@ def scan_ssrf(
     timeout: int = 5,
 ) -> List[Finding]:
     """Test SSRF by injecting internal IPs into URL parameters (localhost only)."""
-    if not base_url.startswith(("http://localhost", "http://127.0.0.1")):
+    if not _is_localhost(base_url):
         return []
 
     findings: List[Finding] = []
@@ -47,7 +63,7 @@ def scan_ssrf(
             try:
                 req = urllib.request.Request(url, method="GET")
                 req.add_header("User-Agent", "RedTeam-Scanner/1.0 (security-audit)")
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                with _no_redirect_opener.open(req, timeout=timeout) as resp:
                     body = resp.read(4096).decode("utf-8", errors="ignore")
                     status = resp.status
 

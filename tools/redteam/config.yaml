@@ -17,8 +17,10 @@ targets:
     url: ws://localhost:8080
     type: websocket
 
+# repo_paths: use relative path (relative to project root) or set via
+# environment variable REDTEAM_REPO_PATH.
 repo_paths:
-  ai-trader: /Users/openclaw/.openclaw/shared/projects/ai-trader
+  ai-trader: .
 
 known_config_files:
   - ecosystem.config.js
@@ -26,5 +28,7 @@ known_config_files:
   - .env.production
   - .env.local
 
+# nginx_config_path / pm2_binary: must match the allowlist in
+# service_enumerator.py (ALLOWED_NGINX_DIRS / ALLOWED_PM2_BINS).
 nginx_config_path: /etc/nginx/sites-enabled/
 pm2_binary: pm2

@@ -13,14 +13,22 @@ from .config_auditor import audit_config
 from .dependency_auditor import audit_all as audit_deps
 from .finding_scorer import Finding, RedTeamReport, score_finding
 from .report_generator import generate_report
-from .service_enumerator import enumerate_all
+from .service_enumerator import enumerate_all, ALLOWED_PM2_BINS, ALLOWED_NGINX_DIRS
 
 # Attack simulators
 from .attack_simulators.auth_bypass import scan_auth_bypass
 from .attack_simulators.path_traversal import scan_path_traversal
 from .attack_simulators.ssrf import scan_ssrf
 
+from urllib.parse import urlparse
+
 _DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
+
+
+def _is_localhost(url: str) -> bool:
+    """Check if URL targets localhost using proper URL parsing."""
+    parsed = urlparse(url)
+    return parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
 
 def load_config(config_path: Optional[str] = None) -> dict:
@@ -61,7 +69,7 @@ def run_scan(config_path: Optional[str] = None) -> RedTeamReport:
     targets = config.get("targets", [])
     for target in targets:
         url = target.get("url", "")
-        if not url.startswith(("http://localhost", "http://127.0.0.1")):
+        if not _is_localhost(url):
             continue
 
         attack_findings.extend(scan_path_traversal(url, max_requests=max_req, timeout=timeout))

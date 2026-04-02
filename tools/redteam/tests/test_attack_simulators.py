@@ -83,21 +83,21 @@ class TestSsrf:
         findings = scan_ssrf("http://example.com")
         assert findings == []
 
-    @patch("tools.redteam.attack_simulators.ssrf.urllib.request.urlopen")
-    def test_detects_ssrf(self, mock_urlopen):
+    @patch("tools.redteam.attack_simulators.ssrf._no_redirect_opener")
+    def test_detects_ssrf(self, mock_opener):
         mock_resp = MagicMock()
         mock_resp.status = 200
         mock_resp.read.return_value = b'{"ami-id": "ami-12345", "instance-id": "i-abc"}'
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_urlopen.return_value = mock_resp
+        mock_opener.open.return_value = mock_resp
 
         findings = scan_ssrf("http://localhost:3000", max_requests=2)
         assert len(findings) >= 1
         assert findings[0].category == "ssrf"
 
-    @patch("tools.redteam.attack_simulators.ssrf.urllib.request.urlopen")
-    def test_respects_max_requests(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("refused")
+    @patch("tools.redteam.attack_simulators.ssrf._no_redirect_opener")
+    def test_respects_max_requests(self, mock_opener):
+        mock_opener.open.side_effect = urllib.error.URLError("refused")
         scan_ssrf("http://localhost:3000", max_requests=5)
-        assert mock_urlopen.call_count <= 5
+        assert mock_opener.open.call_count <= 5

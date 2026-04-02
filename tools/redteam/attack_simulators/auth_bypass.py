@@ -6,8 +6,15 @@ from typing import List
 
 import urllib.request
 import urllib.error
+from urllib.parse import urlparse
 
 from ..finding_scorer import Finding
+
+
+def _is_localhost(url: str) -> bool:
+    """Check if URL targets localhost using proper URL parsing."""
+    parsed = urlparse(url)
+    return parsed.hostname in ("localhost", "127.0.0.1", "::1")
 
 # Endpoints commonly requiring auth
 _AUTH_ENDPOINTS = [
@@ -33,7 +40,7 @@ def scan_auth_bypass(
     timeout: int = 5,
 ) -> List[Finding]:
     """Test authentication bypass on API endpoints (localhost only)."""
-    if not base_url.startswith(("http://localhost", "http://127.0.0.1")):
+    if not _is_localhost(base_url):
         return []
 
     findings: List[Finding] = []
@@ -68,11 +75,18 @@ def scan_auth_bypass(
                             is_data = len(body) > 50
 
                         if is_data:
+                            # Summarise response structure, not actual values (avoid leaking sensitive data)
+                            try:
+                                parsed_summary = json.loads(body)
+                                body_summary = f"JSON keys: {list(parsed_summary.keys())[:5]}"
+                            except (json.JSONDecodeError, AttributeError):
+                                body_summary = f"text, {len(body)} bytes"
+
                             findings.append(Finding(
                                 title=f"Auth bypass: {endpoint} ({case_name})",
                                 description=f"Endpoint returned data without valid authentication",
                                 category="auth-bypass",
-                                evidence=f"URL: {url}, Case: {case_name}, Status: {status}, Body: {body[:100]}",
+                                evidence=f"URL: {url}, Case: {case_name}, Status: {status}, Response: {body_summary}",
                                 remediation="Enforce authentication middleware on all API endpoints",
                             ))
             except urllib.error.HTTPError as e:
