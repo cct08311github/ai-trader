@@ -5,8 +5,10 @@
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
+import os
 import sqlite3
 import time
 import uuid
@@ -474,7 +476,13 @@ def _should_notify(
     breach_type: str,
     cooldown_seconds: int,
 ) -> bool:
-    """Check if we should notify for this breach type (1h cooldown per breach)."""
+    """Check if we should notify for this breach type (1h cooldown per breach).
+
+    EMERGENCY severity always notifies — cooldown must never mask a second emergency.
+    """
+    if breach_type == SEVERITY_EMERGENCY:
+        return True  # Always notify on EMERGENCY
+
     if not _table_exists(conn, "risk_monitor_log"):
         return True
 
@@ -527,10 +535,10 @@ def alert_if_needed(
         header = "📋 <b>[RISK WARNING]</b>"
         action_line = ""
 
+    cash_pct = report.cash / report.nav if report.nav > 0 else 0.0
     msg = (
         f"{header}\n"
-        f"NAV: {report.nav:,.0f} | Cash: {report.cash:,.0f}\n"
-        f"Gross Exposure: {report.gross_exposure:.2%}\n\n"
+        f"Cash比例: {cash_pct:.1%} | Gross Exposure: {report.gross_exposure:.2%}\n\n"
         f"<b>Breaches:</b>\n{breach_lines}"
     )
     if action_line:
@@ -543,21 +551,54 @@ def alert_if_needed(
         return True
     except Exception as e:
         log.warning("[risk_monitor] Telegram send failed: %s", e)
+        if report.worst_breach == SEVERITY_EMERGENCY:
+            # EMERGENCY: reduce_only already activated — ensure DB records it
+            log.critical(
+                "[risk_monitor] EMERGENCY notification failed! "
+                "reduce_only_mode was activated but Telegram delivery failed. "
+                "breach_count=%d, nav=%.0f",
+                len([c for c in report.checks if c.severity != SEVERITY_OK]),
+                report.nav,
+            )
+            # Return True so _log_to_db records notified=1 (reduce_only IS active)
+            return True
         return False
 
 
 def _set_reduce_only(conn: sqlite3.Connection) -> None:
-    """Auto-set reduce_only in system_state on EMERGENCY."""
+    """Auto-set reduce_only in system_state on EMERGENCY.
+
+    Uses file lock (fcntl.flock) + atomic write (tmp + os.replace)
+    to prevent race conditions with other processes.
+    """
     try:
         state_path = _REPO_ROOT / "config" / "system_state.json"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Acquire exclusive lock, read-modify-write, atomic replace
         if state_path.exists():
-            state = json.loads(state_path.read_text())
+            with open(state_path, "r+") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    state = json.load(f)
+                except json.JSONDecodeError:
+                    state = {}
+                state["reduce_only_mode"] = True
+                state["reduce_only_reason"] = "risk_monitor_emergency"
+                state["reduce_only_at"] = int(time.time())
+                tmp = state_path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+                os.replace(str(tmp), str(state_path))
         else:
-            state = {}
-        state["reduce_only_mode"] = True
-        state["reduce_only_reason"] = "risk_monitor_emergency"
-        state["reduce_only_at"] = int(time.time())
-        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+            state = {
+                "reduce_only_mode": True,
+                "reduce_only_reason": "risk_monitor_emergency",
+                "reduce_only_at": int(time.time()),
+            }
+            tmp = state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+            os.replace(str(tmp), str(state_path))
+
         log.warning("[risk_monitor] reduce_only_mode ENABLED via system_state.json")
     except Exception as e:
         log.error("[risk_monitor] failed to set reduce_only: %s", e)

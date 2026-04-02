@@ -394,6 +394,83 @@ def test_alert_emergency_sets_reduce_only(mem_db, tmp_path, monkeypatch):
     assert state["reduce_only_reason"] == "risk_monitor_emergency"
 
 
+
+
+def test_should_notify_emergency_always(mem_db):
+    """EMERGENCY must always notify regardless of cooldown."""
+    mem_db.execute(
+        "INSERT INTO risk_monitor_log VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("test-id", int(time.time()), 100000, 5000, 0.8, 0.15, -0.01, 0.05,
+         "emergency", "[]", 1),
+    )
+    mem_db.commit()
+    # Even with a recent emergency notification, should still notify
+    assert _should_notify(mem_db, "emergency", 3600) is True
+
+
+def test_alert_emergency_telegram_fail_still_returns_true(mem_db, tmp_path, monkeypatch):
+    """HIGH-3: If Telegram fails on EMERGENCY, still return True for DB logging."""
+    monkeypatch.setattr("openclaw.agents.risk_monitor._REPO_ROOT", tmp_path)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "system_state.json").write_text("{}")
+
+    def tg_fail(text, **kw):
+        raise ConnectionError("Telegram down")
+
+    monkeypatch.setattr(
+        "openclaw.tg_notify.send_message",
+        tg_fail,
+    )
+
+    report = RiskMonitorReport(
+        checks=[RiskCheckResult("gross_exposure", 1.5, 1.2, "emergency")],
+        worst_breach="emergency",
+        nav=100000,
+        timestamp=int(time.time()),
+        gross_exposure=1.5,
+    )
+    result = alert_if_needed(report, mem_db)
+    # Should return True even though Telegram failed — reduce_only was activated
+    assert result is True
+
+    # Verify reduce_only was still set
+    import json
+    state = json.loads((config_dir / "system_state.json").read_text())
+    assert state["reduce_only_mode"] is True
+
+
+def test_alert_message_no_absolute_values(mem_db, tmp_path, monkeypatch):
+    """MEDIUM: Telegram message should show percentages, not absolute NAV/Cash."""
+    monkeypatch.setattr("openclaw.agents.risk_monitor._REPO_ROOT", tmp_path)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "system_state.json").write_text("{}")
+
+    sent = []
+    monkeypatch.setattr(
+        "openclaw.tg_notify.send_message",
+        lambda text, **kw: sent.append(text) or True,
+    )
+
+    report = RiskMonitorReport(
+        checks=[RiskCheckResult("cash_level", 0.03, 0.05, "warning")],
+        worst_breach="warning",
+        nav=100000,
+        timestamp=int(time.time()),
+        cash=3000,
+    )
+    alert_if_needed(report, mem_db)
+
+    assert len(sent) == 1
+    msg = sent[0]
+    # Should NOT contain absolute NAV or Cash values
+    assert "100,000" not in msg
+    assert "3,000" not in msg
+    # Should contain percentage
+    assert "Cash比例:" in msg
+
+
 # ── Policy Loading Tests ─────────────────────────────────────────────────────
 
 def test_load_policy_defaults():

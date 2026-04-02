@@ -158,28 +158,28 @@ async def run_orchestrator() -> None:
                     # 每 30 分鐘系統健康（市場時段）
                     if 9 <= now_twn.hour < 14:
                         if (last_health_run_utc is None or
-                                (now_utc - last_health_run_utc).seconds >= 1800):
+                                (now_utc - last_health_run_utc).total_seconds() >= 1800):
                             asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
                             last_health_run_utc = now_utc
 
                     # 每 15 分鐘風險監控（市場時段）
                     if 9 <= now_twn.hour < 14:
                         if (last_risk_market_utc is None or
-                                (now_utc - last_risk_market_utc).seconds >= 900):
+                                (now_utc - last_risk_market_utc).total_seconds() >= 900):
                             asyncio.create_task(_run_agent("RiskMonitorAgent", run_risk_monitor))
                             last_risk_market_utc = now_utc
 
                 # 每 2 小時系統健康（非市場時段）
                 if not (9 <= now_twn.hour < 14):
                     if (last_health_off_utc is None or
-                            (now_utc - last_health_off_utc).seconds >= 7200):
+                            (now_utc - last_health_off_utc).total_seconds() >= 7200):
                         asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
                         last_health_off_utc = now_utc
 
                 # 每 60 分鐘風險監控（非市場時段）
                 if not (9 <= now_twn.hour < 14):
                     if (last_risk_off_utc is None or
-                            (now_utc - last_risk_off_utc).seconds >= 3600):
+                            (now_utc - last_risk_off_utc).total_seconds() >= 3600):
                         asyncio.create_task(_run_agent("RiskMonitorAgent", run_risk_monitor))
                         last_risk_off_utc = now_utc
 
