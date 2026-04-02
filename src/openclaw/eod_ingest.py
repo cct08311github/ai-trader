@@ -417,16 +417,34 @@ def main() -> None:
                     file=__import__("sys").stderr,
                 )
 
-        # ── Positions current_price sync ──────────────────────────────────
+        # ── Positions current_price sync + HWM backfill ─────────────────
         positions_updated = 0
         if status == "success":
             try:
-                from openclaw.pnl_engine import refresh_current_prices
+                from openclaw.pnl_engine import refresh_current_prices, backfill_high_water_mark
                 conn.row_factory = None
                 positions_updated = refresh_current_prices(conn)
+                backfill_high_water_mark(conn)
             except Exception as pos_exc:
                 print(
                     f"[eod_ingest] positions price sync skipped: {pos_exc}",
+                    file=__import__("sys").stderr,
+                )
+
+            # ── EOD fallback exit signal check ───────────────────────────
+            # 盤後用最新 eod_prices 對所有持倉重跑 evaluate_exit()
+            # 補漏盤中 watcher 因故未觸發的 stop_loss / trailing_stop
+            try:
+                from openclaw.eod_exit_check import run_eod_exit_check
+                eod_exit_results = run_eod_exit_check(conn)
+                if eod_exit_results:
+                    print(
+                        f"[eod_ingest] EOD exit signals: {eod_exit_results}",
+                        file=__import__("sys").stderr,
+                    )
+            except Exception as exit_exc:
+                print(
+                    f"[eod_ingest] EOD exit check skipped: {exit_exc}",
                     file=__import__("sys").stderr,
                 )
 
