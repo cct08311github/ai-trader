@@ -157,6 +157,61 @@ def _get_orders_last_60s(conn: sqlite3.Connection) -> int:
         return 0
 
 
+# ── 市場制度濾波器 (#531) ─────────────────────────────────────────────────
+_MARKET_REGIME_SYMBOL: str = _os.environ.get("MARKET_REGIME_SYMBOL", "0050")
+_MARKET_REGIME_MA_SHORT: int = int(_os.environ.get("MARKET_REGIME_MA_SHORT", "5"))
+_MARKET_REGIME_MA_LONG: int = int(_os.environ.get("MARKET_REGIME_MA_LONG", "20"))
+
+# Cache: (date_str, result) — recalculate once per calendar day
+_market_regime_cache: tuple[Optional[str], bool] = (None, True)
+
+
+def _is_market_bullish(conn: sqlite3.Connection) -> bool:
+    """0050 MA5 >= MA20 時視為多頭市場，允許建倉。
+
+    Bearish (MA5 < MA20) → 禁止新建倉（buy 信號降級為 hold），只允許賣出。
+    資料不足（< MA_LONG 筆 eod_prices）→ 不阻擋（fail-open）。
+    結果按日快取，避免每個 symbol 重複查詢。
+
+    Issue: #531
+    """
+    global _market_regime_cache
+
+    today_str = dt.datetime.now(tz=dt.timezone(dt.timedelta(hours=8))).strftime("%Y-%m-%d")
+    if _market_regime_cache[0] == today_str:
+        return _market_regime_cache[1]
+
+    try:
+        rows = conn.execute(
+            "SELECT close FROM eod_prices WHERE symbol = ? "
+            "ORDER BY trade_date DESC LIMIT ?",
+            (_MARKET_REGIME_SYMBOL, _MARKET_REGIME_MA_LONG),
+        ).fetchall()
+
+        if len(rows) < _MARKET_REGIME_MA_LONG:
+            log.warning("market regime: insufficient data (%d rows) for %s — fail-open",
+                        len(rows), _MARKET_REGIME_SYMBOL)
+            _market_regime_cache = (today_str, True)
+            return True
+
+        # rows are newest-first from DESC; reverse for chronological
+        closes = [float(r[0]) for r in reversed(rows)]
+        ma_short = sum(closes[-_MARKET_REGIME_MA_SHORT:]) / _MARKET_REGIME_MA_SHORT
+        ma_long = sum(closes) / _MARKET_REGIME_MA_LONG
+        bullish = ma_short >= ma_long
+
+        _market_regime_cache = (today_str, bullish)
+        log.info("market regime: %s MA%d=%.2f MA%d=%.2f → %s",
+                 _MARKET_REGIME_SYMBOL, _MARKET_REGIME_MA_SHORT, ma_short,
+                 _MARKET_REGIME_MA_LONG, ma_long,
+                 "BULLISH" if bullish else "BEARISH")
+        return bullish
+    except sqlite3.Error as e:
+        log.warning("market regime check failed: %s — fail-open", e)
+        _market_regime_cache = (today_str, True)
+        return True
+
+
 def _get_today_buy_filled_symbols(conn: sqlite3.Connection) -> set:
     """返回今日（UTC+8）已有 fills 的 buy 訂單 symbol 集合，用於 wash sale 防護。"""
     try:
@@ -1304,6 +1359,17 @@ def run_watcher() -> None:
                                approved=False, reject_code="RISK_MOCK_DATA_FORBIDDEN",
                                decision_id=decision_id, extra_meta=_agg_meta)
                     log.info("[%s] signal=buy BLOCKED — mock data mode", symbol)
+                    continue
+
+                # ── 市場制度濾波器：大盤 MA5<MA20 時禁止建倉 (#531) ────────
+                if sig == "buy" and not _is_market_bullish(conn):
+                    _agg_meta["market_regime"] = "bearish"
+                    _log_trace(conn, symbol=symbol, signal=sig, snap=snap,
+                               approved=False, reject_code="RISK_MARKET_REGIME_BEARISH",
+                               decision_id=decision_id, extra_meta=_agg_meta)
+                    log.info("[%s] signal=buy BLOCKED — market regime bearish (%s MA%d < MA%d)",
+                             symbol, _MARKET_REGIME_SYMBOL,
+                             _MARKET_REGIME_MA_SHORT, _MARKET_REGIME_MA_LONG)
                     continue
 
                 # ── 策略立場守衛：委員會 stance 影響買入決策 (#383) ────────
