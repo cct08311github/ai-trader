@@ -133,6 +133,7 @@ async def run_orchestrator() -> None:
     last_health_run_utc: Optional[datetime] = None
     last_health_off_utc: Optional[datetime] = None
     last_opt_trigger_date: Optional[str] = None
+    last_optimizer_event_date: Optional[str] = None
 
     from openclaw.db_utils import get_readwrite_conn
 
@@ -181,16 +182,24 @@ async def run_orchestrator() -> None:
                             _run_agent("StrategyCommitteeAgent", run_strategy_committee))
 
                 # ── 事件任務 ──────────────────────────────────────────────────
+                today_str = now_twn.strftime("%Y-%m-%d")
                 new_reviewed_at = _pm_review_just_completed(last_seen=last_pm_reviewed_at)
                 if new_reviewed_at:
-                    log.info("[EVENT] PM review completed → StrategyCommitteeAgent + StrategyAutoOptimizer")
                     last_pm_reviewed_at = new_reviewed_at
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))
-                    asyncio.create_task(
-                        _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
+                    # 每日最多觸發一次 StrategyAutoOptimizer（事件驅動去重）
+                    if last_optimizer_event_date != today_str:
+                        log.info("[EVENT] PM review completed → StrategyCommitteeAgent + StrategyAutoOptimizer")
+                        last_optimizer_event_date = today_str
+                        asyncio.create_task(
+                            _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
+                    else:
+                        log.info(
+                            "[EVENT] PM review completed → StrategyCommitteeAgent only "
+                            "(StrategyAutoOptimizer already triggered today)"
+                        )
 
-                today_str = now_twn.strftime("%Y-%m-%d")
                 if last_opt_trigger_date != today_str and _watcher_no_fills_3days(conn):
                     log.info("[EVENT] 3-day no fills → SystemOptimizationAgent")
                     last_opt_trigger_date = today_str
