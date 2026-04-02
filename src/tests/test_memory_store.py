@@ -518,7 +518,10 @@ def test_run_memory_hygiene():
 
 
 def test_run_memory_hygiene_no_expiry():
+    from datetime import datetime, timedelta
     conn = _conn()
+    # Use a recent date (within 90-day window) to avoid date-sensitive flakiness
+    recent_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     upsert_semantic_rule(
         conn,
         SemanticRule(
@@ -526,7 +529,7 @@ def test_run_memory_hygiene_no_expiry():
             confidence=0.9,
             source_episodes=[],
             sample_count=1,
-            last_validated_date="2026-01-01",
+            last_validated_date=recent_date,
         ),
     )
     result = run_memory_hygiene(conn)
