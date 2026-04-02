@@ -1,0 +1,30 @@
+# Red Team Simulator Configuration
+# All scans are localhost-only with safe payloads.
+
+scan:
+  max_requests_per_endpoint: 10
+  timeout_seconds: 5
+  localhost_only: true
+
+targets:
+  - name: ai-trader-web
+    url: http://localhost:3000
+    type: web
+  - name: ai-trader-api
+    url: http://localhost:8000
+    type: api
+  - name: ai-trader-ws
+    url: ws://localhost:8080
+    type: websocket
+
+repo_paths:
+  ai-trader: /Users/openclaw/.openclaw/shared/projects/ai-trader
+
+known_config_files:
+  - ecosystem.config.js
+  - .env
+  - .env.production
+  - .env.local
+
+nginx_config_path: /etc/nginx/sites-enabled/
+pm2_binary: pm2
