@@ -126,6 +126,7 @@ async def run_orchestrator() -> None:
     from openclaw.agents.system_optimization import run_system_optimization
     from openclaw.agents.eod_analysis import run_eod_analysis
     from openclaw.agents.risk_monitor import run_risk_monitor
+    from openclaw.agents.strategy_auto_optimizer import run_strategy_auto_optimizer
 
     log.info("Agent Orchestrator started | DB=%s", DB_PATH)
 
@@ -135,6 +136,7 @@ async def run_orchestrator() -> None:
     last_opt_trigger_date: Optional[str] = None
     last_risk_market_utc: Optional[datetime] = None
     last_risk_off_utc: Optional[datetime] = None
+    last_optimizer_event_date: Optional[str] = None
 
     from openclaw.db_utils import get_readwrite_conn
 
@@ -189,19 +191,32 @@ async def run_orchestrator() -> None:
                             _run_agent("SystemOptimizationAgent", run_system_optimization))
                         # 週一 07:00 深度反思（非阻塞）
                         asyncio.create_task(asyncio.to_thread(_run_reflection_agent))
+                    if _should_run_now("07:15", now_twn):
+                        asyncio.create_task(
+                            _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
                     if _should_run_now("07:30", now_twn):
                         asyncio.create_task(
                             _run_agent("StrategyCommitteeAgent", run_strategy_committee))
 
                 # ── 事件任務 ──────────────────────────────────────────────────
+                today_str = now_twn.strftime("%Y-%m-%d")
                 new_reviewed_at = _pm_review_just_completed(last_seen=last_pm_reviewed_at)
                 if new_reviewed_at:
-                    log.info("[EVENT] PM review completed → StrategyCommitteeAgent")
                     last_pm_reviewed_at = new_reviewed_at
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))
+                    # 每日最多觸發一次 StrategyAutoOptimizer（事件驅動去重）
+                    if last_optimizer_event_date != today_str:
+                        log.info("[EVENT] PM review completed → StrategyCommitteeAgent + StrategyAutoOptimizer")
+                        last_optimizer_event_date = today_str
+                        asyncio.create_task(
+                            _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
+                    else:
+                        log.info(
+                            "[EVENT] PM review completed → StrategyCommitteeAgent only "
+                            "(StrategyAutoOptimizer already triggered today)"
+                        )
 
-                today_str = now_twn.strftime("%Y-%m-%d")
                 if last_opt_trigger_date != today_str and _watcher_no_fills_3days(conn):
                     log.info("[EVENT] 3-day no fills → SystemOptimizationAgent")
                     last_opt_trigger_date = today_str

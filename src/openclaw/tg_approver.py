@@ -27,7 +27,7 @@ import uuid
 log = logging.getLogger(__name__)
 
 _DEFAULT_CHAT_ID = "-1003772422881"
-_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS", "STRATEGY_DIRECTION"}
+_NOTIFIABLE_RULES = {"POSITION_REBALANCE", "SECTOR_FOCUS", "STRATEGY_DIRECTION", "PARAM_OPTIMIZATION"}
 
 
 # ── 內部工具 ──────────────────────────────────────────────────────────────────
@@ -175,7 +175,8 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
                   supporting_evidence, confidence, proposal_json
              FROM strategy_proposals
             WHERE status='pending'
-              AND target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS', 'STRATEGY_DIRECTION')
+              AND (target_rule IN ('POSITION_REBALANCE', 'SECTOR_FOCUS', 'STRATEGY_DIRECTION', 'PARAM_OPTIMIZATION')
+                   OR rule_category = 'PARAM_OPTIMIZATION')
             ORDER BY created_at DESC""",
     ).fetchall()
 
@@ -198,7 +199,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         # 持倉現況
         pos_ctx = _get_position_context(conn, symbol) if symbol else ""
 
-        emoji = {"POSITION_REBALANCE": "🔄", "SECTOR_FOCUS": "🎯", "STRATEGY_DIRECTION": "📊"}.get(rule, "📋")
+        emoji = {"POSITION_REBALANCE": "🔄", "SECTOR_FOCUS": "🎯", "STRATEGY_DIRECTION": "📊", "PARAM_OPTIMIZATION": "⚙️"}.get(rule, "📋")
         lines = [
             f"{emoji} <b>策略提案審查</b>",
             f"<b>類型</b>：{rule}",
@@ -230,6 +231,8 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         lines.append(f"\n信心度：{conf:.0%}　<i>ID：{pid[:8]}…</i>")
 
         # URL 按鈕：點擊開瀏覽器呼叫 api 端點，不產生 callback_query
+        # TODO(security): AUTH_TOKEN 直接嵌入 URL 查詢參數有洩露風險（瀏覽器歷史、日誌）。
+        #   應改為 HMAC 簽名 token（含 proposal_id + 過期時間），需要較大架構變更。
         base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
         auth = os.environ.get("AUTH_TOKEN", "")
         buttons = [
