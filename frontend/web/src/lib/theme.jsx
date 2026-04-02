@@ -11,19 +11,35 @@ function getLocalStorage(key, fallback) {
 }
 
 const LIGHT_VARS = {
-  '--bg':      '255 255 255',
-  '--text':    '15 23 42',
-  '--surface': '248 250 252',
-  '--border':  '226 232 240',
-  '--muted':   '148 163 184',
+  '--bg':       '249 250 251',   // gray-50
+  '--text':     '15 23 42',      // slate-900
+  '--surface':  '255 255 255',   // white
+  '--border':   '209 213 219',   // gray-300
+  '--muted':    '107 114 128',   // gray-500
+  '--card':     '255 255 255',   // white
+  '--card-alt': '243 244 246',   // gray-100
+  '--accent':   '16 185 129',    // emerald-500
+  '--shadow':   '0 0 0',
+  '--sidebar-bg':      '15 23 42',   // keep sidebar dark in both modes
+  '--sidebar-text':    '203 213 225',
+  '--sidebar-border':  '30 41 59',
+  '--sidebar-surface': '30 41 59',
 };
 
 const DARK_VARS = {
-  '--bg':      '2 6 23',
-  '--text':    '226 232 240',
-  '--surface': '15 23 42',
-  '--border':  '30 41 59',
-  '--muted':   '100 116 139',
+  '--bg':       '2 6 23',        // slate-950
+  '--text':     '226 232 240',   // slate-200
+  '--surface':  '15 23 42',      // slate-900
+  '--border':   '30 41 59',      // slate-800
+  '--muted':    '100 116 139',   // slate-500
+  '--card':     '15 23 42',      // slate-900
+  '--card-alt': '8 15 40',       // ~slate-950
+  '--accent':   '16 185 129',    // emerald-500
+  '--shadow':   '0 0 0',
+  '--sidebar-bg':      '2 6 23',
+  '--sidebar-text':    '203 213 225',
+  '--sidebar-border':  '15 23 42',
+  '--sidebar-surface': '15 23 42',
 };
 
 function applyTheme(theme) {

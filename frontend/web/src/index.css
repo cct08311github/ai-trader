@@ -2,16 +2,188 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme-aware base ────────────────────────────────────── */
 :root {
   color-scheme: dark;
+}
+:root.light {
+  color-scheme: light;
+}
+
+body {
+  background: rgb(var(--bg));
+  color: rgb(var(--text));
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(51 65 85) transparent;
+  scrollbar-color: rgb(var(--border)) transparent;
 }
 
-/* nicer selection */
 ::selection {
   background: rgba(16, 185, 129, 0.25);
+}
+
+/* ── Light mode overrides for hardcoded dark classes ──────── */
+/*
+  Strategy: components use bg-slate-900/30, border-slate-800, etc.
+  Instead of changing every JSX file, override the worst offenders here.
+  Components will gradually migrate to th-* classes.
+*/
+
+/* Card / panel backgrounds */
+.light .bg-slate-900\/30,
+.light .bg-slate-900\/20,
+.light .bg-slate-900\/40,
+.light .bg-slate-950\/30,
+.light .bg-slate-950\/40,
+.light .bg-slate-950\/50,
+.light .bg-slate-950\/60,
+.light .bg-slate-950\/95 {
+  background-color: rgb(var(--card)) !important;
+}
+
+.light .bg-slate-800 {
+  background-color: rgb(209 213 219) !important; /* gray-300 */
+}
+
+.light .bg-slate-900 {
+  background-color: rgb(var(--surface)) !important;
+}
+
+.light .bg-slate-700\/50 {
+  background-color: rgb(229 231 235 / 0.5) !important; /* gray-200/50 */
+}
+
+.light .bg-slate-700 {
+  background-color: rgb(209 213 219) !important; /* gray-300 */
+}
+
+/* Borders */
+.light .border-slate-800,
+.light .border-slate-800\/60,
+.light .border-slate-900 {
+  border-color: rgb(var(--border)) !important;
+}
+
+.light .border-slate-700 {
+  border-color: rgb(209 213 219) !important; /* gray-300 */
+}
+
+.light .border-slate-600 {
+  border-color: rgb(209 213 219) !important;
+}
+
+/* Text */
+.light .text-slate-100,
+.light .text-slate-200 {
+  color: rgb(15 23 42) !important; /* slate-900 */
+}
+
+.light .text-slate-300 {
+  color: rgb(51 65 85) !important; /* slate-700 */
+}
+
+.light .text-slate-400 {
+  color: rgb(100 116 139) !important; /* slate-500 */
+}
+
+.light .text-slate-500 {
+  color: rgb(107 114 128) !important; /* gray-500 */
+}
+
+/* Shadow override */
+.light .shadow-panel {
+  box-shadow: 0 0 0 1px rgb(var(--border) / 0.4), 0 4px 16px rgb(0 0 0 / 0.06) !important;
+}
+
+.light .shadow-2xl {
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.1) !important;
+}
+
+/* Inputs & selects */
+.light select.bg-slate-950\/40,
+.light input.bg-slate-950\/40 {
+  background-color: rgb(var(--surface)) !important;
+  color: rgb(var(--text)) !important;
+}
+
+/* Hover states */
+.light .hover\:bg-slate-900\/40:hover {
+  background-color: rgb(243 244 246) !important; /* gray-100 */
+}
+
+.light .hover\:bg-slate-800:hover {
+  background-color: rgb(229 231 235) !important; /* gray-200 */
+}
+
+.light .hover\:bg-slate-700:hover {
+  background-color: rgb(229 231 235) !important;
+}
+
+.light .hover\:text-slate-100:hover,
+.light .hover\:text-slate-200:hover {
+  color: rgb(15 23 42) !important;
+}
+
+/* Placeholder */
+.light .placeholder\:text-slate-500::placeholder {
+  color: rgb(156 163 175) !important; /* gray-400 */
+}
+
+/* ── Keep sidebar always dark ────────────────────────────── */
+.light aside,
+.light [role="complementary"] {
+  --bg: var(--sidebar-bg);
+  --text: var(--sidebar-text);
+  --border: var(--sidebar-border);
+  --surface: var(--sidebar-surface);
+}
+
+.light aside .bg-slate-900\/30,
+.light aside .bg-slate-900\/40,
+.light aside .bg-slate-950\/60,
+.light [role="complementary"] .bg-slate-900\/30,
+.light [role="complementary"] .bg-slate-900\/40,
+.light [role="complementary"] .bg-slate-950\/60 {
+  background-color: rgb(30 41 59 / 0.4) !important;
+}
+
+.light aside .text-slate-100,
+.light aside .text-slate-200,
+.light aside .text-slate-300,
+.light aside .text-slate-400,
+.light aside .text-slate-500,
+.light [role="complementary"] .text-slate-100,
+.light [role="complementary"] .text-slate-200,
+.light [role="complementary"] .text-slate-300,
+.light [role="complementary"] .text-slate-400,
+.light [role="complementary"] .text-slate-500 {
+  color: inherit !important;
+}
+
+.light aside .border-slate-800,
+.light aside .border-slate-900,
+.light [role="complementary"] .border-slate-800,
+.light [role="complementary"] .border-slate-900 {
+  border-color: rgb(30 41 59) !important;
+}
+
+/* ── Alert / status color refinements for light ──────────── */
+.light .bg-rose-900\/20 {
+  background-color: rgb(254 242 242) !important; /* red-50 */
+}
+.light .border-rose-800 {
+  border-color: rgb(225 29 72) !important; /* rose-600 */
+}
+.light .bg-amber-900\/20 {
+  background-color: rgb(255 251 235) !important; /* amber-50 */
+}
+.light .border-amber-800 {
+  border-color: rgb(217 119 6) !important; /* amber-600 */
+}
+
+/* ── Modal backdrop for light ────────────────────────────── */
+.light .bg-black\/60 {
+  background-color: rgb(0 0 0 / 0.3) !important;
 }
