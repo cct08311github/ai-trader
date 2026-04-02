@@ -1,4 +1,4 @@
-"""eod_exit_check.py — 盤後 exit signal fallback
+"""eod_exit_check.py — 盤後 exit signal fallback (#528)
 
 盤中 ticker_watcher 可能因 Shioaji 斷線或其他異常而遺漏 exit signal。
 本模組在 eod_ingest 完成後，對所有持倉用最新 eod_prices 重跑 evaluate_exit()，
