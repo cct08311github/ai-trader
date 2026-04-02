@@ -104,9 +104,13 @@ def refresh_current_prices(conn: sqlite3.Connection) -> int:
     return PnLRepository(conn).refresh_current_prices()
 
 
-def _backfill_high_water_mark(conn: sqlite3.Connection) -> None:
+def backfill_high_water_mark(conn: sqlite3.Connection) -> None:
     """Set high_water_mark from eod_prices max(close) since entry for positions missing it."""
     PnLRepository(conn).backfill_high_water_mark()
+
+
+# keep private alias for backward compat
+_backfill_high_water_mark = backfill_high_water_mark
 
 
 # ── API helpers ──────────────────────────────────────────────────────────────
