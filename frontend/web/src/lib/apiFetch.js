@@ -46,6 +46,10 @@ export async function apiFetch(url, options = {}) {
     ...rest
   } = options
 
+  // Prepend Vite base path for subpath deployments (e.g. /ai-trader/api/...)
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const resolvedUrl = url.startsWith('/') && !url.startsWith(base) ? `${base}${url}` : url
+
   const token = getToken()
   const headers = {
     'Content-Type': 'application/json',
@@ -65,7 +69,7 @@ export async function apiFetch(url, options = {}) {
 
   async function attempt(remainingRetries) {
     try {
-      const res = await fetch(url, {
+      const res = await fetch(resolvedUrl, {
         method,
         headers,
         body: body != null ? JSON.stringify(body) : undefined,

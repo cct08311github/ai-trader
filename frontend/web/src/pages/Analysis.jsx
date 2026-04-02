@@ -258,7 +258,7 @@ function ChipsTab({ report }) {
   useEffect(() => {
     if (!tradeDate) { setError('本日尚無法人籌碼資料'); setLoading(false); return }
     setLoading(true); setError(null)
-    fetch(`/api/chips/${tradeDate}/summary`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    fetch(`${getApiBase()}/api/chips/${tradeDate}/summary`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then(r => {
         if (r.status === 404) { setError('本日尚無法人籌碼資料'); setLoading(false); return null }
         if (!r.ok) throw new Error(`無法載入籌碼資料 (HTTP ${r.status})`)
@@ -402,7 +402,7 @@ export default function AnalysisPage() {
     setError(null)
     setNoData(false)
     try {
-      const r = await fetch('/api/analysis/latest', {
+      const r = await fetch(`${getApiBase()}/api/analysis/latest`, {
         headers: { Authorization: `Bearer ${getToken()}` }
       })
       if (r.status === 404) { setNoData(true); return }

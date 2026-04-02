@@ -40,21 +40,22 @@ export function isAuthenticated() {
 
 /**
  * Resolve the API base URL.
- * Returns '' so Vite proxy handles /api/* → https://127.0.0.1:8080.
- * When VITE_API_BASE is set (Tailscale production), use that directly.
+ * Uses Vite's BASE_URL for subpath deployments (e.g. /ai-trader).
+ * When VITE_API_BASE is set, use that directly as override.
  */
 export function getApiBase() {
     if (import.meta?.env?.VITE_API_BASE) {
         return import.meta.env.VITE_API_BASE.replace(/\/$/, '')
     }
-    return ''
+    return (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
 }
 
 /** Redirect to login page — always reliable */
 function redirectToLogin() {
     if (typeof window === 'undefined') return
-    if (window.location.pathname.startsWith('/login')) return   // already there
-    window.location.replace('/login')
+    const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+    if (window.location.pathname.startsWith(`${base}/login`)) return   // already there
+    window.location.replace(`${base}/login`)
 }
 
 /**

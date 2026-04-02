@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { isAuthenticated, login } from '../lib/auth'
 import { Lock, User, AlertTriangle, Eye, EyeOff, Shield } from 'lucide-react'
 
+const FRONTEND_BASE = (import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+
 export default function LoginPage() {
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -12,7 +14,7 @@ export default function LoginPage() {
     // If already logged in, redirect away
     useEffect(() => {
         if (isAuthenticated()) {
-            window.location.replace('/portfolio')
+            window.location.replace(`${FRONTEND_BASE}/portfolio`)
         }
     }, [])
 
@@ -23,7 +25,7 @@ export default function LoginPage() {
         try {
             await login(username, password)
             // Hard redirect so the entire app re-initialises with the new token
-            window.location.replace('/portfolio')
+            window.location.replace(`${FRONTEND_BASE}/portfolio`)
         } catch (err) {
             setError(err.message || '登入失敗')
         } finally {

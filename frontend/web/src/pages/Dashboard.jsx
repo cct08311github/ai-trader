@@ -11,7 +11,7 @@ import {
   mockPositions
 } from '../lib/portfolio'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
-import { getToken } from '../lib/auth'
+import { getToken, getApiBase } from '../lib/auth'
 
 function Panel({ title, right, children }) {
   return (
@@ -69,7 +69,7 @@ export default function DashboardPage() {
   }, [])
 
   useEffect(() => {
-    fetch('/api/analysis/latest', {
+    fetch(`${getApiBase()}/api/analysis/latest`, {
       headers: { Authorization: `Bearer ${getToken()}` }
     })
       .then(r => r.ok ? r.json() : null)
