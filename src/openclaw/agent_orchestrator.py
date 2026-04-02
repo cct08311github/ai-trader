@@ -126,6 +126,7 @@ async def run_orchestrator() -> None:
     from openclaw.agents.system_optimization import run_system_optimization
     from openclaw.agents.eod_analysis import run_eod_analysis
     from openclaw.agents.risk_monitor import run_risk_monitor
+    from openclaw.agents.strategy_auto_optimizer import run_strategy_auto_optimizer
 
     log.info("Agent Orchestrator started | DB=%s", DB_PATH)
 
@@ -189,6 +190,9 @@ async def run_orchestrator() -> None:
                             _run_agent("SystemOptimizationAgent", run_system_optimization))
                         # 週一 07:00 深度反思（非阻塞）
                         asyncio.create_task(asyncio.to_thread(_run_reflection_agent))
+                    if _should_run_now("07:15", now_twn):
+                        asyncio.create_task(
+                            _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
                     if _should_run_now("07:30", now_twn):
                         asyncio.create_task(
                             _run_agent("StrategyCommitteeAgent", run_strategy_committee))
@@ -196,10 +200,12 @@ async def run_orchestrator() -> None:
                 # ── 事件任務 ──────────────────────────────────────────────────
                 new_reviewed_at = _pm_review_just_completed(last_seen=last_pm_reviewed_at)
                 if new_reviewed_at:
-                    log.info("[EVENT] PM review completed → StrategyCommitteeAgent")
+                    log.info("[EVENT] PM review completed → StrategyCommitteeAgent + StrategyAutoOptimizer")
                     last_pm_reviewed_at = new_reviewed_at
                     asyncio.create_task(
                         _run_agent("StrategyCommitteeAgent", run_strategy_committee))
+                    asyncio.create_task(
+                        _run_agent("StrategyAutoOptimizer", run_strategy_auto_optimizer))
 
                 today_str = now_twn.strftime("%Y-%m-%d")
                 if last_opt_trigger_date != today_str and _watcher_no_fills_3days(conn):
