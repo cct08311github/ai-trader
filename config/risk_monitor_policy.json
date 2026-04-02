@@ -1,0 +1,12 @@
+{
+  "gross_exposure_limit": 1.20,
+  "max_symbol_weight": 0.20,
+  "daily_loss_pct_threshold": 0.05,
+  "drawdown_pct_threshold": 0.15,
+  "correlation_max_pair_abs_corr": 0.85,
+  "correlation_max_weighted_avg_abs_corr": 0.55,
+  "cash_min_pct": 0.05,
+  "notification_cooldown_seconds": 3600,
+  "market_hours_interval_minutes": 15,
+  "off_market_interval_minutes": 60
+}

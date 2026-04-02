@@ -125,6 +125,7 @@ async def run_orchestrator() -> None:
     from openclaw.agents.strategy_committee import run_strategy_committee
     from openclaw.agents.system_optimization import run_system_optimization
     from openclaw.agents.eod_analysis import run_eod_analysis
+    from openclaw.agents.risk_monitor import run_risk_monitor
 
     log.info("Agent Orchestrator started | DB=%s", DB_PATH)
 
@@ -132,6 +133,8 @@ async def run_orchestrator() -> None:
     last_health_run_utc: Optional[datetime] = None
     last_health_off_utc: Optional[datetime] = None
     last_opt_trigger_date: Optional[str] = None
+    last_risk_market_utc: Optional[datetime] = None
+    last_risk_off_utc: Optional[datetime] = None
 
     from openclaw.db_utils import get_readwrite_conn
 
@@ -159,12 +162,26 @@ async def run_orchestrator() -> None:
                             asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
                             last_health_run_utc = now_utc
 
+                    # 每 15 分鐘風險監控（市場時段）
+                    if 9 <= now_twn.hour < 14:
+                        if (last_risk_market_utc is None or
+                                (now_utc - last_risk_market_utc).seconds >= 900):
+                            asyncio.create_task(_run_agent("RiskMonitorAgent", run_risk_monitor))
+                            last_risk_market_utc = now_utc
+
                 # 每 2 小時系統健康（非市場時段）
                 if not (9 <= now_twn.hour < 14):
                     if (last_health_off_utc is None or
                             (now_utc - last_health_off_utc).seconds >= 7200):
                         asyncio.create_task(_run_agent("SystemHealthAgent", run_system_health))
                         last_health_off_utc = now_utc
+
+                # 每 60 分鐘風險監控（非市場時段）
+                if not (9 <= now_twn.hour < 14):
+                    if (last_risk_off_utc is None or
+                            (now_utc - last_risk_off_utc).seconds >= 3600):
+                        asyncio.create_task(_run_agent("RiskMonitorAgent", run_risk_monitor))
+                        last_risk_off_utc = now_utc
 
                 if _is_monday_twn(now_twn):
                     if _should_run_now("07:00", now_twn):
