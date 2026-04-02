@@ -157,8 +157,8 @@ def test_notify_sends_for_new_proposals(conn_with_data, monkeypatch):
         n = notify_pending_proposals(c)
 
     assert n == 2
-    # 2 individual proposals + 1 batch summary (≥2 triggers summary)
-    assert mock_send.call_count == 3
+    # 2 individual proposals (batch-approve button is inline per proposal)
+    assert mock_send.call_count == 2
 
 
 def test_notify_skips_already_notified(conn_with_data, monkeypatch):

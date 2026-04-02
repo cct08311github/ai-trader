@@ -232,10 +232,15 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         # URL 按鈕：點擊開瀏覽器呼叫 api 端點，不產生 callback_query
         base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
         auth = os.environ.get("AUTH_TOKEN", "")
-        buttons = [[
-            {"text": "✅ 核准", "url": f"{base}/api/strategy/proposals/{pid}/approve?token={auth}"},
-            {"text": "🚫 拒絕", "url": f"{base}/api/strategy/proposals/{pid}/reject?token={auth}"},
-        ]]
+        buttons = [
+            [
+                {"text": "✅ 核准", "url": f"{base}/api/strategy/proposals/{pid}/approve?token={auth}"},
+                {"text": "🚫 拒絕", "url": f"{base}/api/strategy/proposals/{pid}/reject?token={auth}"},
+            ],
+            [
+                {"text": "📋 一鍵全部核准", "url": f"{base}/api/strategy/proposals/batch-approve-all?token={auth}"},
+            ],
+        ]
 
         ok = send_message_with_buttons("\n".join(lines), buttons, chat_id=_chat_id())
         if ok:
@@ -245,20 +250,6 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
 
     if sent > 0:
         _wm_set(conn, "notified_ids", list(notified))
-
-        # ── 批量摘要：2 筆以上附「一鍵全部核准」按鈕 ──────────────────
-        if sent >= 2:
-            base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
-            auth = os.environ.get("AUTH_TOKEN", "")
-            try:
-                send_message_with_buttons(
-                    f"📋 本批次共 <b>{sent}</b> 筆待審提案",
-                    [[{"text": f"✅ 一鍵全部核准 ({sent})",
-                       "url": f"{base}/api/strategy/proposals/batch-approve-all?token={auth}"}]],
-                    chat_id=_chat_id(),
-                )
-            except Exception as _e:
-                log.warning("[tg_approver] batch summary notification failed: %s", _e)
 
     return sent
 

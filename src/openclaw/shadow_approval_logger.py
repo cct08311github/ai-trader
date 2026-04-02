@@ -47,6 +47,12 @@ _AUTO_APPROVE_SELL_FLOOR: float = float(
 
 _BUY_KEYWORDS = frozenset({"buy", "increase", "offensive", "bullish", "加碼", "買入", "多頭"})
 _SELL_KEYWORDS = frozenset({"sell", "reduce", "defensive", "bearish", "decrease", "減少", "減碼", "賣出", "空頭"})
+_HOLD_KEYWORDS = frozenset({"hold", "maintain", "維持", "觀望", "持有"})
+
+# Hold direction uses buy floor (same strictness — prevents threshold gaming)
+_AUTO_APPROVE_HOLD_FLOOR: float = float(
+    os.environ.get("STRATEGY_AUTO_APPROVE_HOLD_CONFIDENCE", "0.65")
+)
 
 
 def _should_require_human_new_logic(
@@ -56,23 +62,31 @@ def _should_require_human_new_logic(
 ) -> int:
     """New auto-approval logic with asymmetric confidence thresholds.
 
-    Design philosophy: auto-approve only when direction is clear.
-    1. Unknown/neutral direction → always require human
+    Design philosophy: auto-approve when direction is clear.
+    1. Unknown direction (empty string) → always require human
     2. Buy direction with confidence < BUY_FLOOR (0.65) → require human
     3. Sell direction with confidence < SELL_FLOOR (0.50) → require human
-    4. Arbiter strongly against + buy direction → require human
+    4. Hold direction with confidence < HOLD_FLOOR (0.60) → require human
+    5. Arbiter strongly against + buy direction → require human
 
     LEVEL3 categories are blocked independently by proposal_engine.
     """
     d_lower = direction.lower()
     is_buy = any(kw in d_lower for kw in _BUY_KEYWORDS)
     is_sell = any(kw in d_lower for kw in _SELL_KEYWORDS)
+    is_hold = any(kw in d_lower for kw in _HOLD_KEYWORDS)
 
-    # Unknown/neutral direction → always require human review
-    if not is_buy and not is_sell:
+    # Completely unknown direction → always require human review
+    if not is_buy and not is_sell and not is_hold:
         return 1
 
-    floor = _AUTO_APPROVE_BUY_FLOOR if is_buy else _AUTO_APPROVE_SELL_FLOOR
+    # Determine confidence floor based on direction
+    if is_buy:
+        floor = _AUTO_APPROVE_BUY_FLOOR
+    elif is_sell:
+        floor = _AUTO_APPROVE_SELL_FLOOR
+    else:
+        floor = _AUTO_APPROVE_HOLD_FLOOR
 
     if confidence < floor:
         return 1

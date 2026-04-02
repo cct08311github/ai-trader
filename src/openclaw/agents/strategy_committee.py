@@ -306,6 +306,72 @@ def _build_market_context(conn: sqlite3.Connection) -> tuple[str, str]:
     return market_data, portfolio_constraint
 
 
+def _infer_direction(arbiter_resp: dict, proposal: dict) -> str:
+    """Infer buy/sell/hold direction from arbiter stance + proposal text.
+
+    The arbiter LLM returns 'stance' (defensive/neutral/constructive) but
+    not 'direction'. We derive direction from stance + proposal content
+    so auto-approval logic can apply asymmetric thresholds.
+
+    Security note: keyword matching uses word boundaries for English terms
+    to prevent substring false positives (e.g. "threshold" matching "hold").
+    Chinese keywords don't need boundaries (no word separators in CJK).
+    """
+    import re
+
+    # 1. Explicit direction from arbiter (if future LLM versions add it)
+    explicit = str(arbiter_resp.get("direction", "")).strip()
+    if explicit:
+        return explicit
+
+    # 2. Derive from stance + proposal text
+    stance = str(arbiter_resp.get("stance", "")).lower()
+    text = " ".join([
+        str(proposal.get("proposed_value", "")),
+        str(proposal.get("supporting_evidence", "")),
+    ]).lower()
+
+    # English keywords use word boundary (\b), Chinese use substring (no \b needed)
+    _BUY_EN = {"buy", "increase", "offensive", "bullish"}
+    _BUY_ZH = {"加碼", "買入", "積極", "加倉", "建倉"}
+    _SELL_EN = {"sell", "reduce", "decrease", "bearish"}
+    _SELL_ZH = {"減碼", "賣出", "減少", "出場", "平倉"}
+    # Note: "停利"/"停損" excluded — they appear in hold proposals too
+    _HOLD_EN = {"hold", "maintain"}
+    _HOLD_ZH = {"維持", "觀望", "持有", "暫停"}
+
+    def _count(en_kws: set, zh_kws: set) -> int:
+        en = sum(1 for kw in en_kws if re.search(rf'\b{kw}\b', text))
+        zh = sum(1 for kw in zh_kws if kw in text)
+        return en + zh
+
+    buy_score = _count(_BUY_EN, _BUY_ZH)
+    sell_score = _count(_SELL_EN, _SELL_ZH)
+    hold_score = _count(_HOLD_EN, _HOLD_ZH)
+
+    # Stance weighting (only when no text keywords matched at all)
+    if buy_score + sell_score + hold_score == 0:
+        if stance == "constructive":
+            buy_score += 1
+        elif stance == "defensive":
+            sell_score += 1
+
+    # Hold takes priority when tied with sell (conservative = safer default)
+    if hold_score > 0 and hold_score >= sell_score and hold_score >= buy_score:
+        return "hold"
+    if buy_score > sell_score and buy_score > hold_score:
+        return "buy"
+    if sell_score > buy_score:
+        return "sell"
+
+    # Fallback: map stance directly
+    if stance == "constructive":
+        return "buy"
+    if stance == "defensive":
+        return "sell"
+    return "neutral"
+
+
 def _normalize_strategy_text(*parts: str) -> str:
     normalized = " ".join((part or "").strip().lower() for part in parts if part)
     return " ".join(normalized.split())
@@ -485,7 +551,7 @@ def run_strategy_committee(
                 log_shadow_decision,
             )
             _confidence = float(p.get("confidence", 0.5))
-            _direction = str(arbiter_resp.get("direction", ""))
+            _direction = _infer_direction(arbiter_resp, p)
             _shadow_would_approve = _should_require_human_new_logic(
                 arbiter_resp, _confidence, _direction
             ) == 0
