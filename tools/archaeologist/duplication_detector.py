@@ -10,13 +10,12 @@ from tools.archaeologist.models import DuplicateGroup
 
 _EXCLUDE_DIRS = {
     "node_modules", ".venv", "bin/venv", "deploy-offline",
-    "__pycache__", ".next", ".git",
+    "__pycache__", ".next", ".git", "tests", "test",
+    "frontend", "tools", "doc", "config", "data",
+    ".eggs", "dist", "build", "migrations",
 }
-_SOURCE_EXTENSIONS = {
-    ".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".go",
-    ".rs", ".cs", ".rb", ".sh", ".yaml", ".yml",
-}
-_MIN_TOKENS = 30  # Skip very small files
+_SOURCE_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx"}
+_MIN_TOKENS = 50  # Skip small files (raised from 30)
 
 
 def _should_skip(rel_path: str, exclude_patterns: Optional[List[str]] = None) -> bool:
@@ -83,7 +82,7 @@ def _ngrams(tokens: List[str], n: int = 3) -> Set[str]:
 
 def find_duplicates(
     repo_path: str,
-    threshold: float = 0.7,
+    threshold: float = 0.80,
     exclude_patterns: Optional[List[str]] = None,
 ) -> List[DuplicateGroup]:
     """Find near-duplicate source files with Jaccard similarity > threshold."""

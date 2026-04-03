@@ -1,1 +1,25 @@
-[]
+[
+  {
+    "run_date": "2026-04-03T01:38:28Z",
+    "proposals_generated": 0,
+    "proposals_accepted": 0,
+    "proposals_rejected": 0,
+    "memory_stats": {
+      "total": 13,
+      "stale": 0,
+      "duplicates": 0,
+      "by_type": {
+        "reference": 2,
+        "feedback": 6,
+        "project": 4,
+        "user": 1
+      }
+    },
+    "rule_stats": {
+      "total": 49,
+      "redundant": 0,
+      "outdated_refs": 0,
+      "conflicts": 0
+    }
+  }
+]

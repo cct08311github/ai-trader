@@ -17,7 +17,9 @@ _ENTRY_POINT_PREFIXES = ("test_", "conftest")
 
 _EXCLUDE_DIRS = {
     "node_modules", ".venv", "bin/venv", "deploy-offline",
-    "__pycache__", ".next", ".git",
+    "__pycache__", ".next", ".git", "tests", "test",
+    "frontend", "tools", "doc", "config", "data",
+    ".eggs", "dist", "build", "migrations",
 }
 
 

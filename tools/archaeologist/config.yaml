@@ -2,8 +2,12 @@ repos:
   - path: "."
     name: ai-trader
     language: python
+    scan_dirs:
+      - src/openclaw
+    # Only scan main source code, not tests/tools/frontend
 stale_threshold_days: 180
 max_issues_per_run: 5
+duplication_threshold: 0.80
 exclude_patterns:
   - node_modules
   - .venv
@@ -12,3 +16,14 @@ exclude_patterns:
   - __pycache__
   - .next
   - .git
+  - tests
+  - test_
+  - frontend
+  - tools
+  - doc
+  - config
+  - data
+  - .eggs
+  - dist
+  - build
+  - migrations
