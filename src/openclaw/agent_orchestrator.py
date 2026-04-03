@@ -124,6 +124,7 @@ def _run_reflection_agent() -> None:
 # ── 主排程迴圈 ────────────────────────────────────────────────────────────────
 
 async def run_orchestrator() -> None:
+    from openclaw.agents.geopolitical_agent import run_geopolitical_agent
     from openclaw.agents.market_research import run_market_research
     from openclaw.agents.portfolio_review import run_portfolio_review
     from openclaw.agents.system_health import run_system_health
@@ -146,6 +147,7 @@ async def run_orchestrator() -> None:
     last_risk_market_utc: Optional[datetime] = None
     last_risk_off_utc: Optional[datetime] = None
     last_optimizer_event_date: Optional[str] = None
+    last_geo_run_utc: Optional[datetime] = None
 
     from openclaw.db_utils import get_readwrite_conn
 
@@ -179,6 +181,13 @@ async def run_orchestrator() -> None:
                     # 每交易日 22:00 TWN → 盤後分析（資料最晚 21:14 入庫，22:00 安全）
                     if _should_run_now("22:00", now_twn):
                         asyncio.create_task(_run_agent("EODAnalysisAgent", run_eod_analysis))
+
+                    # 每 4 小時（平日）→ 地緣政治事件監控
+                    if (last_geo_run_utc is None or
+                            (now_utc - last_geo_run_utc).total_seconds() >= 14400):
+                        asyncio.create_task(
+                            _run_agent("GeopoliticalAgent", run_geopolitical_agent))
+                        last_geo_run_utc = now_utc
 
                     # 每 30 分鐘系統健康（市場時段）
                     if 9 <= now_twn.hour < 14:
