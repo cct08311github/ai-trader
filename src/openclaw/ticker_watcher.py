@@ -1276,6 +1276,19 @@ def run_watcher() -> None:
                     except Exception:  # noqa: BLE001 — rollback guard; must not raise
                         pass
 
+            # #598: Call trading_engine.tick() for ALL held positions,
+            # not just processable_watchlist — ensures time stops fire even
+            # if a symbol is dropped from watchlist while still held.
+            _te_ticked: set = set()
+            for _pos_sym in list(positions.keys()):
+                if _pos_sym not in processable_watchlist:
+                    try:
+                        from openclaw.trading_engine import tick as _te_tick
+                        _te_tick(conn, _pos_sym)
+                        _te_ticked.add(_pos_sym)
+                    except Exception as _te_err:  # noqa: BLE001
+                        log.warning("[%s] trading_engine.tick (off-watchlist) 失敗：%s", _pos_sym, _te_err)
+
             for symbol in processable_watchlist:
                 snap      = snaps[symbol]
                 pos_entry = positions.get(symbol)          # (qty, avg_price) or None

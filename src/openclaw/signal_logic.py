@@ -23,6 +23,7 @@ class SignalParams:
     trailing_profit_threshold_mid: float = 0.10   # 10% triggers mid tier
     trailing_profit_threshold_tight: float = 0.30  # 30% triggers tight tier
     trailing_profit_threshold: float = 0.30  # kept for backward compat
+    hard_kill_dd_pct: float = 0.15       # #598: hard kill at -15% DD from HWM
     ma_short: int = 5
     ma_long: int = 20
     rsi_period: int = 14
@@ -54,6 +55,13 @@ def evaluate_exit(
         return SignalResult("flat", "insufficient_data")
 
     latest = closes[-1]
+
+    # 0. Hard Kill — unconditional exit if DD from HWM exceeds hard_kill_dd_pct (#598)
+    # This fires regardless of profit tier — prevents catastrophic drawdown
+    if high_water_mark and high_water_mark > 0:
+        dd_from_hwm = (high_water_mark - latest) / high_water_mark
+        if dd_from_hwm >= params.hard_kill_dd_pct:
+            return SignalResult("sell", f"hard_kill:hwm={high_water_mark:.2f},dd={dd_from_hwm:.2%}")
 
     # 1. Trailing Stop (3-tier: 5% / 4% / 3%)
     if high_water_mark and avg_price > 0:
