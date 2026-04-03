@@ -1,3 +1,11 @@
+/**
+ * Trades.jsx -- BattleTheme Redesign
+ *
+ * Brutalist trade ledger. Orders and fills displayed as a
+ * military intelligence dossier -- monospace numbers,
+ * status dots, accent-border panels, no rounded SaaS cards.
+ */
+
 import React, { useEffect, useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
@@ -10,7 +18,6 @@ import ErrorState from '../components/ErrorState'
 
 function toIsoDate(d) {
   if (!d) return ''
-  // input[type=date] gives YYYY-MM-DD
   return `${d}T00:00:00Z`
 }
 
@@ -19,7 +26,6 @@ function toIsoDateEnd(d) {
   return `${d}T23:59:59Z`
 }
 
-/** 將 ISO UTC 字串轉為 TWN (UTC+8) 可讀格式 */
 function toTWN(isoStr) {
   if (!isoStr) return '-'
   try {
@@ -36,7 +42,33 @@ function toTWN(isoStr) {
   }
 }
 
-/** Monthly Stats Summary — design doc §4.2 */
+/* ── Panel wrapper (brutalist) ─────────────────────────────── */
+function Panel({ title, right, children, className = '' }) {
+  return (
+    <section
+      className={`border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.6)] ${className}`}
+      style={{ borderRadius: '4px' }}
+    >
+      <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
+        <div className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">{title}</div>
+        {right && <div className="font-mono text-[10px] text-[rgb(var(--muted))]">{right}</div>}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  )
+}
+
+/* ── Status dot ─────────────────────────────────────────────── */
+function StatusDot({ color, label }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${color}`} />
+      <span className="font-mono text-[10px] uppercase tracking-widest text-[rgb(var(--muted))]">{label}</span>
+    </span>
+  )
+}
+
+/* ── Monthly Stats Summary ─────────────────────────────────── */
 function MonthlySummaryPanel() {
   const now = new Date()
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -54,42 +86,46 @@ function MonthlySummaryPanel() {
   }, [month])
 
   const stats = [
-    { label: '本月成交金額', value: data ? formatCurrency(data.total_amount) : '-' },
-    { label: '手續費+稅金', value: data ? formatCurrency(data.total_fee_tax) : '-' },
-    { label: '勝率', value: data ? formatPercent(data.win_rate) : '-', good: data?.win_rate >= 0.5 },
-    { label: '平均持倉天數', value: data ? `${Number(data.avg_holding_days).toFixed(1)} 天` : '-' },
-    { label: '最大單筆獲利', value: data ? (data.max_profit != null ? formatCurrency(data.max_profit) : '-') : '-', good: true },
-    { label: '最大單筆虧損', value: data ? (data.max_loss != null ? formatCurrency(data.max_loss) : '-') : '-', bad: true },
+    { label: 'TURNOVER', value: data ? formatCurrency(data.total_amount) : '-' },
+    { label: 'FEE + TAX', value: data ? formatCurrency(data.total_fee_tax) : '-' },
+    { label: 'WIN RATE', value: data ? formatPercent(data.win_rate) : '-', good: data?.win_rate >= 0.5 },
+    { label: 'AVG HOLD', value: data ? `${Number(data.avg_holding_days).toFixed(1)}d` : '-' },
+    { label: 'MAX GAIN', value: data ? (data.max_profit != null ? formatCurrency(data.max_profit) : '-') : '-', good: true },
+    { label: 'MAX LOSS', value: data ? (data.max_loss != null ? formatCurrency(data.max_loss) : '-') : '-', bad: true },
   ]
 
   return (
-    <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold text-slate-200">月度統計摘要</div>
-          <div className="text-xs text-slate-500 mt-0.5">設計書 §4.2 — 成交金額、費用、勝率、持倉天數</div>
-        </div>
+    <Panel title="MONTHLY SUMMARY" right={month} className="mb-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">
+          MONTHLY STATS
+        </span>
         <input
           type="month"
           value={month}
           onChange={e => setMonth(e.target.value)}
-          className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-1.5 text-sm text-slate-200 focus:border-emerald-500/50 focus:outline-none"
+          className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-1.5 font-mono text-sm text-[rgb(var(--text))] focus:border-[rgba(var(--accent),0.5)] focus:outline-none"
+          style={{ borderRadius: '3px' }}
         />
       </div>
       {loading ? (
-        <div className="py-4"><LoadingSpinner label="讀取交易資料中..." /></div>
+        <div className="py-4"><LoadingSpinner label="Loading..." /></div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {stats.map(s => (
-            <div key={s.label} className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
-              <div className="text-[11px] text-slate-400 mb-1">{s.label}</div>
-              <div className={`text-sm font-bold ${s.good ? 'text-emerald-300' : s.bad ? 'text-rose-300' : 'text-slate-100'
-                }`}>{s.value}</div>
+            <div key={s.label}
+              className="border-l-2 border-[rgba(var(--accent),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-2"
+              style={{ borderRadius: '2px' }}
+            >
+              <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">{s.label}</div>
+              <div className={`mt-1 font-mono text-sm font-bold tabular-nums ${
+                s.good ? 'text-[rgb(var(--up))]' : s.bad ? 'text-[rgb(var(--danger))]' : 'text-[rgb(var(--text))]'
+              }`}>{s.value}</div>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </Panel>
   )
 }
 
@@ -116,7 +152,7 @@ export default function TradesPage() {
   const [selected, setSelected] = useState(null)
   const [causalData, setCausalData] = useState(null)
   const [causalLoading, setCausalLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState('details') // 'details' or 'causal'
+  const [activeTab, setActiveTab] = useState('details')
 
   const query = useMemo(
     () => ({
@@ -136,17 +172,14 @@ export default function TradesPage() {
   async function load({ silent = false } = {}) {
     if (!silent) setLoading(true)
     setError(null)
-
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
-
     try {
       const data = await fetchTrades({ ...query, signal: controller.signal })
       setItems(data.items)
       setTotal(data.total)
       setSource('api')
     } catch (e) {
-      // Do NOT fallback to mock — show real error so user knows data is unavailable
       setItems([])
       setTotal(0)
       setSource('error')
@@ -157,18 +190,12 @@ export default function TradesPage() {
     }
   }
 
-  useEffect(() => {
-    // MVP: try API first; fallback to mock
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  useEffect(() => { load() }, [])
 
   async function handleTradeSelect(trade) {
     setSelected(trade)
     setActiveTab('details')
     setCausalData(null)
-
-    // 加载因果链数据
     if (trade.id) {
       setCausalLoading(true)
       try {
@@ -207,34 +234,45 @@ export default function TradesPage() {
   }
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-100">交易明細</h1>
-        <div className="mt-1 text-sm text-slate-400">查看歷史交易記錄與決策因果鏈</div>
+    <div className="space-y-4 pb-20 lg:pb-4">
+      {/* ── Header ──────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-mono text-xl font-bold tracking-tight text-[rgb(var(--text))]">TRADE LEDGER</h1>
+          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-widest text-[rgb(var(--muted))]">
+            ORDER HISTORY + CAUSAL CHAIN
+          </p>
+        </div>
+        <StatusDot
+          color={source === 'api' ? 'bg-[rgb(var(--up))]' : 'bg-[rgb(var(--danger))]'}
+          label={source === 'api' ? 'API LIVE' : source.toUpperCase()}
+        />
       </div>
 
-      {/* Monthly Summary — design doc §4.2 */}
+      {/* ── Monthly Summary ─────────────────────────────────────── */}
       <MonthlySummaryPanel />
 
-      {/* Filters */}
-      <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/20 p-4 shadow-panel">
+      {/* ── Filters ─────────────────────────────────────────────── */}
+      <Panel title="FILTERS" right={`SORT: ${sortBy} ${sortDir}`}>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-400">Symbol</div>
+            <div className="mb-1 font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">SYMBOL</div>
             <input
               type="text"
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
               placeholder="e.g. 2330"
-              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600"
+              className="w-full border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-2 font-mono text-sm text-[rgb(var(--text))] placeholder:text-[rgb(var(--muted))] focus:outline-none focus:border-[rgba(var(--accent),0.5)]"
+              style={{ borderRadius: '3px' }}
             />
           </div>
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-400">Type</div>
+            <div className="mb-1 font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">TYPE</div>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+              className="w-full border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-2 font-mono text-sm text-[rgb(var(--text))]"
+              style={{ borderRadius: '3px' }}
             >
               <option value="">All</option>
               <option value="buy">Buy</option>
@@ -242,21 +280,23 @@ export default function TradesPage() {
             </select>
           </div>
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-400">Start date</div>
+            <div className="mb-1 font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">FROM</div>
             <input
               type="date"
               value={dateStart}
               onChange={(e) => setDateStart(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+              className="w-full border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-2 font-mono text-sm text-[rgb(var(--text))]"
+              style={{ borderRadius: '3px' }}
             />
           </div>
           <div>
-            <div className="mb-1 text-xs font-medium text-slate-400">End date</div>
+            <div className="mb-1 font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">TO</div>
             <input
               type="date"
               value={dateEnd}
               onChange={(e) => setDateEnd(e.target.value)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm text-slate-200"
+              className="w-full border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-2 font-mono text-sm text-[rgb(var(--text))]"
+              style={{ borderRadius: '3px' }}
             />
           </div>
         </div>
@@ -267,126 +307,116 @@ export default function TradesPage() {
               type="button"
               onClick={() => load()}
               disabled={loading}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-900/30 disabled:opacity-50"
+              className="border border-[rgba(var(--accent),0.4)] bg-[rgba(var(--accent),0.08)] px-4 py-2 font-mono text-xs font-bold uppercase tracking-widest text-[rgb(var(--accent))] transition hover:bg-[rgba(var(--accent),0.15)] disabled:opacity-50"
+              style={{ borderRadius: '3px' }}
             >
-              {loading ? '讀取中...' : '套用篩選'}
+              {loading ? '...' : 'APPLY'}
             </button>
             <button
               type="button"
               onClick={() => {
-                setSymbol('')
-                setType('')
-                setDateStart('')
-                setDateEnd('')
-                setStatus('')
+                setSymbol(''); setType(''); setDateStart(''); setDateEnd(''); setStatus('')
                 setTimeout(() => load(), 0)
               }}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
+              className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-4 py-2 font-mono text-xs text-[rgb(var(--muted))] transition hover:bg-[rgba(var(--surface),0.5)]"
+              style={{ borderRadius: '3px' }}
             >
-              Clear
+              CLEAR
             </button>
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={exportCsv}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
-            >
-              CSV
-            </button>
-            <button
-              type="button"
-              onClick={exportExcel}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-4 py-2 text-sm text-slate-400 hover:bg-slate-900/30"
-            >
-              Excel
-            </button>
+            <button type="button" onClick={exportCsv}
+              className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-2 font-mono text-xs text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.5)]"
+              style={{ borderRadius: '3px' }}
+            >CSV</button>
+            <button type="button" onClick={exportExcel}
+              className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-2 font-mono text-xs text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.5)]"
+              style={{ borderRadius: '3px' }}
+            >EXCEL</button>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-          <div>
-            Sorting: <span className="text-slate-200">{sortBy}</span> / <span className="text-slate-200">{sortDir}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div>Limit</div>
-            <select
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value))
-                setOffset(0)
-              }}
-              className="rounded-xl border border-slate-800 bg-slate-950/40 px-2 py-1 text-xs text-slate-200"
-            >
-              {[20, 50, 100, 200].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="mt-3 flex items-center justify-between font-mono text-[10px] text-[rgb(var(--muted))]">
+          <div>LIMIT</div>
+          <select
+            value={limit}
+            onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0) }}
+            className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--text))]"
+            style={{ borderRadius: '3px' }}
+          >
+            {[20, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
         </div>
-      </div>
+      </Panel>
 
-      {/* Table */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/20 shadow-panel">
-        <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <div className="text-sm font-semibold">交易列表</div>
-          <div className="text-xs text-slate-400">
-            {formatNumber(total)} trades · offset {formatNumber(offset)}
-          </div>
+      {/* ── Trade Table ─────────────────────────────────────────── */}
+      <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.6)]" style={{ borderRadius: '4px' }}>
+        <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">TRADE LIST</span>
+          <span className="font-mono text-[10px] text-[rgb(var(--muted))]">
+            {formatNumber(total)} TRADES / OFFSET {formatNumber(offset)}
+          </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="px-4 py-3">
-                  <button type="button" className="hover:text-slate-200" onClick={() => toggleSort('time')}>
-                    Time
+          <table className="min-w-full text-left text-sm" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr className="border-b border-[rgba(var(--grid),0.15)]">
+                <th className="px-4 py-3 font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">
+                  <button type="button" className="hover:text-[rgb(var(--text))]" onClick={() => toggleSort('time')}>
+                    TIME {sortBy === 'time' ? (sortDir === 'asc' ? '^' : 'v') : ''}
                   </button>
                 </th>
-                <th className="px-4 py-3">Symbol</th>
-                <th className="px-4 py-3">Side</th>
-                <th className="px-4 py-3 text-right">Qty</th>
-                <th className="px-4 py-3 text-right">Price</th>
-                <th className="px-4 py-3 text-right">
-                  <button type="button" className="hover:text-slate-200" onClick={() => toggleSort('amount')}>
-                    Amount
+                <th className="px-4 py-3 font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">SYMBOL</th>
+                <th className="px-4 py-3 font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">SIDE</th>
+                <th className="px-4 py-3 text-right font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">QTY</th>
+                <th className="px-4 py-3 text-right font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">PRICE</th>
+                <th className="px-4 py-3 text-right font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">
+                  <button type="button" className="hover:text-[rgb(var(--text))]" onClick={() => toggleSort('amount')}>
+                    AMOUNT {sortBy === 'amount' ? (sortDir === 'asc' ? '^' : 'v') : ''}
                   </button>
                 </th>
-                <th className="px-4 py-3 text-right">
-                  <button type="button" className="hover:text-slate-200" onClick={() => toggleSort('pnl')}>
-                    PnL
+                <th className="px-4 py-3 text-right font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">
+                  <button type="button" className="hover:text-[rgb(var(--text))]" onClick={() => toggleSort('pnl')}>
+                    PNL {sortBy === 'pnl' ? (sortDir === 'asc' ? '^' : 'v') : ''}
                   </button>
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody>
               {items.map((t) => {
                 const qty = Number(t.quantity || 0)
                 const price = Number(t.price || 0)
                 const amount = Number(t.amount ?? qty * price)
                 const pnl = Number(t.pnl || 0)
-                const pnlTone = pnl >= 0 ? 'text-emerald-300' : 'text-rose-300'
-                const sideTone = String(t.action).toLowerCase() === 'buy' ? 'text-emerald-200' : 'text-rose-200'
+                const isBuy = String(t.action).toLowerCase() === 'buy'
 
                 return (
                   <tr
                     key={t.id}
-                    className="cursor-pointer hover:bg-slate-900/40"
+                    className="cursor-pointer border-b border-[rgba(var(--grid),0.08)] transition hover:bg-[rgba(var(--surface),0.4)]"
                     onClick={() => handleTradeSelect(t)}
                   >
-                    <td className="px-4 py-3 font-medium text-slate-100">{toTWN(t.timestamp)}</td>
-                    <td className="px-4 py-3 text-slate-200">{formatSymbol(t.symbol, symbolNames)}</td>
-                    <td className={`px-4 py-3 font-medium ${sideTone}`}>{String(t.action).toUpperCase()}</td>
-                    <td className="px-4 py-3 text-right text-slate-200">
+                    <td className="px-4 py-3 font-mono text-xs tabular-nums text-[rgb(var(--text))]">{toTWN(t.timestamp)}</td>
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-[rgb(var(--text))]">{formatSymbol(t.symbol, symbolNames)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 font-mono text-xs font-bold ${
+                        isBuy ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${isBuy ? 'bg-[rgb(var(--up))]' : 'bg-[rgb(var(--danger))]'}`} />
+                        {String(t.action).toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-[rgb(var(--text))]">
                       {formatNumber(qty, { maximumFractionDigits: 4 })}
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-200">{formatCurrency(price)}</td>
-                    <td className="px-4 py-3 text-right text-slate-200">{formatCurrency(amount)}</td>
-                    <td className={`px-4 py-3 text-right font-medium ${t.pnl == null ? 'text-slate-500' : pnlTone}`}>
+                    <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-[rgb(var(--text))]">{formatCurrency(price)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-xs tabular-nums text-[rgb(var(--text))]">{formatCurrency(amount)}</td>
+                    <td className={`px-4 py-3 text-right font-mono text-xs font-bold tabular-nums ${
+                      t.pnl == null ? 'text-[rgb(var(--muted))]' : pnl >= 0 ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'
+                    }`}>
                       {t.pnl == null ? '-' : formatCurrency(pnl)}
                     </td>
                   </tr>
@@ -396,13 +426,13 @@ export default function TradesPage() {
               {loading && items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-12">
-                    <LoadingSpinner label="讀取交易資料中..." />
+                    <LoadingSpinner label="Loading trades..." />
                   </td>
                 </tr>
               ) : error && items.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8">
-                    <ErrorState message="讀取交易紀錄失敗" description={error} onRetry={() => load()} />
+                    <ErrorState message="Failed to load trades" description={error} onRetry={() => load()} />
                   </td>
                 </tr>
               ) : items.length === 0 ? (
@@ -410,8 +440,8 @@ export default function TradesPage() {
                   <td colSpan={7} className="px-4 py-10">
                     <EmptyState
                       icon={FileText}
-                      title="尚無交易紀錄"
-                      description="開始交易後成交紀錄將顯示在這裡"
+                      title="NO TRADES"
+                      description="Trade records will appear here after execution"
                     />
                   </td>
                 </tr>
@@ -420,168 +450,168 @@ export default function TradesPage() {
           </table>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-800 px-4 py-3">
-          <div className="text-xs text-slate-400">
-            Page: {Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil(total / limit))}
+        {/* Pagination */}
+        <div className="flex items-center justify-between border-t border-[rgba(var(--grid),0.15)] px-4 py-2.5">
+          <div className="font-mono text-[10px] text-[rgb(var(--muted))]">
+            PAGE {Math.floor(offset / limit) + 1} / {Math.max(1, Math.ceil(total / limit))}
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={!canPrev}
-              onClick={() => {
-                setOffset((o) => Math.max(0, o - limit))
-                setTimeout(() => load({ silent: true }), 0)
-              }}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
-            >
-              Prev
-            </button>
+              onClick={() => { setOffset((o) => Math.max(0, o - limit)); setTimeout(() => load({ silent: true }), 0) }}
+              className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))] disabled:opacity-30"
+              style={{ borderRadius: '3px' }}
+            >PREV</button>
             <button
               type="button"
               disabled={!canNext}
-              onClick={() => {
-                setOffset((o) => o + limit)
-                setTimeout(() => load({ silent: true }), 0)
-              }}
-              className="rounded-xl border border-slate-800 bg-slate-900/10 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-40"
-            >
-              Next
-            </button>
+              onClick={() => { setOffset((o) => o + limit); setTimeout(() => load({ silent: true }), 0) }}
+              className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))] disabled:opacity-30"
+              style={{ borderRadius: '3px' }}
+            >NEXT</button>
           </div>
         </div>
       </div>
 
-      {/* Detail modal */}
+      {/* ── Detail Modal ────────────────────────────────────────── */}
       {selected ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={() => setSelected(null)}>
           <div
-            className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-panel"
+            className="w-full max-w-4xl border border-[rgba(var(--grid),0.4)] bg-[rgb(var(--bg))] p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
+            style={{ borderRadius: '4px' }}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold">交易详情 - {selected.symbol}</div>
-                <div className="mt-1 text-xs text-slate-400">{selected.id}</div>
+                <div className="font-mono text-sm font-bold text-[rgb(var(--text))]">TRADE DETAIL -- {selected.symbol}</div>
+                <div className="mt-1 font-mono text-[10px] text-[rgb(var(--muted))]">{selected.id}</div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                className="rounded-xl border border-slate-800 bg-slate-900/10 px-3 py-1.5 text-sm text-slate-200"
-              >
-                Close
-              </button>
+                className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))] hover:bg-[rgba(var(--surface),0.5)]"
+                style={{ borderRadius: '3px' }}
+              >CLOSE</button>
             </div>
 
             {/* Tabs */}
-            <div className="mt-4 flex border-b border-slate-800">
+            <div className="mt-4 flex border-b border-[rgba(var(--grid),0.3)]">
               <button
                 type="button"
-                className={`px-4 py-2 text-sm font-medium ${activeTab === 'details' ? 'border-b-2 border-emerald-500 text-emerald-300' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`px-4 py-2 font-mono text-xs font-bold uppercase tracking-widest ${
+                  activeTab === 'details'
+                    ? 'border-b-2 border-[rgb(var(--accent))] text-[rgb(var(--accent))]'
+                    : 'text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]'
+                }`}
                 onClick={() => setActiveTab('details')}
-              >
-                交易详情
-              </button>
+              >DETAILS</button>
               <button
                 type="button"
-                className={`px-4 py-2 text-sm font-medium ${activeTab === 'causal' ? 'border-b-2 border-emerald-500 text-emerald-300' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`px-4 py-2 font-mono text-xs font-bold uppercase tracking-widest ${
+                  activeTab === 'causal'
+                    ? 'border-b-2 border-[rgb(var(--accent))] text-[rgb(var(--accent))]'
+                    : 'text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]'
+                }`}
                 onClick={() => setActiveTab('causal')}
-              >
-                决策因果链
-              </button>
+              >CAUSAL CHAIN</button>
             </div>
 
             {/* Tab content */}
             <div className="mt-4">
               {activeTab === 'details' ? (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <Field label="Timestamp (TWN)" value={toTWN(selected.timestamp)} />
-                  <Field label="Symbol" value={selected.symbol} />
-                  <Field label="Side" value={String(selected.action).toUpperCase()} />
-                  <Field label="Quantity" value={formatNumber(Number(selected.quantity || 0))} />
-                  <Field label="Price" value={formatCurrency(Number(selected.price || 0))} />
-                  <Field label="Amount" value={formatCurrency(Number(selected.amount ?? 0))} />
-                  <Field label="PnL" value={selected.pnl == null ? '-' : formatCurrency(Number(selected.pnl))} />
-                  <Field label="Fee" value={formatCurrency(Number(selected.fee || 0))} />
-                  <Field label="Tax" value={formatCurrency(Number(selected.tax || 0))} />
-                  <Field label="Status" value={selected.status || 'filled'} />
-                  <Field label="Agent" value={selected.agent_id || '-'} />
-                  <Field label="Decision" value={selected.decision_id || '-'} />
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                  <Field label="TIMESTAMP (TWN)" value={toTWN(selected.timestamp)} />
+                  <Field label="SYMBOL" value={selected.symbol} />
+                  <Field label="SIDE" value={String(selected.action).toUpperCase()}
+                    highlight={String(selected.action).toLowerCase() === 'buy' ? 'up' : 'down'} />
+                  <Field label="QUANTITY" value={formatNumber(Number(selected.quantity || 0))} />
+                  <Field label="PRICE" value={formatCurrency(Number(selected.price || 0))} />
+                  <Field label="AMOUNT" value={formatCurrency(Number(selected.amount ?? 0))} />
+                  <Field label="PNL" value={selected.pnl == null ? '-' : formatCurrency(Number(selected.pnl))}
+                    highlight={selected.pnl == null ? null : Number(selected.pnl) >= 0 ? 'up' : 'down'} />
+                  <Field label="FEE" value={formatCurrency(Number(selected.fee || 0))} />
+                  <Field label="TAX" value={formatCurrency(Number(selected.tax || 0))} />
+                  <Field label="STATUS" value={selected.status || 'filled'} />
+                  <Field label="AGENT" value={selected.agent_id || '-'} />
+                  <Field label="DECISION" value={selected.decision_id || '-'} />
                 </div>
               ) : (
                 <div>
                   {causalLoading ? (
-                    <div className="py-8 text-center text-slate-400">加载决策因果链中...</div>
+                    <div className="py-8 text-center font-mono text-xs text-[rgb(var(--muted))]">Loading causal chain...</div>
                   ) : causalData ? (
-                    <div className="space-y-4">
-                      {/* 决策信息 */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                        <div className="text-xs font-medium text-slate-400">决策信息</div>
-                        <div className="mt-2 space-y-2">
+                    <div className="space-y-3">
+                      {/* Decision */}
+                      <div className="border-l-2 border-[rgba(var(--accent),0.5)] bg-[rgba(var(--surface),0.3)] p-4" style={{ borderRadius: '2px' }}>
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">DECISION</div>
+                        <div className="mt-2 space-y-1 font-mono text-xs">
                           <div className="flex justify-between">
-                            <span className="text-sm text-slate-300">决策ID:</span>
-                            <span className="text-sm text-slate-200">{causalData.decision.decision_id}</span>
+                            <span className="text-[rgb(var(--muted))]">ID</span>
+                            <span className="text-[rgb(var(--text))]">{causalData.decision.decision_id}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-sm text-slate-300">信号方向:</span>
-                            <span className={`text-sm font-medium ${causalData.decision.signal_side === 'buy' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                            <span className="text-[rgb(var(--muted))]">SIGNAL</span>
+                            <span className={`font-bold ${causalData.decision.signal_side === 'buy' ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>
                               {causalData.decision.signal_side.toUpperCase()}
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* 风控检查 */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                        <div className="text-xs font-medium text-slate-400">风控检查</div>
-                        <div className="mt-2">
-                          <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${causalData.risk_check.passed ? 'bg-emerald-900/30 text-emerald-300' : 'bg-rose-900/30 text-rose-300'}`}>
-                            {causalData.risk_check.passed ? '✓ 通过' : '✗ 拒绝'}
-                          </div>
-                          {causalData.risk_check.reject_code && (
-                            <div className="mt-2 text-sm text-slate-300">拒绝代码: {causalData.risk_check.reject_code}</div>
-                          )}
+                      {/* Risk Check */}
+                      <div className="border-l-2 border-[rgba(var(--warn),0.5)] bg-[rgba(var(--surface),0.3)] p-4" style={{ borderRadius: '2px' }}>
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">RISK CHECK</div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full ${causalData.risk_check.passed ? 'bg-[rgb(var(--up))]' : 'bg-[rgb(var(--danger))]'}`} />
+                          <span className={`font-mono text-xs font-bold ${causalData.risk_check.passed ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>
+                            {causalData.risk_check.passed ? 'PASSED' : 'REJECTED'}
+                          </span>
                         </div>
+                        {causalData.risk_check.reject_code && (
+                          <div className="mt-1 font-mono text-xs text-[rgb(var(--muted))]">Code: {causalData.risk_check.reject_code}</div>
+                        )}
                       </div>
 
                       {/* LLM Traces */}
                       {causalData.llm_traces && causalData.llm_traces.length > 0 ? (
-                        <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                          <div className="text-xs font-medium text-slate-400">LLM 决策轨迹</div>
+                        <div className="border-l-2 border-[rgba(var(--info),0.5)] bg-[rgba(var(--surface),0.3)] p-4" style={{ borderRadius: '2px' }}>
+                          <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">LLM TRACES</div>
                           <div className="mt-2 space-y-3">
                             {causalData.llm_traces.map((trace, index) => (
-                              <div key={index} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                              <div key={index} className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-3" style={{ borderRadius: '2px' }}>
                                 <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-slate-200">{trace.agent}</span>
+                                  <span className="font-mono text-xs font-bold text-[rgb(var(--text))]">{trace.agent}</span>
                                   {trace.created_at && (
-                                    <span className="text-xs text-slate-500">{new Date(trace.created_at * 1000).toLocaleString()}</span>
+                                    <span className="font-mono text-[10px] text-[rgb(var(--muted))]">{new Date(trace.created_at * 1000).toLocaleString()}</span>
                                   )}
                                 </div>
                                 <div className="mt-2">
-                                  <div className="text-xs text-slate-400">Prompt:</div>
-                                  <div className="mt-1 text-sm text-slate-300 overflow-auto max-h-20">{trace.prompt_text}</div>
+                                  <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">PROMPT</div>
+                                  <div className="mt-1 max-h-20 overflow-auto font-mono text-[11px] text-[rgb(var(--text))]">{trace.prompt_text}</div>
                                 </div>
                                 <div className="mt-2">
-                                  <div className="text-xs text-slate-400">Response:</div>
-                                  <div className="mt-1 text-sm text-slate-300 overflow-auto max-h-20">{trace.response_text}</div>
+                                  <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">RESPONSE</div>
+                                  <div className="mt-1 max-h-20 overflow-auto font-mono text-[11px] text-[rgb(var(--text))]">{trace.response_text}</div>
                                 </div>
                               </div>
                             ))}
                           </div>
                         </div>
                       ) : (
-                        <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                          <div className="text-center text-sm text-slate-400">无 LLM 决策轨迹记录</div>
+                        <div className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-4 text-center font-mono text-xs text-[rgb(var(--muted))]" style={{ borderRadius: '2px' }}>
+                          NO LLM TRACE RECORDS
                         </div>
                       )}
 
-                      {/* 成交信息 */}
-                      <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4">
-                        <div className="text-xs font-medium text-slate-400">成交信息</div>
-                        <div className="mt-2 space-y-2">
+                      {/* Fills */}
+                      <div className="border-l-2 border-[rgba(var(--accent),0.5)] bg-[rgba(var(--surface),0.3)] p-4" style={{ borderRadius: '2px' }}>
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">FILLS</div>
+                        <div className="mt-2 space-y-1">
                           {causalData.fills.map((fill, index) => (
-                            <div key={index} className="flex justify-between">
-                              <span className="text-sm text-slate-300">成交 #{index + 1}:</span>
-                              <span className="text-sm text-slate-200">
+                            <div key={index} className="flex justify-between font-mono text-xs">
+                              <span className="text-[rgb(var(--muted))]">FILL #{index + 1}</span>
+                              <span className="tabular-nums text-[rgb(var(--text))]">
                                 {fill.qty} @ {formatCurrency(fill.price)}
                               </span>
                             </div>
@@ -590,8 +620,8 @@ export default function TradesPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="py-8 text-center text-slate-400">
-                      无法加载决策因果链数据
+                    <div className="py-8 text-center font-mono text-xs text-[rgb(var(--muted))]">
+                      UNABLE TO LOAD CAUSAL CHAIN
                     </div>
                   )}
                 </div>
@@ -604,11 +634,20 @@ export default function TradesPage() {
   )
 }
 
-function Field({ label, value }) {
+function Field({ label, value, highlight }) {
+  const colorCls = highlight === 'up'
+    ? 'text-[rgb(var(--up))]'
+    : highlight === 'down'
+      ? 'text-[rgb(var(--danger))]'
+      : 'text-[rgb(var(--text))]'
+
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-3">
-      <div className="text-xs font-medium text-slate-400">{label}</div>
-      <div className="mt-1 text-sm text-slate-100 break-all">{value}</div>
+    <div
+      className="border-l-2 border-[rgba(var(--grid),0.2)] bg-[rgba(var(--surface),0.3)] px-3 py-2"
+      style={{ borderRadius: '2px' }}
+    >
+      <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">{label}</div>
+      <div className={`mt-1 break-all font-mono text-sm font-semibold tabular-nums ${colorCls}`}>{value}</div>
     </div>
   )
 }
