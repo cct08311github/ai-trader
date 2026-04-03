@@ -196,10 +196,12 @@ def enforce_network_security(
     whitelist: Optional[List[str]] = None,
     conn: Optional[sqlite3.Connection] = None,
     db_path: Optional[str] = None,
+    simulation_mode: bool = False,
 ) -> str:
     """Enforce IP allowlist for sensitive API calls.
 
     - If allowlist is empty -> no-op.
+    - If simulation_mode is True -> no-op (#600: avoid false positives when no real broker calls).
     - If allowlist is set and current IP not allowed -> log incident (best-effort) then raise.
 
     Allowlist sources:
@@ -213,6 +215,9 @@ def enforce_network_security(
 
     Returns resolved current IP.
     """
+    # #600: skip IP enforcement in simulation mode — no real broker calls made
+    if simulation_mode:
+        return current_ip or "127.0.0.1"
 
     allow = whitelist if whitelist is not None else _parse_allowlist(os.getenv("OPENCLAW_IP_ALLOWLIST"))
     if not allow:

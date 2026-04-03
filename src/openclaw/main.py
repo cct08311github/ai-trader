@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sqlite3
 import time
 import uuid
@@ -168,9 +169,19 @@ def execute_approved_order(
         )
 
     # v4 #12: IP allowlist gate for sensitive broker APIs (configurable via env)
+    # #600: skip in simulation mode to avoid false-positive SEC_NETWORK_IP_DENIED
     from openclaw.network_allowlist import enforce_network_security
 
-    enforce_network_security(conn=conn)
+    _sim_mode = os.getenv("SIMULATION_MODE", "").lower() in ("1", "true", "yes")
+    if not _sim_mode:
+        try:
+            import json as _json
+            _ss_path = os.getenv("SYSTEM_STATE_PATH", "config/system_state.json")
+            with open(_ss_path) as _f:
+                _sim_mode = _json.load(_f).get("simulation_mode", False)
+        except (OSError, ValueError):
+            pass
+    enforce_network_security(conn=conn, simulation_mode=_sim_mode)
 
     submission = broker.submit_order(order_id, candidate)
     if submission.status != "submitted":

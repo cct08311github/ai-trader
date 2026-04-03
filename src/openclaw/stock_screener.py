@@ -380,24 +380,34 @@ def screen_candidates(
     short_term: List[Dict] = []
     long_term: List[Dict] = []
 
+    _skip_count = 0
     for sym in symbols:
-        st_score, st_reasons = _check_short_term_rules(conn, sym, trade_date)
-        if st_score >= MIN_SCORE_THRESHOLD:
-            short_term.append({
-                "symbol": sym,
-                "label": "short_term",
-                "score": st_score,
-                "reasons": st_reasons,
-            })
+        try:
+            st_score, st_reasons = _check_short_term_rules(conn, sym, trade_date)
+            if st_score >= MIN_SCORE_THRESHOLD:
+                short_term.append({
+                    "symbol": sym,
+                    "label": "short_term",
+                    "score": st_score,
+                    "reasons": st_reasons,
+                })
 
-        lt_score, lt_reasons = _check_long_term_rules(conn, sym, trade_date)
-        if lt_score >= MIN_SCORE_THRESHOLD:
-            long_term.append({
-                "symbol": sym,
-                "label": "long_term",
-                "score": lt_score,
-                "reasons": lt_reasons,
-            })
+            lt_score, lt_reasons = _check_long_term_rules(conn, sym, trade_date)
+            if lt_score >= MIN_SCORE_THRESHOLD:
+                long_term.append({
+                    "symbol": sym,
+                    "label": "long_term",
+                    "score": lt_score,
+                    "reasons": lt_reasons,
+                })
+        except (TypeError, ValueError, ArithmeticError) as _rule_err:
+            # #600: NULL values in eod_prices cause NoneType arithmetic errors
+            # Skip this symbol but continue screening others
+            _skip_count += 1
+            continue
+
+    if _skip_count:
+        log.warning("screen_candidates: skipped %d/%d symbols due to data errors", _skip_count, len(symbols))
 
     # Sort by score desc, cap each label
     half = max(1, max_candidates // 2)
