@@ -13,6 +13,7 @@ from app.api.agents import router as agents_router
 from app.api.analysis import router as analysis_router
 from app.api.chips import router as chips_router
 from app.api.auth import router as auth_router
+from app.api.research import router as research_router
 from app.api.chat import router as chat_router
 from app.api.control import router as control_router
 from app.api.pm import router as pm_router
@@ -98,3 +99,4 @@ app.include_router(inventory_router)
 app.include_router(capital_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
+app.include_router(research_router)
