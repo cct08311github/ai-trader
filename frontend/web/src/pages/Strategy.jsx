@@ -1,9 +1,14 @@
 /**
- * Strategy.jsx -- BattleTheme Redesign
+ * Strategy.jsx -- War Room Layout
  *
- * Strategy war room: proposal review table, market rating,
- * committee debates (Bull vs Bear), LLM traces, semantic memory.
- * Brutalist panels, monospace labels, status dots, accent borders.
+ * Complete layout restructure:
+ *   Hero: Active proposals expanded by default
+ *   Split view: Bull thesis (5 cols) | Arbiter (2 cols) | Bear thesis (5 cols)
+ *   Below: Proposal queue as compact rows with status dots
+ *   Committee debate: conversation-style chat bubbles
+ *   LLM trace: collapsible terminal-style monospace blocks
+ *
+ * All data fetching and state management preserved from original.
  */
 
 import React, { useEffect, useMemo, useState, Fragment } from 'react'
@@ -27,20 +32,7 @@ function safeJsonParse(s) {
   try { return JSON.parse(s) } catch { return null }
 }
 
-/* ── Panel wrapper ──────────────────────────────────────────── */
-function Panel({ title, right, children, className = '' }) {
-  return (
-    <section className={`border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.6)] ${className}`} style={{ borderRadius: '4px' }}>
-      <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
-        <div className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">{title}</div>
-        {right && <div className="font-mono text-[10px] text-[rgb(var(--muted))]">{right}</div>}
-      </div>
-      <div className="p-4">{children}</div>
-    </section>
-  )
-}
-
-/* ── Status Tag with dot ───────────────────────────────────── */
+/* ── Status Tag with dot ─────────────────────────────────── */
 function StatusTag({ status }) {
   const s = String(status || '').toLowerCase() || 'unknown'
   const map = {
@@ -59,112 +51,32 @@ function StatusTag({ status }) {
   )
 }
 
-/* ── Rating Card ──────────────────────────────────────────── */
-function RatingCard({ rating, basis }) {
+/* ── Rating Card -- large dramatic display ───────────────── */
+function RatingHero({ rating, basis }) {
   const r = String(rating || '').toUpperCase()
-  const borderColor = {
-    A: 'border-l-[rgb(var(--up))]',
-    B: 'border-l-[rgb(var(--warn))]',
-    C: 'border-l-[rgb(var(--danger))]',
-  }[r] || 'border-l-[rgb(var(--muted))]'
-  const textColor = {
-    A: 'text-[rgb(var(--up))]',
-    B: 'text-[rgb(var(--warn))]',
-    C: 'text-[rgb(var(--danger))]',
-  }[r] || 'text-[rgb(var(--muted))]'
+  const colorVar = { A: '--up', B: '--warn', C: '--danger' }[r] || '--muted'
 
   return (
-    <div className={`border border-[rgba(var(--grid),0.3)] border-l-4 ${borderColor} bg-[rgba(var(--surface),0.6)] p-6`} style={{ borderRadius: '4px' }}>
-      <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">MARKET RATING</div>
-      <div className="mt-4 flex items-end justify-between gap-4">
-        <div className={`font-mono text-6xl font-black tabular-nums tracking-tight ${textColor}`}
-          style={{ filter: r === 'A' ? 'drop-shadow(0 0 6px rgb(var(--up)))' : 'none' }}
+    <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px', borderLeft: `4px solid rgb(var(${colorVar}))` }}>
+      <div className="flex items-center gap-6 px-6 py-5">
+        <div className="font-mono text-7xl font-black tabular-nums tracking-tight"
+          style={{
+            color: `rgb(var(${colorVar}))`,
+            filter: r === 'A' ? 'drop-shadow(0 0 8px rgb(var(--up)))' : 'none',
+            lineHeight: 1,
+          }}
         >{r || '-'}</div>
-        <div className="font-mono text-[10px] text-[rgb(var(--muted))]">SOURCE: PM LLM</div>
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">MARKET RATING</div>
+          <div className="mt-2 font-mono text-[11px] leading-relaxed text-[rgb(var(--muted))] line-clamp-3">{basis || '(No rating basis)'}</div>
+        </div>
       </div>
-      <div className="mt-4 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[rgb(var(--muted))]">{basis || '(No rating basis)'}</div>
     </div>
   )
 }
 
-/* ── PM LLM Trace Panel ──────────────────────────────────── */
-function PmTracePanel() {
-  const [traces, setTraces] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState({})
-
-  function reload() {
-    setLoading(true)
-    authFetch(`${getApiBase()}/api/strategy/pm-traces?limit=5`)
-      .then(r => r.json())
-      .then(d => { setTraces(d?.data || []); setLoading(false) })
-      .catch(() => setLoading(false))
-  }
-
-  useEffect(() => { reload() }, [])
-
-  function toggle(id, field) {
-    setExpanded(prev => ({ ...prev, [id]: prev[id] === field ? null : field }))
-  }
-
-  return (
-    <Panel title="PM AUDIT TRACES" right={`${traces.length} RECORDS`}>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">PROMPT + RAW RESPONSE</span>
-        <button onClick={reload} disabled={loading}
-          className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-[10px] text-[rgb(var(--text))] hover:bg-[rgba(var(--surface),0.5)] disabled:opacity-50"
-          style={{ borderRadius: '3px' }}
-        >{loading ? '...' : 'REFRESH'}</button>
-      </div>
-
-      {loading ? (
-        <div className="py-6"><LoadingSpinner label="Loading traces..." /></div>
-      ) : traces.length === 0 ? (
-        <EmptyState icon={FileText} title="NO TRACES" description="Trigger AI review from Portfolio page" />
-      ) : (
-        <div className="space-y-2">
-          {traces.map(t => (
-            <div key={t.trace_id} className="border border-[rgba(var(--grid),0.15)] overflow-hidden" style={{ borderRadius: '2px' }}>
-              <div className="flex flex-wrap items-center gap-3 bg-[rgba(var(--surface),0.4)] px-4 py-2 font-mono text-[10px] text-[rgb(var(--muted))]">
-                <span className="text-[rgb(var(--text))]">{t.trace_id}</span>
-                <span>{formatUnixSec(t.created_at)}</span>
-                <span className="text-[rgb(var(--info))]">{t.model}</span>
-                {t.latency_ms != null && <span>{t.latency_ms}ms</span>}
-              </div>
-              {/* Prompt */}
-              <div className="border-t border-[rgba(var(--grid),0.1)]">
-                <button onClick={() => toggle(t.trace_id, 'prompt')}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--warn))] hover:bg-[rgba(var(--surface),0.2)]"
-                >
-                  {expanded[t.trace_id] === 'prompt' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  PROMPT
-                </button>
-                {expanded[t.trace_id] === 'prompt' && (
-                  <pre className="max-h-[60vh] overflow-auto px-4 pb-4 font-mono text-[11px] leading-relaxed text-[rgb(var(--text))] whitespace-pre-wrap break-words">{t.prompt || '(empty)'}</pre>
-                )}
-              </div>
-              {/* Response */}
-              <div className="border-t border-[rgba(var(--grid),0.1)]">
-                <button onClick={() => toggle(t.trace_id, 'response')}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--up))] hover:bg-[rgba(var(--surface),0.2)]"
-                >
-                  {expanded[t.trace_id] === 'response' ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  RAW RESPONSE
-                </button>
-                {expanded[t.trace_id] === 'response' && (
-                  <pre className="max-h-[60vh] overflow-auto px-4 pb-4 font-mono text-[11px] leading-relaxed text-[rgb(var(--up))] whitespace-pre-wrap break-words">{t.response || '(empty)'}</pre>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-/* ── Bull vs Bear Debate Panel ────────────────────────────── */
-function DebatePanel() {
+/* ── Bull vs Bear Split View ─────────────────────────────── */
+function DebateHeroSection() {
   const [debates, setDebates] = useState([])
   const [date, setDate] = useState('today')
   const [loading, setLoading] = useState(false)
@@ -191,82 +103,197 @@ function DebatePanel() {
           ? `${cj.recommended_action} (conf ${((cj.confidence || 0) * 100).toFixed(0)}%, ${approved ? 'AUTHORIZED' : 'BLOCKED'})`
           : null,
         summary: d.summary || null,
+        confidence: cj.confidence,
       }
     })
   }, [debates])
 
   const today = new Date().toISOString().slice(0, 10)
+  const latest = parsed[0]
+
+  if (loading) return <div className="py-8"><LoadingSpinner label="Loading debates..." /></div>
 
   return (
-    <Panel title="BULL vs BEAR DEBATE">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">COMMITTEE DEBATE LOG</span>
-        <input
-          type="date"
-          value={date === 'today' ? today : date}
-          onChange={e => setDate(e.target.value)}
-          className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-3 py-1.5 font-mono text-sm text-[rgb(var(--text))] focus:border-[rgba(var(--accent),0.5)] focus:outline-none"
-          style={{ borderRadius: '3px' }}
-        />
+    <div className="space-y-4">
+      {/* Date selector */}
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">COMMITTEE DEBATE</span>
+        <input type="date" value={date === 'today' ? today : date} onChange={e => setDate(e.target.value)}
+          className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-[10px] text-[rgb(var(--text))] focus:border-[rgba(var(--accent),0.5)] focus:outline-none"
+          style={{ borderRadius: '2px' }} />
       </div>
 
-      {loading ? (
-        <div className="py-6"><LoadingSpinner label="Loading debates..." /></div>
-      ) : parsed.length === 0 ? (
+      {parsed.length === 0 ? (
         <EmptyState icon={Lightbulb} title="NO DEBATES" description="Trigger AI review from Portfolio page" />
       ) : (
-        <div className="space-y-3">
-          {parsed.map((d, i) => (
-            <div key={d.id || i} className="border border-[rgba(var(--grid),0.15)] overflow-hidden" style={{ borderRadius: '2px' }}>
-              {d.summary && (
-                <div className="bg-[rgba(var(--surface),0.4)] px-4 py-2 font-mono text-[10px] text-[rgb(var(--muted))] border-b border-[rgba(var(--grid),0.1)]">
-                  {formatUnixSec(d.timestamp)} -- {d.summary}
+        <>
+          {/* Latest debate -- hero split view 5:2:5 */}
+          {latest && (
+            <div className="grid grid-cols-1 gap-0 lg:grid-cols-12">
+              {/* Bull thesis */}
+              <div className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
+                   style={{ borderRadius: '4px 0 0 4px', borderLeft: '3px solid rgb(var(--up))' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-3 w-3 rounded-full bg-[rgb(var(--up))]" style={{ boxShadow: '0 0 6px rgba(var(--up),0.4)' }} />
+                  <span className="font-mono text-xs font-black uppercase tracking-widest text-[rgb(var(--up))]">BULL THESIS</span>
                 </div>
-              )}
-              <div className="grid grid-cols-1 lg:grid-cols-3">
-                {/* Bull */}
-                <div className="border-l-2 border-l-[rgb(var(--up))] p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-[rgb(var(--up))]" />
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--up))]">BULL</span>
-                  </div>
-                  <p className="font-mono text-[11px] leading-relaxed text-[rgb(var(--text))]">
-                    {d.bull || <span className="text-[rgb(var(--muted))]">(no data)</span>}
-                  </p>
+                <div className="font-mono text-[12px] leading-relaxed text-[rgb(var(--text))]">
+                  {latest.bull || <span className="text-[rgb(var(--muted))] italic">(no data)</span>}
                 </div>
-                {/* Bear */}
-                <div className="border-l-2 border-l-[rgb(var(--danger))] p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-[rgb(var(--danger))]" />
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--danger))]">BEAR</span>
-                  </div>
-                  <p className="font-mono text-[11px] leading-relaxed text-[rgb(var(--text))]">
-                    {d.bear || <span className="text-[rgb(var(--muted))]">(no data)</span>}
-                  </p>
+              </div>
+
+              {/* Arbiter verdict -- center column */}
+              <div className="lg:col-span-2 border-y border-[rgba(var(--grid),0.2)] bg-[rgba(var(--surface),0.5)] flex flex-col items-center justify-center px-4 py-5">
+                <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))] mb-3">VERDICT</div>
+                {/* Confidence bar -- vertical */}
+                <div className="relative w-4 h-24 border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] overflow-hidden" style={{ borderRadius: '2px' }}>
+                  <div className="absolute bottom-0 left-0 right-0 transition-all"
+                    style={{
+                      height: `${Math.round((latest.confidence || 0) * 100)}%`,
+                      backgroundColor: latest.confidence >= 0.6 ? 'rgb(var(--up))' : latest.confidence >= 0.4 ? 'rgb(var(--warn))' : 'rgb(var(--danger))',
+                      boxShadow: `0 0 8px ${latest.confidence >= 0.6 ? 'rgba(var(--up),0.3)' : 'rgba(var(--warn),0.3)'}`,
+                    }}
+                  />
                 </div>
-                {/* PM Decision */}
-                <div className="border-l-2 border-l-[rgb(var(--info))] bg-[rgba(var(--surface),0.3)] p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-[rgb(var(--info))]" />
-                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--info))]">PM VERDICT</span>
-                  </div>
-                  <p className="font-mono text-[11px] font-bold leading-relaxed text-[rgb(var(--text))]">
-                    {d.pm || <span className="text-[rgb(var(--muted))]">(no data)</span>}
-                  </p>
-                  {d.neutral && (
-                    <p className="mt-2 font-mono text-[10px] leading-relaxed text-[rgb(var(--muted))]">{d.neutral}</p>
-                  )}
+                <div className="mt-2 font-mono text-sm font-black tabular-nums text-[rgb(var(--text))]">
+                  {Math.round((latest.confidence || 0) * 100)}%
+                </div>
+                <div className="mt-3 font-mono text-[10px] font-bold text-center text-[rgb(var(--info))] leading-tight">
+                  {latest.pm || '-'}
+                </div>
+              </div>
+
+              {/* Bear thesis */}
+              <div className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
+                   style={{ borderRadius: '0 4px 4px 0', borderRight: '3px solid rgb(var(--danger))' }}>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-3 w-3 rounded-full bg-[rgb(var(--danger))]" style={{ boxShadow: '0 0 6px rgba(var(--danger),0.4)' }} />
+                  <span className="font-mono text-xs font-black uppercase tracking-widest text-[rgb(var(--danger))]">BEAR THESIS</span>
+                </div>
+                <div className="font-mono text-[12px] leading-relaxed text-[rgb(var(--text))]">
+                  {latest.bear || <span className="text-[rgb(var(--muted))] italic">(no data)</span>}
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* Earlier debates as chat bubbles */}
+          {parsed.length > 1 && (
+            <div className="space-y-3">
+              <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">EARLIER DEBATES</div>
+              {parsed.slice(1).map((d, i) => (
+                <div key={d.id || i} className="space-y-2">
+                  {d.summary && (
+                    <div className="font-mono text-[10px] text-[rgb(var(--muted))]">{formatUnixSec(d.timestamp)}</div>
+                  )}
+                  <div className="flex gap-3">
+                    {/* Bull bubble */}
+                    <div className="flex-1 border-l-2 border-l-[rgb(var(--up))] bg-[rgba(var(--up),0.03)] px-3 py-2" style={{ borderRadius: '2px' }}>
+                      <div className="font-mono text-[9px] font-bold text-[rgb(var(--up))] mb-1">BULL</div>
+                      <div className="font-mono text-[10px] text-[rgb(var(--text))] line-clamp-2">{d.bull || '(no data)'}</div>
+                    </div>
+                    {/* Bear bubble */}
+                    <div className="flex-1 border-l-2 border-l-[rgb(var(--danger))] bg-[rgba(var(--danger),0.03)] px-3 py-2" style={{ borderRadius: '2px' }}>
+                      <div className="font-mono text-[9px] font-bold text-[rgb(var(--danger))] mb-1">BEAR</div>
+                      <div className="font-mono text-[10px] text-[rgb(var(--text))] line-clamp-2">{d.bear || '(no data)'}</div>
+                    </div>
+                  </div>
+                  {d.pm && (
+                    <div className="border-l-2 border-l-[rgb(var(--info))] bg-[rgba(var(--info),0.03)] px-3 py-2 ml-8" style={{ borderRadius: '2px' }}>
+                      <div className="font-mono text-[9px] font-bold text-[rgb(var(--info))] mb-1">PM VERDICT</div>
+                      <div className="font-mono text-[10px] font-bold text-[rgb(var(--text))]">{d.pm}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
-    </Panel>
+    </div>
   )
 }
 
-/* ── JSON display box ─────────────────────────────────────── */
+/* ── PM LLM Trace -- terminal-style collapsible ──────────── */
+function PmTraceTerminal() {
+  const [traces, setTraces] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState({})
+
+  function reload() {
+    setLoading(true)
+    authFetch(`${getApiBase()}/api/strategy/pm-traces?limit=5`)
+      .then(r => r.json())
+      .then(d => { setTraces(d?.data || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  function toggle(id, field) {
+    setExpanded(prev => ({ ...prev, [id]: prev[id] === field ? null : field }))
+  }
+
+  return (
+    <div className="border border-[rgba(var(--grid),0.3)] bg-[rgb(var(--bg))] overflow-hidden" style={{ borderRadius: '4px' }}>
+      {/* Terminal title bar */}
+      <div className="flex items-center justify-between bg-[rgba(var(--surface),0.6)] px-4 py-2.5 border-b border-[rgba(var(--grid),0.3)]">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full bg-[rgb(var(--danger))]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[rgb(var(--warn))]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[rgb(var(--up))]" />
+          <span className="ml-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">PM AUDIT TRACES</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] tabular-nums text-[rgb(var(--muted))]">{traces.length} RECORDS</span>
+          <button onClick={reload} disabled={loading}
+            className="font-mono text-[10px] text-[rgb(var(--accent))] hover:underline disabled:opacity-50"
+          >{loading ? '...' : 'REFRESH'}</button>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-1 max-h-[50vh] overflow-y-auto">
+        {loading ? (
+          <div className="py-6"><LoadingSpinner label="Loading traces..." /></div>
+        ) : traces.length === 0 ? (
+          <div className="py-6 text-center font-mono text-[10px] text-[rgb(var(--muted))]">$ no traces found</div>
+        ) : (
+          traces.map(t => (
+            <div key={t.trace_id} className="font-mono text-[11px]">
+              <div className="flex flex-wrap items-center gap-3 px-3 py-1.5 text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)]">
+                <span className="text-[rgb(var(--up))]">$</span>
+                <span className="text-[rgb(var(--text))]">{t.trace_id}</span>
+                <span>{formatUnixSec(t.created_at)}</span>
+                <span className="text-[rgb(var(--info))]">{t.model}</span>
+                {t.latency_ms != null && <span>{t.latency_ms}ms</span>}
+                <span className="ml-auto flex gap-2">
+                  <button onClick={() => toggle(t.trace_id, 'prompt')}
+                    className={`text-[rgb(var(--warn))] hover:underline ${expanded[t.trace_id] === 'prompt' ? 'font-bold' : ''}`}
+                  >[prompt]</button>
+                  <button onClick={() => toggle(t.trace_id, 'response')}
+                    className={`text-[rgb(var(--up))] hover:underline ${expanded[t.trace_id] === 'response' ? 'font-bold' : ''}`}
+                  >[response]</button>
+                </span>
+              </div>
+              {expanded[t.trace_id] === 'prompt' && (
+                <pre className="mx-3 mb-2 max-h-[40vh] overflow-auto bg-[rgba(var(--surface),0.2)] p-3 text-[11px] leading-relaxed text-[rgb(var(--warn))] whitespace-pre-wrap break-words border-l-2 border-l-[rgb(var(--warn))]">
+                  {t.prompt || '(empty)'}
+                </pre>
+              )}
+              {expanded[t.trace_id] === 'response' && (
+                <pre className="mx-3 mb-2 max-h-[40vh] overflow-auto bg-[rgba(var(--surface),0.2)] p-3 text-[11px] leading-relaxed text-[rgb(var(--up))] whitespace-pre-wrap break-words border-l-2 border-l-[rgb(var(--up))]">
+                  {t.response || '(empty)'}
+                </pre>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── JSON display box ───────────────────────────────────── */
 function JsonBox({ value }) {
   const text = useMemo(() => {
     if (value == null) return ''
@@ -277,9 +304,7 @@ function JsonBox({ value }) {
     }
     return JSON.stringify(value, null, 2)
   }, [value])
-
   if (!text) return <div className="font-mono text-xs text-[rgb(var(--muted))]">(empty)</div>
-
   return (
     <pre className="max-h-[35vh] sm:max-h-[55vh] overflow-y-auto overflow-x-hidden border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.3)] p-3 font-mono text-[11px] text-[rgb(var(--text))] whitespace-pre-wrap break-all" style={{ borderRadius: '2px' }}>
       {text}
@@ -287,65 +312,7 @@ function JsonBox({ value }) {
   )
 }
 
-/* ── Committee Context Card ───────────────────────────────── */
-function CommitteeContextCard({ title, tone, content, confidence, icon }) {
-  const borderMap = {
-    emerald: 'border-l-[rgb(var(--up))]',
-    rose: 'border-l-[rgb(var(--danger))]',
-    cyan: 'border-l-[rgb(var(--info))]',
-    slate: 'border-l-[rgb(var(--muted))]',
-  }
-  const textMap = {
-    emerald: 'text-[rgb(var(--up))]',
-    rose: 'text-[rgb(var(--danger))]',
-    cyan: 'text-[rgb(var(--info))]',
-    slate: 'text-[rgb(var(--muted))]',
-  }
-
-  return (
-    <div className={`border border-[rgba(var(--grid),0.15)] border-l-2 ${borderMap[tone] || borderMap.slate} bg-[rgba(var(--surface),0.3)] p-3`} style={{ borderRadius: '2px' }}>
-      <div className="flex items-center justify-between gap-3">
-        <div className={`flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-widest ${textMap[tone] || textMap.slate}`}>
-          <span>{icon}</span>
-          <span>{title}</span>
-        </div>
-        {confidence != null && confidence !== '' && (
-          <span className="font-mono text-[10px] text-[rgb(var(--muted))]">CONF {Math.round(Number(confidence) * 100)}%</span>
-        )}
-      </div>
-      <div className="mt-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[rgb(var(--text))]">
-        {content || '(empty)'}
-      </div>
-    </div>
-  )
-}
-
-function CommitteeDecisionBasis({ basis }) {
-  if (!basis) return null
-  const sections = [
-    ['BULL POINTS', basis.bull_points],
-    ['BEAR POINTS', basis.bear_points],
-    ['KEY TRADEOFFS', basis.key_tradeoffs],
-    ['DATA GAPS', basis.data_gaps],
-  ]
-  return (
-    <div className="space-y-2">
-      {sections.map(([label, items]) => (
-        <div key={label} className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-3" style={{ borderRadius: '2px' }}>
-          <div className="font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">{label}</div>
-          {Array.isArray(items) && items.length > 0 ? (
-            <ul className="mt-2 space-y-1 font-mono text-[11px] text-[rgb(var(--text))]">
-              {items.map((item, idx) => <li key={idx} className="break-words">- {item}</li>)}
-            </ul>
-          ) : (
-            <div className="mt-2 font-mono text-[11px] text-[rgb(var(--muted))]">(no data)</div>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
+/* ── Committee Context (for modal) ───────────────────────── */
 function CommitteeContextSection({ payload }) {
   const ctx = payload?.committee_context
   if (!ctx) return null
@@ -354,17 +321,41 @@ function CommitteeContextSection({ payload }) {
     <div className="mt-4 space-y-3">
       <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">COMMITTEE DEBATE CONTEXT</div>
       <div className="grid gap-3 lg:grid-cols-3">
-        <CommitteeContextCard title="BULL ANALYST" tone="emerald" icon="^" content={ctx?.bull?.thesis} confidence={ctx?.bull?.confidence} />
-        <CommitteeContextCard title="BEAR ANALYST" tone="rose" icon="v" content={ctx?.bear?.thesis} confidence={ctx?.bear?.confidence} />
-        <CommitteeContextCard title={`ARBITER${ctx?.arbiter?.stance ? ` [${ctx.arbiter.stance}]` : ''}`} tone="cyan" icon="*" content={ctx?.arbiter?.summary} confidence={payload?.confidence ?? ctx?.arbiter?.raw?.confidence} />
+        {[
+          { title: 'BULL ANALYST', tone: '--up', icon: '^', content: ctx?.bull?.thesis, confidence: ctx?.bull?.confidence },
+          { title: 'BEAR ANALYST', tone: '--danger', icon: 'v', content: ctx?.bear?.thesis, confidence: ctx?.bear?.confidence },
+          { title: `ARBITER${ctx?.arbiter?.stance ? ` [${ctx.arbiter.stance}]` : ''}`, tone: '--info', icon: '*', content: ctx?.arbiter?.summary, confidence: payload?.confidence ?? ctx?.arbiter?.raw?.confidence },
+        ].map(c => (
+          <div key={c.title} className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.3)] p-3"
+               style={{ borderRadius: '2px', borderLeft: `2px solid rgb(var(${c.tone}))` }}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-widest" style={{ color: `rgb(var(${c.tone}))` }}>{c.icon} {c.title}</span>
+              {c.confidence != null && <span className="font-mono text-[10px] text-[rgb(var(--muted))]">CONF {Math.round(Number(c.confidence) * 100)}%</span>}
+            </div>
+            <div className="mt-2 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-[rgb(var(--text))]">{c.content || '(empty)'}</div>
+          </div>
+        ))}
       </div>
-      <CommitteeDecisionBasis basis={ctx?.arbiter?.decision_basis} />
-      <div className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-3" style={{ borderRadius: '2px' }}>
-        <div className="font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">COMMITTEE INPUT DATA</div>
-        <pre className="mt-2 max-h-[24vh] overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-[rgb(var(--muted))]">
-          {ctx?.market_data || '(no data)'}
-        </pre>
-      </div>
+      {ctx?.arbiter?.decision_basis && (
+        <div className="space-y-2">
+          {[['BULL POINTS', ctx.arbiter.decision_basis.bull_points], ['BEAR POINTS', ctx.arbiter.decision_basis.bear_points], ['KEY TRADEOFFS', ctx.arbiter.decision_basis.key_tradeoffs], ['DATA GAPS', ctx.arbiter.decision_basis.data_gaps]].map(([label, items]) => (
+            <div key={label} className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-3" style={{ borderRadius: '2px' }}>
+              <div className="font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">{label}</div>
+              {Array.isArray(items) && items.length > 0 ? (
+                <ul className="mt-2 space-y-1 font-mono text-[11px] text-[rgb(var(--text))]">
+                  {items.map((item, idx) => <li key={idx}>- {item}</li>)}
+                </ul>
+              ) : <div className="mt-2 font-mono text-[11px] text-[rgb(var(--muted))]">(no data)</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {ctx?.market_data && (
+        <div className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.2)] p-3" style={{ borderRadius: '2px' }}>
+          <div className="font-mono text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">COMMITTEE INPUT DATA</div>
+          <pre className="mt-2 max-h-[24vh] overflow-auto whitespace-pre-wrap break-all font-mono text-[10px] leading-relaxed text-[rgb(var(--muted))]">{ctx.market_data}</pre>
+        </div>
+      )}
     </div>
   )
 }
@@ -373,7 +364,6 @@ function CommitteeContextSection({ payload }) {
 function DuplicateAlertsSection({ payload }) {
   const alerts = Array.isArray(payload?.duplicate_alerts) ? payload.duplicate_alerts : []
   if (alerts.length === 0) return null
-
   return (
     <div className="mt-4 border-l-2 border-l-[rgb(var(--warn))] bg-[rgba(var(--warn),0.05)] p-4" style={{ borderRadius: '2px' }}>
       <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--warn))]">DUPLICATE ALERTS</div>
@@ -407,49 +397,43 @@ function DuplicateAlertFeed({ logs }) {
       .slice(0, 8)
   }, [logs])
 
+  if (alerts.length === 0) return null
+
   return (
-    <Panel title="DUPLICATE SUPPRESSION FEED" right={`${alerts.length} SUPPRESSED`}>
-      {alerts.length === 0 ? (
-        <div className="font-mono text-xs text-[rgb(var(--muted))]">No duplicate suppressions recorded.</div>
-      ) : (
-        <div className="space-y-2">
-          {alerts.map(alert => (
-            <div key={alert.traceId || `${alert.duplicate_of}-${alert.createdAt}`}
-              className="border-l-2 border-l-[rgb(var(--warn))] bg-[rgba(var(--surface),0.3)] p-3" style={{ borderRadius: '2px' }}
-            >
-              <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-[rgb(var(--muted))]">
-                <span>{formatUnixSec(alert.createdAt) || '-'}</span>
-                <span className="text-[rgb(var(--warn))]">SIM {alert.similarity ?? '-'}</span>
-                <span>LOOKBACK {alert.lookback_hours ?? '-'}h</span>
-                {alert.traceId && <span className="text-[rgb(var(--muted))]">{alert.traceId}</span>}
-              </div>
-              <div className="mt-2 break-words font-mono text-[11px] font-bold text-[rgb(var(--text))]">
-                {alert.proposed_value || '(no summary)'}
-              </div>
-              {alert.supporting_evidence && <div className="mt-1 break-words font-mono text-[10px] text-[rgb(var(--muted))]">{alert.supporting_evidence}</div>}
-              <div className="mt-2 font-mono text-[10px] text-[rgb(var(--warn))]">DUP_OF: {alert.duplicate_of || '-'}</div>
-              {alert.summary && <div className="mt-1 font-mono text-[10px] text-[rgb(var(--muted))]">{alert.summary}</div>}
+    <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px' }}>
+      <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--warn))]">DUPLICATE SUPPRESSION FEED</span>
+        <span className="font-mono text-[10px] text-[rgb(var(--muted))]">{alerts.length} SUPPRESSED</span>
+      </div>
+      <div className="p-3 space-y-2">
+        {alerts.map(alert => (
+          <div key={alert.traceId || `${alert.duplicate_of}-${alert.createdAt}`}
+            className="border-l-2 border-l-[rgb(var(--warn))] bg-[rgba(var(--surface),0.3)] p-3" style={{ borderRadius: '2px' }}>
+            <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-[rgb(var(--muted))]">
+              <span>{formatUnixSec(alert.createdAt) || '-'}</span>
+              <span className="text-[rgb(var(--warn))]">SIM {alert.similarity ?? '-'}</span>
+              <span>LOOKBACK {alert.lookback_hours ?? '-'}h</span>
             </div>
-          ))}
-        </div>
-      )}
-    </Panel>
+            <div className="mt-2 break-words font-mono text-[11px] font-bold text-[rgb(var(--text))]">{alert.proposed_value || '(no summary)'}</div>
+            {alert.supporting_evidence && <div className="mt-1 break-words font-mono text-[10px] text-[rgb(var(--muted))]">{alert.supporting_evidence}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
-/* ── Proposal Modal ───────────────────────────────────────── */
+/* ── Proposal Modal ──────────────────────────────────────── */
 function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   const payload = safeJsonParse(proposal?.proposal_json || '')
   const status = String(proposal?.status || '').toLowerCase()
   const isPending = status === 'pending'
-
   if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
       <div className="w-full max-w-4xl overflow-y-auto overflow-x-hidden border border-[rgba(var(--grid),0.4)] bg-[rgb(var(--bg))] p-5 shadow-2xl max-h-[90dvh]"
-        onMouseDown={e => e.stopPropagation()} style={{ borderRadius: '4px' }}
-      >
+        onMouseDown={e => e.stopPropagation()} style={{ borderRadius: '4px' }}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="font-mono text-sm font-bold text-[rgb(var(--text))]">PROPOSAL DETAIL</div>
@@ -457,24 +441,14 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
               ID: {proposal?.proposal_id || '-'} -- {formatUnixSec(proposal?.created_at) || '-'} -- <StatusTag status={proposal?.status} />
             </div>
           </div>
-          <button onClick={onClose}
-            className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))]"
-            style={{ borderRadius: '3px' }}
-          >CLOSE</button>
+          <button onClick={onClose} className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] px-3 py-1.5 font-mono text-xs text-[rgb(var(--text))]" style={{ borderRadius: '3px' }}>CLOSE</button>
         </div>
-
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <div className="font-mono text-[9px] uppercase tracking-widest text-[rgb(var(--muted))]">METADATA</div>
             <div className="border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.3)] p-3 font-mono text-[11px]" style={{ borderRadius: '2px' }}>
               <div className="grid grid-cols-3 gap-2">
-                {[
-                  ['GENERATED_BY', proposal?.generated_by],
-                  ['TARGET_RULE', proposal?.target_rule],
-                  ['RULE_CAT', proposal?.rule_category],
-                  ['CONFIDENCE', proposal?.confidence],
-                  ['DECIDED_AT', formatUnixSec(proposal?.decided_at)],
-                ].map(([k, v]) => (
+                {[['GENERATED_BY', proposal?.generated_by], ['TARGET_RULE', proposal?.target_rule], ['RULE_CAT', proposal?.rule_category], ['CONFIDENCE', proposal?.confidence], ['DECIDED_AT', formatUnixSec(proposal?.decided_at)]].map(([k, v]) => (
                   <Fragment key={k}>
                     <div className="text-[rgb(var(--muted))]">{k}</div>
                     <div className="col-span-2 break-words text-[rgb(var(--text))]">{v || '-'}</div>
@@ -484,13 +458,9 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button disabled={busy || !isPending} onClick={onApprove}
-                className="border-2 border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-4 py-2 font-mono text-xs font-bold text-[rgb(var(--up))] disabled:opacity-40 hover:bg-[rgba(var(--up),0.2)]"
-                style={{ borderRadius: '3px' }}
-              >APPROVE</button>
+                className="border-2 border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-4 py-2 font-mono text-xs font-bold text-[rgb(var(--up))] disabled:opacity-40" style={{ borderRadius: '3px' }}>APPROVE</button>
               <button disabled={busy || !isPending} onClick={onReject}
-                className="border-2 border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-4 py-2 font-mono text-xs font-bold text-[rgb(var(--danger))] disabled:opacity-40 hover:bg-[rgba(var(--danger),0.2)]"
-                style={{ borderRadius: '3px' }}
-              >REJECT</button>
+                className="border-2 border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-4 py-2 font-mono text-xs font-bold text-[rgb(var(--danger))] disabled:opacity-40" style={{ borderRadius: '3px' }}>REJECT</button>
               {!isPending && <div className="font-mono text-[10px] text-[rgb(var(--muted))]">ONLY PENDING CAN BE ACTIONED</div>}
             </div>
           </div>
@@ -499,7 +469,6 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
             <JsonBox value={payload || proposal?.proposal_json} />
           </div>
         </div>
-
         <CommitteeContextSection payload={payload} />
         <DuplicateAlertsSection payload={payload} />
       </div>
@@ -507,7 +476,7 @@ function ProposalModal({ open, onClose, proposal, onApprove, onReject, busy }) {
   )
 }
 
-/* ── Semantic Memory Table ────────────────────────────────── */
+/* ── Semantic Memory ─────────────────────────────────────── */
 function SemanticMemoryTable({ data }) {
   if (!data || data.length === 0) return <div className="font-mono text-xs text-[rgb(var(--muted))] py-4">(No learned rules)</div>
   return (
@@ -536,7 +505,9 @@ function SemanticMemoryTable({ data }) {
   )
 }
 
-/* ── Main Page ─────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   MAIN PAGE
+   ══════════════════════════════════════════════════════════════ */
 export default function StrategyPage() {
   const { proposals, logs, marketRating, semanticMemory, debates, error, loading, act, batchAct, refreshProposals, refreshLogs, refreshSemanticMemory } = useStrategyData({ pollMs: 10000 })
   const STREAM_BASE = useStreamApiBase()
@@ -549,6 +520,7 @@ export default function StrategyPage() {
   const [copiedId, setCopiedId] = useState(null)
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [batchPending, setBatchPending] = useState(null)
+  const [expandedProposal, setExpandedProposal] = useState(null)
 
   const [memOrder, setMemOrder] = useState('desc')
   const [currentPage, setCurrentPage] = useState(1)
@@ -647,105 +619,162 @@ export default function StrategyPage() {
     navigator.clipboard.writeText(id).then(() => { setCopiedId(id); setTimeout(() => setCopiedId(null), 2000) })
   }
 
+  // Find most recent pending or approved proposal for hero
+  const heroProposal = useMemo(() => {
+    return rows.find(r => r.status === 'pending') || rows[0]
+  }, [rows])
+
   return (
-    <div className="space-y-4 pb-20 lg:pb-4">
-      {/* ── Proposal Review Table ──────────────────────────────── */}
-      <Panel title="STRATEGY PROPOSALS" right={`${rows.length} TOTAL`}>
-        <div className="mb-3 font-mono text-[10px] text-[rgb(var(--muted))]">
-          PENDING = actionable / APPROVED = queued / EXECUTED = filled / REJECTED = blocked. SSE auto-refresh.
+    <div className="space-y-6 pb-20 lg:pb-4">
+
+      {/* ══════════════════════════════════════════════════════════
+          HERO: Rating + Active Proposal (side by side)
+          ══════════════════════════════════════════════════════════ */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-4">
+          <RatingHero rating={marketRating?.rating} basis={marketRating?.basis} />
+        </div>
+        <div className="lg:col-span-8">
+          {heroProposal ? (
+            <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] p-5" style={{ borderRadius: '4px' }}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">ACTIVE PROPOSAL</span>
+                  <StatusTag status={heroProposal.status} />
+                </div>
+                <span className="font-mono text-[10px] tabular-nums text-[rgb(var(--muted))]">{heroProposal._ts}</span>
+              </div>
+              <div className="flex items-baseline gap-4">
+                <span className="font-mono text-2xl font-black text-[rgb(var(--text))]">{heroProposal._symbol}</span>
+                <span className={`font-mono text-sm font-bold uppercase ${
+                  heroProposal._side.toLowerCase() === 'buy' ? 'text-[rgb(var(--up))]' : heroProposal._side.toLowerCase() === 'sell' ? 'text-[rgb(var(--danger))]' : 'text-[rgb(var(--text))]'
+                }`}>{heroProposal._side}</span>
+                {heroProposal.confidence != null && (
+                  <span className="font-mono text-xs tabular-nums text-[rgb(var(--muted))]">CONF {heroProposal.confidence}</span>
+                )}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => openDetail(heroProposal)}
+                  className="border border-[rgba(var(--accent),0.4)] bg-[rgba(var(--accent),0.08)] px-4 py-2 font-mono text-[10px] font-bold text-[rgb(var(--accent))]"
+                  style={{ borderRadius: '3px' }}
+                >VIEW DETAIL</button>
+                {String(heroProposal.status).toLowerCase() === 'pending' && (
+                  <>
+                    <button onClick={() => doApprove(heroProposal)} disabled={loading.act}
+                      className="border border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-4 py-2 font-mono text-[10px] font-bold text-[rgb(var(--up))] disabled:opacity-40"
+                      style={{ borderRadius: '3px' }}
+                    >APPROVE</button>
+                    <button onClick={() => doReject(heroProposal)} disabled={loading.act}
+                      className="border border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-4 py-2 font-mono text-[10px] font-bold text-[rgb(var(--danger))] disabled:opacity-40"
+                      style={{ borderRadius: '3px' }}
+                    >REJECT</button>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="border border-[rgba(var(--grid),0.2)] bg-[rgba(var(--surface),0.15)] p-8" style={{ borderRadius: '4px' }}>
+              <EmptyState icon={Target} title="NO PROPOSALS" description="System will generate proposals on next trading session" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════
+          BULL vs BEAR DEBATE -- split view
+          ══════════════════════════════════════════════════════════ */}
+      <DebateHeroSection />
+
+      {/* ══════════════════════════════════════════════════════════
+          PROPOSAL QUEUE -- compact rows with status dots
+          ══════════════════════════════════════════════════════════ */}
+      <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px' }}>
+        <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">PROPOSAL QUEUE</span>
+          <span className="font-mono text-[10px] text-[rgb(var(--muted))]">{rows.length} TOTAL</span>
         </div>
 
-        {error && <div className="mb-3 border-l-2 border-l-[rgb(var(--danger))] bg-[rgba(var(--danger),0.05)] p-3 font-mono text-xs text-[rgb(var(--danger))]">{error}</div>}
+        {error && <div className="mx-4 mt-3 border-l-2 border-l-[rgb(var(--danger))] bg-[rgba(var(--danger),0.05)] p-3 font-mono text-xs text-[rgb(var(--danger))]">{error}</div>}
 
         {/* Batch bar */}
         {selectedIds.size > 0 && (
-          <div className="mb-3 flex items-center gap-3 border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-4 py-2.5" style={{ borderRadius: '3px' }}>
+          <div className="mx-4 mt-3 flex items-center gap-3 border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] px-4 py-2.5" style={{ borderRadius: '3px' }}>
             <span className="font-mono text-xs text-[rgb(var(--text))]">SELECTED: <span className="font-bold">{selectedIds.size}</span></span>
             <button disabled={loading.act} onClick={() => setBatchPending({ type: 'approve' })}
-              className="border border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-3 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--up))] disabled:opacity-40"
-              style={{ borderRadius: '3px' }}
-            >BATCH APPROVE</button>
+              className="border border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-3 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--up))] disabled:opacity-40" style={{ borderRadius: '3px' }}>BATCH APPROVE</button>
             <button disabled={loading.act} onClick={() => setBatchPending({ type: 'reject' })}
-              className="border border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-3 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--danger))] disabled:opacity-40"
-              style={{ borderRadius: '3px' }}
-            >BATCH REJECT</button>
-            <button onClick={() => setSelectedIds(new Set())}
-              className="ml-auto font-mono text-[10px] text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]"
-            >CANCEL</button>
+              className="border border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-3 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--danger))] disabled:opacity-40" style={{ borderRadius: '3px' }}>BATCH REJECT</button>
+            <button onClick={() => setSelectedIds(new Set())} className="ml-auto font-mono text-[10px] text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]">CANCEL</button>
           </div>
         )}
 
-        <div className="overflow-auto border border-[rgba(var(--grid),0.15)]" style={{ borderRadius: '2px' }}>
-          <table className="min-w-full sm:min-w-[980px] w-full text-left font-mono text-xs" style={{ borderCollapse: 'collapse' }}>
-            <thead>
-              <tr className="border-b border-[rgba(var(--grid),0.15)]">
-                <th className="px-3 py-3 w-8">
-                  <input type="checkbox" checked={allPendingSelected && pendingRows.length > 0}
-                    onChange={toggleSelectAll} disabled={pendingRows.length === 0}
-                    className="accent-[rgb(var(--accent))] h-3.5 w-3.5" />
-                </th>
-                {['TIME', 'PROPOSAL ID', 'TARGET', 'SIDE', 'CONF', 'STATUS', 'ACTION'].map(h => (
-                  <th key={h} className="px-4 py-3 text-[9px] font-bold uppercase tracking-widest text-[rgb(var(--muted))]">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pagedRows.length === 0 ? (
-                <tr><td className="px-4 py-8" colSpan={8}>
-                  {loading.proposals ? <LoadingSpinner label="Loading proposals..." /> : <EmptyState icon={Target} title="NO PROPOSALS" description="System will generate proposals on next trading session" />}
-                </td></tr>
-              ) : (
-                pagedRows.map(p => {
-                  const canAct = String(p?.status || '').toLowerCase() === 'pending'
-                  return (
-                    <tr key={p.proposal_id} className="border-b border-[rgba(var(--grid),0.08)] hover:bg-[rgba(var(--surface),0.3)]">
-                      <td className="px-3 py-3">{canAct && <input type="checkbox" checked={selectedIds.has(p.proposal_id)} onChange={() => toggleSelect(p.proposal_id)} className="accent-[rgb(var(--accent))] h-3.5 w-3.5" />}</td>
-                      <td className="px-4 py-3 tabular-nums text-[rgb(var(--muted))] whitespace-nowrap">{p._ts}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => openDetail(p)} className="text-[rgb(var(--text))] underline underline-offset-2 hover:text-[rgb(var(--accent))]">{p.proposal_id}</button>
-                          <button onClick={e => { e.stopPropagation(); copyId(p.proposal_id) }} className="text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]">
-                            {copiedId === p.proposal_id ? <Check className="h-3 w-3 text-[rgb(var(--up))]" /> : <Copy className="h-3 w-3" />}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-[rgb(var(--text))]">{p._symbol}</td>
-                      <td className="px-4 py-3 text-[rgb(var(--text))]">{p._side}</td>
-                      <td className="px-4 py-3 tabular-nums text-[rgb(var(--text))]">{p.confidence ?? '-'}</td>
-                      <td className="px-4 py-3"><StatusTag status={p.status} /></td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button disabled={!canAct || loading.act} onClick={() => doApprove(p)}
-                            className="border border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-2.5 py-1.5 text-[10px] font-bold text-[rgb(var(--up))] disabled:opacity-40"
-                            style={{ borderRadius: '3px' }}
-                          >APPROVE</button>
-                          <button disabled={!canAct || loading.act} onClick={() => doReject(p)}
-                            className="border border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-2.5 py-1.5 text-[10px] font-bold text-[rgb(var(--danger))] disabled:opacity-40"
-                            style={{ borderRadius: '3px' }}
-                          >REJECT</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+        {/* Compact proposal rows */}
+        <div className="p-3 space-y-1">
+          {pagedRows.length === 0 ? (
+            <div className="py-8">
+              {loading.proposals ? <LoadingSpinner label="Loading proposals..." /> : <EmptyState icon={Target} title="NO PROPOSALS" description="System will generate proposals on next trading session" />}
+            </div>
+          ) : (
+            pagedRows.map(p => {
+              const canAct = String(p?.status || '').toLowerCase() === 'pending'
+              const isExpanded = expandedProposal === p.proposal_id
+              return (
+                <div key={p.proposal_id}>
+                  <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-[rgba(var(--surface),0.3)] transition-colors cursor-pointer"
+                       style={{ borderRadius: '2px' }}
+                       onClick={() => setExpandedProposal(isExpanded ? null : p.proposal_id)}>
+                    {canAct && (
+                      <input type="checkbox" checked={selectedIds.has(p.proposal_id)}
+                        onChange={e => { e.stopPropagation(); toggleSelect(p.proposal_id) }}
+                        onClick={e => e.stopPropagation()}
+                        className="accent-[rgb(var(--accent))] h-3.5 w-3.5" />
+                    )}
+                    <StatusTag status={p.status} />
+                    <span className="font-mono text-xs font-bold text-[rgb(var(--text))] min-w-[4rem]">{p._symbol}</span>
+                    <span className={`font-mono text-[10px] font-bold ${
+                      p._side.toLowerCase() === 'buy' ? 'text-[rgb(var(--up))]' : p._side.toLowerCase() === 'sell' ? 'text-[rgb(var(--danger))]' : 'text-[rgb(var(--muted))]'
+                    }`}>{p._side}</span>
+                    <span className="font-mono text-[10px] tabular-nums text-[rgb(var(--muted))] hidden sm:inline">{p._ts}</span>
+                    <span className="ml-auto flex items-center gap-2">
+                      {p.confidence != null && <span className="font-mono text-[10px] tabular-nums text-[rgb(var(--muted))]">{p.confidence}</span>}
+                      <button onClick={e => { e.stopPropagation(); copyId(p.proposal_id) }} className="text-[rgb(var(--muted))] hover:text-[rgb(var(--text))]">
+                        {copiedId === p.proposal_id ? <Check className="h-3 w-3 text-[rgb(var(--up))]" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-[rgb(var(--muted))]" /> : <ChevronRight className="h-3.5 w-3.5 text-[rgb(var(--muted))]" />}
+                    </span>
+                  </div>
+                  {isExpanded && (
+                    <div className="ml-8 mb-2 border-l-2 border-l-[rgba(var(--accent),0.3)] pl-4 py-2 space-y-2">
+                      <div className="font-mono text-[10px] text-[rgb(var(--muted))]">ID: {p.proposal_id}</div>
+                      <div className="flex gap-2">
+                        <button onClick={() => openDetail(p)}
+                          className="border border-[rgba(var(--accent),0.4)] bg-[rgba(var(--accent),0.08)] px-3 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--accent))]" style={{ borderRadius: '3px' }}>VIEW FULL</button>
+                        {canAct && (
+                          <>
+                            <button disabled={loading.act} onClick={() => doApprove(p)}
+                              className="border border-[rgb(var(--up))] bg-[rgba(var(--up),0.1)] px-2.5 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--up))] disabled:opacity-40" style={{ borderRadius: '3px' }}>APPROVE</button>
+                            <button disabled={loading.act} onClick={() => doReject(p)}
+                              className="border border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.1)] px-2.5 py-1.5 font-mono text-[10px] font-bold text-[rgb(var(--danger))] disabled:opacity-40" style={{ borderRadius: '3px' }}>REJECT</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
         </div>
 
         {/* Pagination */}
-        <div className="mt-3 flex items-center justify-between">
-          <div className="font-mono text-[10px] text-[rgb(var(--muted))]">
-            {rows.length} TOTAL / PAGE {currentPage}/{totalPages}
-          </div>
-          {totalPages > 1 && (
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-[rgba(var(--grid),0.2)] px-4 py-2.5">
+            <div className="font-mono text-[10px] text-[rgb(var(--muted))]">{rows.length} TOTAL / PAGE {currentPage}/{totalPages}</div>
             <div className="flex items-center gap-1.5">
               <button disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}
-                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)] disabled:opacity-30" style={{ borderRadius: '3px' }}
-              >{'<<'}</button>
+                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] disabled:opacity-30" style={{ borderRadius: '2px' }}>{'<<'}</button>
               <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}
-                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)] disabled:opacity-30" style={{ borderRadius: '3px' }}
-              >{'<'}</button>
+                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] disabled:opacity-30" style={{ borderRadius: '2px' }}>{'<'}</button>
               {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
                 let page
                 if (totalPages <= 5) page = i + 1
@@ -754,64 +783,62 @@ export default function StrategyPage() {
                 else page = currentPage - 2 + i
                 return (
                   <button key={page} onClick={() => setCurrentPage(page)}
-                    className={`px-2.5 py-1 font-mono text-[10px] font-bold ${page === currentPage ? 'bg-[rgba(var(--accent),0.2)] text-[rgb(var(--accent))]' : 'border border-[rgba(var(--grid),0.3)] text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)]'}`}
-                    style={{ borderRadius: '3px' }}
-                  >{page}</button>
+                    className={`px-2.5 py-1 font-mono text-[10px] font-bold ${page === currentPage ? 'bg-[rgba(var(--accent),0.2)] text-[rgb(var(--accent))]' : 'border border-[rgba(var(--grid),0.3)] text-[rgb(var(--muted))]'}`}
+                    style={{ borderRadius: '2px' }}>{page}</button>
                 )
               })}
               <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}
-                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)] disabled:opacity-30" style={{ borderRadius: '3px' }}
-              >{'>'}</button>
+                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] disabled:opacity-30" style={{ borderRadius: '2px' }}>{'>'}</button>
               <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}
-                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.3)] disabled:opacity-30" style={{ borderRadius: '3px' }}
-              >{'>>'}</button>
+                className="border border-[rgba(var(--grid),0.3)] px-2 py-1 font-mono text-[10px] text-[rgb(var(--muted))] disabled:opacity-30" style={{ borderRadius: '2px' }}>{'>>'}</button>
             </div>
-          )}
-        </div>
-      </Panel>
+          </div>
+        )}
 
-      {/* ── Rating + Semantic Memory (asymmetric 4:8) ──────────── */}
-      <div className="grid gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-4">
-          <RatingCard rating={marketRating?.rating} basis={marketRating?.basis} />
+        {/* Select all */}
+        {pendingRows.length > 0 && (
+          <div className="flex items-center gap-2 border-t border-[rgba(var(--grid),0.15)] px-4 py-2">
+            <input type="checkbox" checked={allPendingSelected} onChange={toggleSelectAll} className="accent-[rgb(var(--accent))] h-3.5 w-3.5" />
+            <span className="font-mono text-[10px] text-[rgb(var(--muted))]">SELECT ALL PENDING ({pendingRows.length})</span>
+          </div>
+        )}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════
+          SEMANTIC MEMORY (full width)
+          ══════════════════════════════════════════════════════════ */}
+      <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px' }}>
+        <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">SEMANTIC MEMORY</span>
+          <button onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
+            className="font-mono text-[10px] text-[rgb(var(--accent))] hover:underline">CONF {memOrder === 'desc' ? 'v HIGH' : '^ LOW'}</button>
         </div>
-        <div className="lg:col-span-8">
-          <Panel title="SEMANTIC MEMORY" right={
-            <button onClick={() => setMemOrder(o => (o === 'desc' ? 'asc' : 'desc'))}
-              className="font-mono text-[10px] text-[rgb(var(--accent))] hover:underline"
-            >CONF {memOrder === 'desc' ? 'v HIGH' : '^ LOW'}</button>
-          }>
-            <div className="mb-2 font-mono text-[10px] text-[rgb(var(--muted))]">AI-learned rules, ranked by confidence from source episodes</div>
-            <SemanticMemoryTable data={semanticMemory} />
-          </Panel>
+        <div className="p-4">
+          <div className="mb-2 font-mono text-[10px] text-[rgb(var(--muted))]">AI-learned rules, ranked by confidence from source episodes</div>
+          <SemanticMemoryTable data={semanticMemory} />
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════
+          DUPLICATE FEED + LLM TRACES (terminal-style)
+          ══════════════════════════════════════════════════════════ */}
+      <DuplicateAlertFeed logs={logs} />
+      <PmTraceTerminal />
 
       {/* ── Proposal Modal ─────────────────────────────────────── */}
       <ProposalModal open={modalOpen} onClose={closeDetail} proposal={selected} busy={loading.act} onApprove={() => doApprove(selected)} onReject={() => doReject(selected)} />
 
-      {/* ── Debate + Duplicates + Traces ────────────────────────── */}
-      <DebatePanel />
-      <DuplicateAlertFeed logs={logs} />
-      <PmTracePanel />
-
-      {/* ── Batch Confirm Dialog ────────────────────────────────── */}
+      {/* ── Batch Confirm Dialog ───────────────────────────────── */}
       {batchPending && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setBatchPending(null)}>
           <div className="w-full max-w-xs border border-[rgba(var(--grid),0.4)] bg-[rgb(var(--bg))] p-5 shadow-2xl" onMouseDown={e => e.stopPropagation()} style={{ borderRadius: '4px' }}>
-            <div className={`font-mono text-sm font-bold mb-2 ${batchPending.type === 'approve' ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>
-              BATCH {batchPending.type.toUpperCase()} {selectedIds.size} PROPOSALS
-            </div>
+            <div className={`font-mono text-sm font-bold mb-2 ${batchPending.type === 'approve' ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>BATCH {batchPending.type.toUpperCase()} {selectedIds.size} PROPOSALS</div>
             <div className="font-mono text-xs text-[rgb(var(--muted))] mb-4">This action cannot be undone.</div>
             <div className="flex gap-3">
-              <button onClick={() => setBatchPending(null)}
-                className="flex-1 border border-[rgba(var(--grid),0.3)] py-2.5 font-mono text-xs text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.4)]"
-                style={{ borderRadius: '3px' }}
-              >CANCEL</button>
+              <button onClick={() => setBatchPending(null)} className="flex-1 border border-[rgba(var(--grid),0.3)] py-2.5 font-mono text-xs text-[rgb(var(--muted))]" style={{ borderRadius: '3px' }}>CANCEL</button>
               <button autoFocus onClick={confirmBatch}
                 className={`flex-1 border-2 py-2.5 font-mono text-xs font-bold ${batchPending.type === 'approve' ? 'border-[rgb(var(--up))] bg-[rgba(var(--up),0.15)] text-[rgb(var(--up))]' : 'border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.15)] text-[rgb(var(--danger))]'}`}
-                style={{ borderRadius: '3px' }}
-              >CONFIRM ({selectedIds.size})</button>
+                style={{ borderRadius: '3px' }}>CONFIRM ({selectedIds.size})</button>
             </div>
           </div>
         </div>
@@ -821,22 +848,14 @@ export default function StrategyPage() {
       {pendingAct && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onMouseDown={() => setPendingAct(null)}>
           <div className="w-full max-w-xs border border-[rgba(var(--grid),0.4)] bg-[rgb(var(--bg))] p-5 shadow-2xl" onMouseDown={e => e.stopPropagation()} style={{ borderRadius: '4px' }}>
-            <div className={`font-mono text-sm font-bold mb-2 ${pendingAct.type === 'approve' ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>
-              CONFIRM {pendingAct.type.toUpperCase()}
-            </div>
+            <div className={`font-mono text-sm font-bold mb-2 ${pendingAct.type === 'approve' ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--danger))]'}`}>CONFIRM {pendingAct.type.toUpperCase()}</div>
             <div className="font-mono text-[10px] text-[rgb(var(--muted))] mb-1">PROPOSAL ID</div>
-            <div className="mb-4 border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.3)] px-3 py-2 font-mono text-xs text-[rgb(var(--text))] break-all" style={{ borderRadius: '2px' }}>
-              {pendingAct.proposal?.proposal_id}
-            </div>
+            <div className="mb-4 border border-[rgba(var(--grid),0.15)] bg-[rgba(var(--surface),0.3)] px-3 py-2 font-mono text-xs text-[rgb(var(--text))] break-all" style={{ borderRadius: '2px' }}>{pendingAct.proposal?.proposal_id}</div>
             <div className="flex gap-3">
-              <button onClick={() => setPendingAct(null)}
-                className="flex-1 border border-[rgba(var(--grid),0.3)] py-2.5 font-mono text-xs text-[rgb(var(--muted))] hover:bg-[rgba(var(--surface),0.4)]"
-                style={{ borderRadius: '3px' }}
-              >CANCEL</button>
+              <button onClick={() => setPendingAct(null)} className="flex-1 border border-[rgba(var(--grid),0.3)] py-2.5 font-mono text-xs text-[rgb(var(--muted))]" style={{ borderRadius: '3px' }}>CANCEL</button>
               <button autoFocus onClick={confirmAct}
                 className={`flex-1 border-2 py-2.5 font-mono text-xs font-bold ${pendingAct.type === 'approve' ? 'border-[rgb(var(--up))] bg-[rgba(var(--up),0.15)] text-[rgb(var(--up))]' : 'border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.15)] text-[rgb(var(--danger))]'}`}
-                style={{ borderRadius: '3px' }}
-              >CONFIRM</button>
+                style={{ borderRadius: '3px' }}>CONFIRM</button>
             </div>
           </div>
         </div>
