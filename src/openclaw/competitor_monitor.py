@@ -9,8 +9,10 @@ Output:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import re
 import sqlite3
 import time
 import uuid
@@ -60,13 +62,40 @@ CREATE TABLE IF NOT EXISTS competitor_intel (
     published_at TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(url_hash)
-);
-"""
+)"""
 
 
 def ensure_table(conn: sqlite3.Connection) -> None:
-    """Create competitor_intel table if it doesn't exist."""
-    conn.executescript(_CREATE_TABLE_SQL)
+    """Create competitor_intel table if it doesn't exist.
+
+    Uses single-statement execute to avoid the implicit COMMIT
+    that multi-statement script execution would cause.
+    """
+    conn.execute(_CREATE_TABLE_SQL)
+    conn.commit()
+
+
+# ── Sanitisation helpers ─────────────────────────────────────────────────────
+
+_DISCORD_SPECIAL_RE = re.compile(r"(\*\*|`|@everyone|@here|<@[!&]?\d+>)")
+_URL_RE = re.compile(r"https?://\S+")
+_MD_RE = re.compile(r"[*_~`|>]")
+
+
+def _strip_discord_chars(text: str) -> str:
+    """Remove Discord markdown special characters that could break formatting."""
+    return _DISCORD_SPECIAL_RE.sub("", text)
+
+
+def _sanitize_evidence_for_alert(text: str, max_len: int = 100) -> str:
+    """Sanitize LLM evidence before sending to Telegram.
+
+    Strips markdown, removes URLs, and truncates to max_len.
+    """
+    cleaned = _MD_RE.sub("", text)
+    cleaned = _URL_RE.sub("", cleaned)
+    cleaned = " ".join(cleaned.split())  # collapse whitespace
+    return cleaned[:max_len]
 
 
 # ── Search query generation ─────────────────────────────────────────────────
@@ -98,7 +127,12 @@ def _gather_intel_for_company(
     queries = _generate_search_queries(company, info)
     all_items: List[Dict] = []
 
-    for query in queries:
+    for idx, query in enumerate(queries):
+        # Rate-limit LLM calls: avoid hitting provider rate limits when
+        # processing multiple queries sequentially.
+        if idx > 0:
+            time.sleep(1.0)
+
         prompt = f"""\
 你是半導體產業情報分析員。請根據以下搜尋主題，提供最新的相關情報。
 
@@ -148,7 +182,13 @@ def _store_intel(conn: sqlite3.Connection, items: List[Dict]) -> int:
     for item in items:
         intel_id = str(uuid.uuid4())
         item_url = item.get("url", "")
-        item_hash = url_hash(item_url) if item_url else str(uuid.uuid4())[:32]
+        # Use title-based hash when URL is empty so dedup still works;
+        # random uuid would bypass the UNIQUE(url_hash) constraint.
+        item_hash = (
+            url_hash(item_url)
+            if item_url
+            else hashlib.sha256(item.get("title", "").encode()).hexdigest()[:32]
+        )
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO competitor_intel
@@ -195,10 +235,13 @@ def _generate_daily_report(
     trigger_results: List[TriggerResult],
 ) -> str:
     """Generate daily Discord summary report."""
-    now_ts = int(time.time())
-    today_start = now_ts - 86400  # last 24 hours
+    # Use proper calendar-day start in TWN timezone instead of a
+    # rolling 24h window, so the report always covers "today".
+    now_twn = datetime.now(tz=_TZ_TWN)
+    today_start_twn = now_twn.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = int(today_start_twn.timestamp())
 
-    lines = [f"**[競品日報] {datetime.now(tz=_TZ_TWN).strftime('%Y-%m-%d')}**\n"]
+    lines = [f"[竸品日報] {now_twn.strftime('%Y-%m-%d')}\n"]
 
     for company in COMPETITORS:
         rows = conn.execute(
@@ -211,19 +254,28 @@ def _generate_daily_report(
         if rows:
             sentiments = [r[2] for r in rows if r[2]]
             dominant = max(set(sentiments), key=sentiments.count) if sentiments else "neutral"
-            summaries = "; ".join(r[1] for r in rows[:2] if r[1])
+            # Strip Discord special chars from LLM-generated summary
+            summaries = "; ".join(
+                _strip_discord_chars(r[1]) for r in rows[:2] if r[1]
+            )
             emoji = {"positive": "+", "negative": "-", "neutral": "~"}.get(dominant, "~")
-            lines.append(f"**{company}** [{emoji}{dominant}]: {summaries}")
+            lines.append(f"{company} [{emoji}{dominant}]: {summaries}")
         else:
-            lines.append(f"**{company}** [~neutral]: 今日無新情報")
+            lines.append(f"{company} [~neutral]: 今日無新情報")
 
     # Trigger status
-    lines.append("\n**-- 論文驗證 --**")
+    lines.append("\n-- 論文驗證 --")
     for tr in trigger_results:
         status = "TRIGGERED" if tr.triggered else "safe"
         lines.append(f"- {tr.trigger_name}: {status} (confidence={tr.confidence}%)")
         if tr.evidence:
-            lines.append(f"  evidence: {tr.evidence[:120]}")
+            evidence_clean = _strip_discord_chars(tr.evidence[:120])
+            lines.append(f"  evidence: {evidence_clean}")
+        # Mark source URLs as unverified in the report
+        if tr.source_urls:
+            for url in tr.source_urls[:3]:
+                display_url = url.replace("[UNVERIFIED] ", "")
+                lines.append(f"  [未驗證] {display_url}")
 
     return "\n".join(lines)
 
@@ -238,10 +290,13 @@ def _send_trigger_alerts(trigger_results: List[TriggerResult]) -> None:
 
     for tr in trigger_results:
         if tr.confidence >= TRIGGER_ALERT_THRESHOLD:
+            # Sanitize evidence: strip markdown, URLs, limit length to
+            # prevent raw LLM output from leaking into Telegram messages.
+            safe_evidence = _sanitize_evidence_for_alert(tr.evidence, max_len=100)
             msg = (
-                f"[競品監控] {tr.trigger_name} 可能觸發 "
-                f"(confidence={tr.confidence}%) — "
-                f"{tr.evidence[:200]} — "
+                f"[竸品監控] {tr.trigger_name} 可能觸發 "
+                f"(confidence={tr.confidence}%) -- "
+                f"{safe_evidence} -- "
                 f"建議：檢視減碼條件"
             )
             try:
