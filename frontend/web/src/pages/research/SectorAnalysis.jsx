@@ -147,7 +147,7 @@ function DetailPanel({ sector, onClose }) {
   const { data: raw, isLoading } = useQuery({
     queryKey: ['sector', 'detail', sector?.sector_code],
     queryFn: () =>
-      authFetch(`/api/sector/${encodeURIComponent(sector.sector_code)}/detail`).then((r) => r.json()),
+      authFetch(`${getApiBase()}/api/sector/${encodeURIComponent(sector.sector_code)}/detail`).then((r) => r.json()),
     enabled: !!sector,
     staleTime: 5 * 60 * 1000,
   })

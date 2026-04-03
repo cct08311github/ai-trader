@@ -50,7 +50,11 @@ function useMarketTickSSE({ enabled = true } = {}) {
     }
 
     const token = localStorage.getItem('auth_token') || ''
-    // EventSource doesn't support custom headers; pass token as query param
+    // SECURITY NOTE: EventSource API does not support custom headers.
+    // Auth token is passed via URL query parameter as a technical limitation.
+    // Token will appear in server access logs and browser history.
+    // Mitigation: Use short-lived SSE-specific tokens in production.
+    // See: https://github.com/whatwg/html/issues/2177
     const url = `${API_BASE}/api/stream/market-ticks${token ? `?token=${encodeURIComponent(token)}` : ''}`
 
     let es

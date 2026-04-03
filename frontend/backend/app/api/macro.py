@@ -128,6 +128,21 @@ FIXED_EVENTS = [
         "importance":  "critical",
         "indicator":   None,
     },
+    # ISM Manufacturing PMI (monthly, 1st business day)
+    {"date": "2026-04-01", "event": "ISM Manufacturing PMI", "country": "US", "importance": "high", "recurrence": "monthly_1st_biz_day"},
+    {"date": "2026-05-01", "event": "ISM Manufacturing PMI", "country": "US", "importance": "high", "recurrence": "monthly_1st_biz_day"},
+    {"date": "2026-06-01", "event": "ISM Manufacturing PMI", "country": "US", "importance": "high", "recurrence": "monthly_1st_biz_day"},
+    # Taiwan Monthly Revenue Deadline (every month 10th)
+    {"date": "2026-04-10", "event": "上市櫃月營收公告截止", "country": "TW", "importance": "high", "recurrence": "monthly_10th"},
+    {"date": "2026-05-10", "event": "上市櫃月營收公告截止", "country": "TW", "importance": "high", "recurrence": "monthly_10th"},
+    {"date": "2026-06-10", "event": "上市櫃月營收公告截止", "country": "TW", "importance": "high", "recurrence": "monthly_10th"},
+    # China Manufacturing PMI (monthly, last day or 1st)
+    {"date": "2026-03-31", "event": "中國製造業PMI", "country": "CN", "importance": "high", "recurrence": "monthly_last_day"},
+    {"date": "2026-04-30", "event": "中國製造業PMI", "country": "CN", "importance": "high", "recurrence": "monthly_last_day"},
+    {"date": "2026-05-31", "event": "中國製造業PMI", "country": "CN", "importance": "high", "recurrence": "monthly_last_day"},
+    # Taiwan Ex-dividend Season (June-September marker)
+    {"date": "2026-06-01", "event": "台股除權息旺季開始", "country": "TW", "importance": "medium", "recurrence": "annual"},
+    {"date": "2026-09-30", "event": "台股除權息旺季結束", "country": "TW", "importance": "medium", "recurrence": "annual"},
 ]
 
 

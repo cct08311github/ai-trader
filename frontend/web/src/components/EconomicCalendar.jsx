@@ -287,8 +287,8 @@ export default function EconomicCalendar({ maxItems = 8, className = '' }) {
           </p>
         )}
 
-        {!isLoading && !isError && visibleEvents.map((evt, idx) => (
-          <EventRow key={`${evt.date}-${idx}`} event={evt} />
+        {!isLoading && !isError && visibleEvents.map((evt) => (
+          <EventRow key={`${evt.date}-${evt.event}`} event={evt} />
         ))}
       </div>
     </div>
