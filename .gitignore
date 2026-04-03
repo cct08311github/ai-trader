@@ -80,3 +80,7 @@ frontend/backend/package-lock.json
 .claude/plan/
 openclaw_demo.db*
 
+# Playwright MCP / screenshots
+.playwright-mcp/
+*.png
+
