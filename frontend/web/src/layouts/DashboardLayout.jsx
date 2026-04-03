@@ -5,10 +5,11 @@ import Sidebar from '../components/Sidebar'
 import GlobalControlBar from '../components/GlobalControlBar'
 import Breadcrumbs from '../components/Breadcrumbs'
 import ThemeToggle from '../components/ThemeToggle'
+import VariantSwitcher from '../components/VariantSwitcher'
 import ChatButton from '../components/chat/ChatButton'
 import { logout } from '../lib/auth'
 
-export default function DashboardLayout() {
+export default function DashboardLayout({ variantSwitcher }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const drawerRef = useRef(null)
   const menuButtonRef = useRef(null)
@@ -81,6 +82,7 @@ export default function DashboardLayout() {
               <div className="flex flex-col gap-2 lg:items-end">
                 <div className="flex items-center justify-between gap-2 lg:justify-end">
                   <ThemeToggle />
+                  {variantSwitcher}
                   {/* Top-right logout — always accessible */}
                   <button
                     id="header-logout-btn"

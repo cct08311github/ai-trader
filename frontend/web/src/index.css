@@ -2,9 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Theme-aware base ────────────────────────────────────── */
+/* ── Battle theme defaults (Variant A: War Terminal) ───────── */
 :root {
   color-scheme: dark;
+  --bg:            8 9 13;
+  --text:          226 232 240;
+  --surface:       15 23 42;
+  --border:        51 65 85;
+  --muted:         100 116 139;
+  --card:          13 19 30;
+  --card-alt:      20 28 45;
+  --shadow:         0 0 0;
+  --accent:        16 185 129;
+  --accent-glow:   16 185 129;
+  --danger:        225 29 72;
+  --danger-glow:   244 63 94;
+  --warn:          251 146 60;
+  --info:          6 182 212;
+  --gold:          161 138 90;
+  --up:            16 185 129;
+  --up-glow:       16 185 129 0.4;
+  --down:          225 29 72;
+  --down-glow:     244 63 94 0.4;
+  --blink:         transparent;
+  --font-ui:       'Noto Sans TC', system-ui, sans-serif;
+  --font-mono:     'Share Tech Mono', 'JetBrains Mono', monospace;
+  --font-data:     'Fira Code', 'JetBrains Mono', monospace;
+  --ecg-up:        #10b981;
+  --ecg-down:      #e11d48;
+  --ecg-ball:      #34d399;
 }
 :root.light {
   color-scheme: light;

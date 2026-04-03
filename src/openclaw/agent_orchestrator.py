@@ -48,6 +48,11 @@ def _is_monday_twn(now_twn: Optional[datetime] = None) -> bool:
     return t.weekday() == 0
 
 
+def _is_wednesday_twn(now_twn: Optional[datetime] = None) -> bool:
+    t = now_twn or datetime.now(tz=_TZ_TWN)
+    return t.weekday() == 2
+
+
 # ── 事件偵測 ──────────────────────────────────────────────────────────────────
 
 _LAST_STRATEGY_COMMITEE_TRIGGER: Optional[datetime] = None
@@ -128,6 +133,7 @@ async def run_orchestrator() -> None:
     from openclaw.agents.risk_monitor import run_risk_monitor
     from openclaw.agents.strategy_auto_optimizer import run_strategy_auto_optimizer
     from openclaw.agents.stock_research import run_stock_research
+    from openclaw.agents.redteam_agent import run_redteam_agent
     from openclaw.competitor_monitor import run_competitor_monitor
     from openclaw.debate_loop import run_debate_loop
 
@@ -214,6 +220,12 @@ async def run_orchestrator() -> None:
                     if _should_run_now("07:30", now_twn):
                         asyncio.create_task(
                             _run_agent("StrategyCommitteeAgent", run_strategy_committee))
+
+                # 每週三 03:00 TWN → Security Red Team 掃描
+                if _is_wednesday_twn(now_twn):
+                    if _should_run_now("03:00", now_twn):
+                        asyncio.create_task(
+                            _run_agent("RedTeamAgent", run_redteam_agent))
 
                 # ── 事件任務 ──────────────────────────────────────────────────
                 today_str = now_twn.strftime("%Y-%m-%d")
