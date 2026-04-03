@@ -173,6 +173,7 @@ _DDL_STATEMENTS = [
 
     # ------------------------------------------------------------------
     # sector_mapping: TWSE symbol → sector classification (Module 2B).
+    # sector_mapping: TWSE symbol -> sector classification (Module 2B).
     # ------------------------------------------------------------------
     """
     CREATE TABLE IF NOT EXISTS sector_mapping (
@@ -209,6 +210,8 @@ _DDL_STATEMENTS = [
     # ------------------------------------------------------------------
     # Indices for common query patterns.
     # ------------------------------------------------------------------
+    "CREATE INDEX IF NOT EXISTS idx_sector_data_date      ON sector_data (trade_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sector_mapping_code   ON sector_mapping (sector_code)",
     "CREATE INDEX IF NOT EXISTS idx_market_indices_date   ON market_indices (trade_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_indices_symbol ON market_indices (symbol)",
     "CREATE INDEX IF NOT EXISTS idx_geo_events_date       ON geopolitical_events (event_date DESC)",

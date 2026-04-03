@@ -169,6 +169,12 @@ async def run_orchestrator() -> None:
                     if _should_run_now("14:30", now_twn):
                         asyncio.create_task(_run_agent("PortfolioReviewAgent", run_portfolio_review))
 
+                    # 每交易日 15:30 TWN → 產業賽道聚合（收盤後、法人流向入庫後）
+                    if _should_run_now("15:30", now_twn):
+                        from openclaw.sector_classifier import run_sector_classifier
+                        asyncio.create_task(
+                            _run_agent("SectorClassifier", run_sector_classifier))
+
                     # 每交易日 17:30 TWN → Multi-Agent Debate Loop
                     if _should_run_now("17:30", now_twn):
                         asyncio.create_task(
