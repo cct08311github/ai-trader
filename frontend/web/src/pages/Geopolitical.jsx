@@ -9,7 +9,7 @@
  *   GET /api/geopolitical/events  — paginated event list
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, lazy, Suspense } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ComposableMap,
@@ -21,6 +21,19 @@ import { DataCard } from '../components/ui/DataCard'
 import { SentimentIndicator } from '../components/ui/SentimentIndicator'
 import { AlertBadge } from '../components/ui/AlertBadge'
 import { authFetch, getApiBase } from '../lib/auth'
+
+// ── Lazy-loaded 3D Globe (code splitting) ─────────────────────────────────────
+const GlobeView = lazy(() => import('../components/GlobeView'))
+
+// ── WebGL / mobile detection ──────────────────────────────────────────────────
+
+function hasWebGL() {
+  try { return !!document.createElement('canvas').getContext('webgl') } catch { return false }
+}
+
+function isMobile() {
+  return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 768
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -557,11 +570,63 @@ function NewsFeedPanel({ events, selectedEvent, onSelectEvent, categoryFilter })
   )
 }
 
+// ── 2D/3D toggle button ───────────────────────────────────────────────────────
+
+function MapViewToggle({ use3D, onChange, disabled }) {
+  return (
+    <div
+      className="inline-flex rounded-sm overflow-hidden"
+      style={{ border: '1px solid rgb(var(--border))' }}
+      role="group"
+      aria-label="地圖檢視切換"
+    >
+      {['2D', '3D'].map(mode => {
+        const isActive = mode === '3D' ? use3D : !use3D
+        return (
+          <button
+            key={mode}
+            disabled={disabled && mode === '3D'}
+            onClick={() => onChange(mode === '3D')}
+            className="px-3 py-1 text-xs transition-colors"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              backgroundColor: isActive ? 'rgb(var(--accent))' : 'rgb(var(--card))',
+              color: isActive ? '#000' : disabled && mode === '3D' ? 'rgb(var(--muted))' : 'rgb(var(--muted))',
+              cursor: disabled && mode === '3D' ? 'not-allowed' : 'pointer',
+              borderRight: mode === '2D' ? '1px solid rgb(var(--border))' : 'none',
+              opacity: disabled && mode === '3D' ? 0.4 : 1,
+            }}
+            title={disabled && mode === '3D' ? '此裝置不支援 WebGL 3D 地圖' : undefined}
+          >
+            {mode}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Geopolitical() {
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [categoryFilter, setCategoryFilter] = useState(null)
+
+  // 3D toggle — persist in sessionStorage; auto-disable if WebGL or mobile unavailable
+  const webglAvailable = hasWebGL() && !isMobile()
+  const [use3D, setUse3D] = useState(() => {
+    if (!webglAvailable) return false
+    try {
+      return sessionStorage.getItem('geo_map_3d') !== 'false'
+    } catch {
+      return true
+    }
+  })
+
+  const handleToggle3D = useCallback(value => {
+    setUse3D(value)
+    try { sessionStorage.setItem('geo_map_3d', String(value)) } catch {}
+  }, [])
 
   const { data: events = [], isLoading, error } = useQuery({
     queryKey: ['geopolitical', 'latest'],
@@ -574,6 +639,9 @@ export default function Geopolitical() {
     setSelectedEvent(prev => (prev?.id === ev.id ? null : ev))
   }, [])
 
+  // Decide which map to render on desktop
+  const showGlobe = use3D && webglAvailable
+
   return (
     <div className="space-y-4 p-4">
       {/* Page title */}
@@ -584,20 +652,30 @@ export default function Geopolitical() {
         >
           地緣政治分析
         </h1>
-        {isLoading && (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-4 h-4 border-2 border-th-border border-t-th-accent rounded-full animate-spin"
-              style={{ borderTopColor: 'rgb(var(--accent))' }}
+        <div className="flex items-center gap-3">
+          {/* 2D/3D toggle — only visible on desktop */}
+          <div className="hidden md:block">
+            <MapViewToggle
+              use3D={use3D}
+              onChange={handleToggle3D}
+              disabled={!webglAvailable}
             />
-            <span
-              className="text-xs"
-              style={{ color: 'rgb(var(--muted))', fontFamily: 'var(--font-ui)' }}
-            >
-              更新中…
-            </span>
           </div>
-        )}
+          {isLoading && (
+            <div className="flex items-center gap-2">
+              <div
+                className="w-4 h-4 border-2 border-th-border border-t-th-accent rounded-full animate-spin"
+                style={{ borderTopColor: 'rgb(var(--accent))' }}
+              />
+              <span
+                className="text-xs"
+                style={{ color: 'rgb(var(--muted))', fontFamily: 'var(--font-ui)' }}
+              >
+                更新中…
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error banner */}
@@ -615,10 +693,34 @@ export default function Geopolitical() {
 
       {/* Desktop: 60/40 split layout */}
       <div className="hidden md:grid gap-4" style={{ gridTemplateColumns: '60% 1fr' }}>
-        {/* Left: World Map */}
+        {/* Left: World Map (2D) or Globe (3D) */}
         <div>
           {isLoading ? (
             <DataCard title="全球風險地圖" loading />
+          ) : showGlobe ? (
+            <Suspense
+              fallback={
+                <div
+                  className="rounded-sm border flex items-center justify-center"
+                  style={{
+                    backgroundColor: 'rgb(var(--card))',
+                    borderColor: 'rgb(var(--border))',
+                    minHeight: 400,
+                    color: 'rgb(var(--muted))',
+                    fontFamily: 'var(--font-ui)',
+                    fontSize: 13,
+                  }}
+                >
+                  載入 3D 地球儀…
+                </div>
+              }
+            >
+              <GlobeView
+                events={events}
+                selectedEvent={selectedEvent}
+                onSelectEvent={handleSelectEvent}
+              />
+            </Suspense>
           ) : (
             <WorldMapPanel
               events={events}
@@ -643,7 +745,7 @@ export default function Geopolitical() {
         </div>
       </div>
 
-      {/* Mobile: full-width news feed only */}
+      {/* Mobile: full-width news feed only (always 2D, no globe on mobile) */}
       <div className="md:hidden">
         {isLoading ? (
           <DataCard title="地緣政治事件" loading />
