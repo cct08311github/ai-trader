@@ -42,8 +42,8 @@ module.exports = {
       kill_timeout: 30000,
       env: {
         OPENCLAW_CURRENT_IP: "127.0.0.1",
-        WATCHER_TELEGRAM_BOT_TOKEN: "8773751510:AAHFORPaipYCA_993wx8B5fGH_eOAq5jqP0",
-        WATCHER_TELEGRAM_CHAT_ID: "1017252031"
+        WATCHER_TELEGRAM_BOT_TOKEN: process.env.WATCHER_TELEGRAM_BOT_TOKEN || '',
+        WATCHER_TELEGRAM_CHAT_ID: process.env.WATCHER_TELEGRAM_CHAT_ID || ''
       }
     },
     {
@@ -56,6 +56,15 @@ module.exports = {
       restart_delay: 10000,
       max_restarts: 5,
       watch: false,
+    },
+    {
+      name: 'ai-trader-market-fetcher',
+      script: 'bin/venv/bin/python',
+      args: '-c "from openclaw.market_index_fetcher import run_market_index_fetcher; run_market_index_fetcher()"',
+      cwd: '/Users/openclaw/.openclaw/shared/projects/ai-trader',
+      cron_restart: '*/5 9-14 * * 1-5',
+      autorestart: false,
+      env: { PYTHONPATH: 'src' }
     },
     {
       name: "ai-trader-ops-summary",
