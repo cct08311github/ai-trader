@@ -16,11 +16,13 @@ from app.api.auth import router as auth_router
 from app.api.research import router as research_router
 from app.api.risk import router as risk_router
 from app.api.screener import router as screener_router
+from app.api.sector import router as sector_router
 from app.api.chat import router as chat_router
 from app.api.control import router as control_router
 from app.api.pm import router as pm_router
 from app.api.portfolio import router as portfolio_router
 from app.api.geopolitical import router as geopolitical_router
+from app.api.macro import router as macro_router
 from app.api.market_indices import router as market_indices_router
 from app.api.reports import router as reports_router
 from app.api.research_reports import router as research_reports_router
@@ -104,9 +106,11 @@ app.include_router(inventory_router)
 app.include_router(capital_router)
 app.include_router(chat_router)
 app.include_router(geopolitical_router)
+app.include_router(macro_router)
 app.include_router(market_indices_router)
 app.include_router(reports_router)
 app.include_router(research_reports_router)
 app.include_router(research_router)
 app.include_router(risk_router)
 app.include_router(screener_router)
+app.include_router(sector_router)

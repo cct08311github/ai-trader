@@ -229,6 +229,10 @@ async def run_orchestrator() -> None:
                     if _should_run_now("07:30", now_twn):
                         asyncio.create_task(
                             _run_agent("StrategyCommitteeAgent", run_strategy_committee))
+                    if _should_run_now("08:00", now_twn):
+                        # 週一 08:00 TWN → 宏觀指標更新（FRED API）
+                        from openclaw.macro_data_fetcher import run_macro_fetcher  # noqa: PLC0415
+                        asyncio.create_task(_run_agent("MacroDataFetcher", run_macro_fetcher))
 
                 # 每週三 03:00 TWN → Security Red Team 掃描
                 if _is_wednesday_twn(now_twn):

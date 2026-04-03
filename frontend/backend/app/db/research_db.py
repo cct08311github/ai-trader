@@ -10,6 +10,9 @@ Platform tables:
   - research_reports      — generated investment research reports
   - data_source_health    — connectivity / staleness health for data providers
   - risk_snapshots        — periodic portfolio-level risk metric snapshots
+  - macro_indicators      — FRED + Taiwan macro-economic time-series (Module 2A)
+  - sector_mapping        — TWSE symbol → sector classification (Module 2B)
+  - sector_data           — daily aggregated sector metrics (Module 2B)
 """
 
 import logging
@@ -152,6 +155,58 @@ _DDL_STATEMENTS = [
     """,
 
     # ------------------------------------------------------------------
+    # macro_indicators: FRED + Taiwan macro-economic time-series (Module 2A).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS macro_indicators (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        indicator_id    TEXT    NOT NULL,           -- FRED series ID or custom (e.g. 'CPIAUCSL', 'TW_CPI')
+        date            TEXT    NOT NULL,           -- ISO-8601 YYYY-MM-DD
+        value           REAL    NOT NULL,
+        unit            TEXT,                       -- 'percent', 'index', etc.
+        source          TEXT    NOT NULL DEFAULT 'fred',  -- fred, dgbas, cbc, derived
+        country         TEXT    NOT NULL DEFAULT 'US',    -- US, TW
+        created_at      INTEGER NOT NULL,           -- Unix timestamp
+        UNIQUE (indicator_id, date)
+    )
+    """,
+
+    # ------------------------------------------------------------------
+    # sector_mapping: TWSE symbol → sector classification (Module 2B).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS sector_mapping (
+        symbol      TEXT    PRIMARY KEY,
+        sector_code TEXT    NOT NULL,
+        sector_name TEXT    NOT NULL,
+        sub_sector  TEXT,
+        updated_at  INTEGER NOT NULL
+    )
+    """,
+
+    # ------------------------------------------------------------------
+    # sector_data: daily aggregated sector metrics (Module 2B).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS sector_data (
+        trade_date        TEXT    NOT NULL,
+        sector_code       TEXT    NOT NULL,
+        sector_name       TEXT    NOT NULL,
+        market_cap        REAL,
+        turnover          REAL,
+        change_pct        REAL,
+        fund_flow_net     REAL,
+        fund_flow_foreign REAL,
+        fund_flow_trust   REAL,
+        pe_ratio          REAL,
+        stock_count       INTEGER,
+        source            TEXT    NOT NULL DEFAULT 'twse',
+        created_at        INTEGER NOT NULL,
+        UNIQUE (trade_date, sector_code)
+    )
+    """,
+
+    # ------------------------------------------------------------------
     # Indices for common query patterns.
     # ------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_market_indices_date   ON market_indices (trade_date DESC)",
@@ -162,6 +217,10 @@ _DDL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_geo_events_region     ON geopolitical_events (region)",
     "CREATE INDEX IF NOT EXISTS idx_research_date         ON research_reports (report_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_risk_snapshot_at      ON risk_snapshots (snapshot_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_macro_date            ON macro_indicators (date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_macro_indicator       ON macro_indicators (indicator_id, date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sector_data_date      ON sector_data (trade_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sector_mapping_code   ON sector_mapping (sector_code)",
 ]
 
 
