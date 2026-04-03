@@ -75,7 +75,7 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<Navigate to="/portfolio" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/portfolio"
             element={
@@ -206,7 +206,7 @@ export default function App() {
         {/* Catch-all */}
         <Route
           path="*"
-          element={isAuthenticated() ? <Navigate to="/portfolio" replace /> : <Navigate to="/login" replace />}
+          element={isAuthenticated() ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />}
         />
       </Routes>
     </QueryClientProvider>
