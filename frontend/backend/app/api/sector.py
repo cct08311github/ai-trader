@@ -107,9 +107,7 @@ def _load_fund_flow(db_path_str: str, days: int) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 @router.get("/overview")
-def get_sector_overview(
-    conn: sqlite3.Connection = Depends(_research_conn_dep),
-):
+def get_sector_overview():
     """所有產業最新日期數據，依市值降序排列。
 
     回傳：trade_date, sector_code, sector_name, market_cap, turnover,
@@ -134,7 +132,6 @@ def get_sector_overview(
 @router.get("/flow")
 def get_sector_flow(
     days: int = Query(default=5, ge=1, le=30, description="回溯天數"),
-    conn: sqlite3.Connection = Depends(_research_conn_dep),
 ):
     """法人資金流向，回傳適合 BarChart 的格式。
 

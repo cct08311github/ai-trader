@@ -17,7 +17,7 @@ import {
 import { DataCard } from '../../components/ui/DataCard'
 import { MetricBadge } from '../../components/ui/MetricBadge'
 import { SentimentIndicator } from '../../components/ui/SentimentIndicator'
-import { authFetch } from '../../lib/auth'
+import { authFetch, getApiBase } from '../../lib/auth'
 
 // ---------------------------------------------------------------------------
 // BattleTheme colour refs
@@ -257,14 +257,14 @@ export default function SectorAnalysis() {
   // ── Overview data
   const { data: overviewRaw, isLoading: ovLoading, error: ovError } = useQuery({
     queryKey: ['sector', 'overview'],
-    queryFn: () => authFetch('/api/sector/overview').then((r) => r.json()),
+    queryFn: () => authFetch(`${getApiBase()}/api/sector/overview`).then((r) => r.json()),
     staleTime: 5 * 60 * 1000,
   })
 
   // ── Fund flow data (5 days)
   const { data: flowRaw, isLoading: flowLoading, error: flowError } = useQuery({
     queryKey: ['sector', 'flow', 5],
-    queryFn: () => authFetch('/api/sector/flow?days=5').then((r) => r.json()),
+    queryFn: () => authFetch(`${getApiBase()}/api/sector/flow?days=5`).then((r) => r.json()),
     staleTime: 5 * 60 * 1000,
   })
 

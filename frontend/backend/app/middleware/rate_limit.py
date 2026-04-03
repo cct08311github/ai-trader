@@ -41,16 +41,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.exclude_paths = exclude_paths
         self._buckets: Dict[str, Bucket] = {}
 
+    # Only trust X-Forwarded-For from known proxy IPs to prevent IP spoofing.
+    TRUSTED_PROXIES: frozenset = frozenset({"127.0.0.1", "::1"})
+
     def _client_key(self, request: Request) -> str:
-        # Prefer X-Forwarded-For when running behind a reverse proxy (nginx, ALB, etc.)
-        # to prevent bypass by clients that all appear as 127.0.0.1.
-        # Take only the first (leftmost) IP which is the original client.
+        # Only trust X-Forwarded-For header when the direct client is a known
+        # trusted proxy (e.g. nginx on localhost). Accepting the header blindly
+        # allows attackers to spoof arbitrary IPs and bypass rate limiting.
         forwarded_for = request.headers.get("X-Forwarded-For", "")
-        host = (
-            forwarded_for.split(",")[0].strip()
-            or (request.client.host if request.client else "unknown")
-        )
-        return host
+        client_host = request.client.host if request.client else None
+
+        if client_host in self.TRUSTED_PROXIES:
+            # Leftmost IP in X-Forwarded-For is the original client IP
+            host = forwarded_for.split(",")[0].strip() if forwarded_for else client_host
+        else:
+            host = client_host or "unknown"
+
+        return host or "unknown"
 
     def _allow(self, key: str) -> bool:
         now = time.monotonic()

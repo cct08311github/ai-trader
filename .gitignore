@@ -83,4 +83,7 @@ openclaw_demo.db*
 # Playwright MCP / screenshots
 .playwright-mcp/
 *.png
+# Exception: bundled static assets
+!frontend/web/public/assets/*.png
+!frontend/web/public/assets/*.jpg
 

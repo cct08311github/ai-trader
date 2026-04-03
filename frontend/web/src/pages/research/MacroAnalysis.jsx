@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   LineChart,
@@ -354,11 +354,11 @@ function EconomicCalendar({ country }) {
       accentColor={C_GOLD}
     >
       <ul className="space-y-2">
-        {events.slice(0, 10).map((ev, i) => {
+        {events.slice(0, 10).map((ev) => {
           const color = IMPORTANCE_COLOR[ev.importance] ?? C_MUTED
           return (
             <li
-              key={i}
+              key={`${ev.date}-${ev.event}`}
               className="flex items-start gap-3 pb-2 border-b last:border-b-0"
               style={{ borderColor: `${C_BORDER}55` }}
             >
@@ -462,8 +462,17 @@ export default function MacroAnalysis() {
   const [country, setCountry]           = useState('US')
   const [selectedId, setSelectedId]     = useState(KPI_CARD_IDS[2]) // default: FEDFUNDS
 
-  // Detect mobile via window width (simple)
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640
+  // Detect mobile via window width — use state + resize listener so it updates on resize
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 640
+  )
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 640)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const { data: dashboardData, isLoading: dashLoading, error: dashError } = useQuery({
     queryKey:  ['macro', 'dashboard', country],

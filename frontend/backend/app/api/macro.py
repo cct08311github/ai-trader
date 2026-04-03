@@ -7,9 +7,12 @@ Endpoints:
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import date, timedelta
 from typing import List, Optional
+
+log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Path, Query
 
@@ -159,6 +162,18 @@ def _dashboard_cached() -> dict:
             ORDER BY m.country, m.indicator_id
         """).fetchall()
 
+        # Fetch previous value per indicator in one query using window function
+        prev_rows = conn.execute("""
+            SELECT indicator_id, value
+            FROM (
+                SELECT indicator_id, value,
+                       ROW_NUMBER() OVER (PARTITION BY indicator_id ORDER BY date DESC) AS rn
+                FROM macro_indicators
+            ) ranked
+            WHERE rn = 2
+        """).fetchall()
+        prev_value_map = {r["indicator_id"]: r["value"] for r in prev_rows}
+
         # Build kpi list with previous value for trend
         kpis = []
         freshness: Optional[str] = None
@@ -167,16 +182,8 @@ def _dashboard_cached() -> dict:
             ind_id = row["indicator_id"]
             meta   = _INDICATOR_META.get(ind_id, {})
 
-            # Fetch previous value (second-latest)
-            prev_row = conn.execute("""
-                SELECT value, date FROM macro_indicators
-                WHERE indicator_id = ? AND date < ?
-                ORDER BY date DESC
-                LIMIT 1
-            """, (ind_id, row["date"])).fetchone()
-
             current_val  = row["value"]
-            previous_val = prev_row["value"] if prev_row else None
+            previous_val = prev_value_map.get(ind_id)
             change       = round(current_val - previous_val, 4) if previous_val is not None else None
             trend        = (
                 "up"   if change is not None and change > 0 else
@@ -248,7 +255,8 @@ def get_macro_dashboard(
     try:
         data = _dashboard_cached()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"research.db error: {exc}") from exc
+        log.error("macro dashboard error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
 
     kpis = data["kpis"]
     if country:
@@ -275,14 +283,24 @@ def get_indicator_history(
         le=120,
         description="Number of months to look back (default 12, max 120)",
     ),
+    days: Optional[int] = Query(
+        default=None,
+        ge=1,
+        le=3650,
+        description="Alias: number of days to look back (overrides months when provided)",
+    ),
 ):
     """Return historical data points for a single macro indicator.
 
     Args:
         indicator_id: FRED series ID (e.g. 'FEDFUNDS') or custom ID.
         months:       Calendar months to look back (1–120, default 12).
+        days:         Alias for specifying look-back in days (overrides months when provided).
     """
-    since = (date.today() - timedelta(days=months * 31)).isoformat()
+    if days is not None:
+        since = (date.today() - timedelta(days=days)).isoformat()
+    else:
+        since = (date.today() - timedelta(days=months * 31)).isoformat()
 
     try:
         conn = _research_conn()
@@ -294,7 +312,8 @@ def get_indicator_history(
         """, (indicator_id, since)).fetchall()
         conn.close()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"research.db error: {exc}") from exc
+        log.error("macro indicator history error [%s]: %s", indicator_id, exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
 
     if not rows:
         raise HTTPException(
