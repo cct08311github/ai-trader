@@ -7,6 +7,7 @@ pytest>=8.0
 hypothesis>=6.0
 httpx>=0.27
 psutil>=5.9
+cachetools>=5.3
 
 # SSE
 sse-starlette>=2.1

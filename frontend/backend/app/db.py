@@ -178,6 +178,8 @@ def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:
 
     conn = sqlite3.connect(db_path.as_posix(), check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    # WAL mode gives better concurrent read performance and crash safety.
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
