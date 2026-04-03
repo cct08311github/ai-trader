@@ -53,6 +53,11 @@ def _is_wednesday_twn(now_twn: Optional[datetime] = None) -> bool:
     return t.weekday() == 2
 
 
+def _is_sunday_twn(now_twn: Optional[datetime] = None) -> bool:
+    t = now_twn or datetime.now(tz=_TZ_TWN)
+    return t.weekday() == 6
+
+
 # ── 事件偵測 ──────────────────────────────────────────────────────────────────
 
 _LAST_STRATEGY_COMMITEE_TRIGGER: Optional[datetime] = None
@@ -245,6 +250,13 @@ async def run_orchestrator() -> None:
                     if _should_run_now("03:00", now_twn):
                         asyncio.create_task(
                             _run_agent("RedTeamAgent", run_redteam_agent))
+
+                # 每週日 22:00 TWN → AI Score Backtester（Module 2D）
+                if _is_sunday_twn(now_twn):
+                    if _should_run_now("22:00", now_twn):
+                        from openclaw.ai_score_backtester import run_backtester  # noqa: PLC0415
+                        asyncio.create_task(
+                            _run_agent("AIScoreBacktester", run_backtester))
 
                 # ── 事件任務 ──────────────────────────────────────────────────
                 today_str = now_twn.strftime("%Y-%m-%d")

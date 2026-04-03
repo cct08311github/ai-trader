@@ -7,6 +7,7 @@ import { MetricBadge } from '../components/ui/MetricBadge'
 import { AlertBadge } from '../components/ui/AlertBadge'
 import { SentimentIndicator } from '../components/ui/SentimentIndicator'
 import { authFetch, getApiBase } from '../lib/auth'
+import EconomicCalendar from '../components/EconomicCalendar'
 
 // ── Fetchers ──────────────────────────────────────────────────────────────────
 
@@ -578,6 +579,11 @@ export default function DashboardPage() {
           </DataCard>
         </div>
       </div>
+
+      {/* ── Economic Calendar (Module 2D) ─────────────────────────────────────── */}
+      <section>
+        <EconomicCalendar maxItems={6} />
+      </section>
 
       {/* ── Action Queue ─────────────────────────────────────────────────────── */}
       <section>

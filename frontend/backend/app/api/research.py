@@ -287,6 +287,89 @@ def get_debate(
     return api_response(data, source="sqlite")
 
 
+@router.get("/backtest")
+@cached(ttl=600, maxsize=4)
+def get_backtest_stats():
+    """GET /api/research/backtest — aggregate AI score backtest statistics.
+
+    Returns win_rate and avg_return per rating (A/B/C/D) plus overall accuracy.
+    Results are cached for 10 minutes.
+    """
+    try:
+        from app.db.research_db import RESEARCH_DB_PATH, connect_research, init_research_db  # noqa: PLC0415
+        init_research_db(RESEARCH_DB_PATH)
+        research_conn = connect_research(RESEARCH_DB_PATH)
+    except Exception as exc:
+        log.error("backtest: cannot open research.db: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    try:
+        rows = research_conn.execute(
+            """
+            SELECT rating,
+                   COUNT(*) AS cnt,
+                   AVG(return_20d) AS avg_ret_20d,
+                   AVG(return_5d)  AS avg_ret_5d,
+                   AVG(return_10d) AS avg_ret_10d,
+                   SUM(CASE WHEN return_20d > 0 THEN 1 ELSE 0 END) AS wins,
+                   SUM(hit_target)   AS total_hits_target,
+                   SUM(hit_stoploss) AS total_hits_stoploss
+            FROM ai_score_backtest
+            WHERE return_20d IS NOT NULL
+            GROUP BY rating
+            ORDER BY rating
+            """
+        ).fetchall()
+
+        by_rating: Dict[str, Any] = {}
+        total_cnt  = 0
+        total_wins = 0
+
+        for row in rows:
+            rating   = row["rating"] or "?"
+            cnt      = row["cnt"]
+            wins     = row["wins"] or 0
+            win_rate = round(wins / cnt, 4) if cnt > 0 else 0.0
+            by_rating[rating] = {
+                "count":              cnt,
+                "win_rate":           win_rate,
+                "avg_return_5d":      round(row["avg_ret_5d"],   4) if row["avg_ret_5d"]   is not None else None,
+                "avg_return_10d":     round(row["avg_ret_10d"],  4) if row["avg_ret_10d"]  is not None else None,
+                "avg_return_20d":     round(row["avg_ret_20d"],  4) if row["avg_ret_20d"]  is not None else None,
+                "total_hit_target":   row["total_hits_target"]   or 0,
+                "total_hit_stoploss": row["total_hits_stoploss"] or 0,
+            }
+            total_cnt  += cnt
+            total_wins += wins
+
+        overall_win_rate = round(total_wins / total_cnt, 4) if total_cnt > 0 else 0.0
+        all_row = research_conn.execute(
+            "SELECT AVG(return_20d) FROM ai_score_backtest WHERE return_20d IS NOT NULL"
+        ).fetchone()
+        overall_avg_ret = round(all_row[0], 4) if all_row and all_row[0] is not None else None
+
+        total_row = research_conn.execute(
+            "SELECT COUNT(*) FROM ai_score_backtest"
+        ).fetchone()
+        total_records = total_row[0] if total_row else 0
+
+    except Exception as exc:
+        log.error("backtest stats query failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    finally:
+        research_conn.close()
+
+    data: Dict[str, Any] = {
+        "by_rating": by_rating,
+        "overall": {
+            "total_count":    total_cnt,
+            "win_rate":       overall_win_rate,
+            "avg_return_20d": overall_avg_ret,
+        },
+    }
+    return api_response(data, total=total_records, source="research.db/ai_score_backtest")
+
+
 @router.get("/watchlist")
 @cached(ttl=300, maxsize=4)
 def get_watchlist():

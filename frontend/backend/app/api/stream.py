@@ -301,3 +301,120 @@ async def stream_health(request: Request):
 
     return EventSourceResponse(health_gen())
 
+
+# ─── SSE /api/stream/market-ticks ────────────────────────────────────────────
+# Module 2D: Real-time market index SSE endpoint.
+# Fetches indices in-process every 30 s and pushes `market_tick` events.
+
+MARKET_TICK_INTERVAL_SEC = max(10, _env_int("MARKET_TICK_INTERVAL_SEC", 30))
+
+# Separate semaphore: max 10 concurrent market-tick SSE clients.
+_market_sema = asyncio.Semaphore(10)
+
+
+def _fetch_market_indices() -> list[dict]:
+    """Fetch latest index rows from research.db market_indices table.
+
+    Returns a list of dicts suitable for JSON serialisation.
+    Falls back to [] on any error so the SSE stream stays alive.
+    """
+    try:
+        from app.db.research_db import RESEARCH_DB_PATH, connect_research, init_research_db  # noqa: PLC0415
+        init_research_db(RESEARCH_DB_PATH)
+        conn = connect_research(RESEARCH_DB_PATH)
+        try:
+            rows = conn.execute(
+                """
+                SELECT m.symbol, m.name, m.close_price, m.change_pct, m.trade_date
+                FROM market_indices m
+                INNER JOIN (
+                    SELECT symbol, MAX(trade_date) AS max_date
+                    FROM market_indices
+                    GROUP BY symbol
+                ) latest ON m.symbol = latest.symbol AND m.trade_date = latest.max_date
+                ORDER BY m.symbol
+                """
+            ).fetchall()
+            return [
+                {
+                    "symbol":      r["symbol"],
+                    "name":        r["name"],
+                    "close_price": r["close_price"],
+                    "change_pct":  r["change_pct"],
+                    "trade_date":  r["trade_date"],
+                }
+                for r in rows
+            ]
+        finally:
+            conn.close()
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).warning("market_indices fetch failed: %s", exc)
+        return []
+
+
+@router.get("/market-ticks")
+async def stream_market_ticks(request: Request):
+    """GET /api/stream/market-ticks — SSE, Module 2D.
+
+    Pushes a ``market_tick`` event every MARKET_TICK_INTERVAL_SEC seconds
+    (default 30 s) with the latest global index snapshot from research.db.
+
+    Safety:
+    - separate semaphore (_market_sema, max 10 clients)
+    - in-process fetch, no cross-process IPC
+    - read-only research.db access
+    """
+    try:
+        await asyncio.wait_for(_market_sema.acquire(), timeout=0.1)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=429, detail="Market-tick SSE capacity reached")
+
+    async def market_gen() -> AsyncGenerator[Dict[str, str], None]:
+        last_heartbeat = 0.0
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                now = time.time()
+                if now - last_heartbeat >= SSE_HEARTBEAT_SEC:
+                    last_heartbeat = now
+                    yield {
+                        "event": "heartbeat",
+                        "data": json.dumps(
+                            {"ts": int(now * 1000), "type": "heartbeat"},
+                            ensure_ascii=False,
+                        ),
+                    }
+
+                try:
+                    indices = await asyncio.to_thread(_fetch_market_indices)
+                    yield {
+                        "event": "market_tick",
+                        "data": json.dumps(
+                            {
+                                "ts":      int(time.time() * 1000),
+                                "indices": indices,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                except Exception as exc:
+                    yield {
+                        "event": "market_tick",
+                        "data": json.dumps(
+                            {
+                                "ts":    int(time.time() * 1000),
+                                "error": str(exc),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+
+                await asyncio.sleep(MARKET_TICK_INTERVAL_SEC)
+        finally:
+            _market_sema.release()
+
+    return EventSourceResponse(market_gen())
+

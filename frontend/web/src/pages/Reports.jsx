@@ -272,7 +272,107 @@ function MarkdownBody({ body }) {
   )
 }
 
+// ── PDF Export ────────────────────────────────────────────────────────────────
+
+/**
+ * exportReportPdf — dynamically imports html2canvas + jspdf and renders the
+ * provided DOM element across multiple pages.
+ *
+ * Dynamic import is ONLY triggered on click, never at module load.
+ */
+async function exportReportPdf(element, filename = 'report.pdf') {
+  // Dynamic import — bundler will code-split these heavy libs
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ])
+
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    backgroundColor: '#0f1117',
+    logging: false,
+  })
+
+  const imgData   = canvas.toDataURL('image/png')
+  const imgWidth  = canvas.width
+  const imgHeight = canvas.height
+
+  const pdf       = new jsPDF({ orientation: 'portrait', unit: 'px', format: 'a4' })
+  const pageWidth = pdf.internal.pageSize.getWidth()
+  const pageHeight= pdf.internal.pageSize.getHeight()
+
+  // Scale image to page width
+  const scaledWidth  = pageWidth
+  const scaledHeight = (imgHeight * pageWidth) / imgWidth
+
+  let yOffset = 0
+
+  // Multi-page: split by page height in a while loop
+  while (yOffset < scaledHeight) {
+    if (yOffset > 0) pdf.addPage()
+    pdf.addImage(
+      imgData,
+      'PNG',
+      0,
+      -yOffset,
+      scaledWidth,
+      scaledHeight,
+    )
+    yOffset += pageHeight
+  }
+
+  pdf.save(filename)
+}
+
+function ExportPdfButton({ report, contentRef }) {
+  const [exporting, setExporting] = React.useState(false)
+
+  const handleExport = async (e) => {
+    e.stopPropagation()   // don't toggle card expand/collapse
+    if (exporting || !contentRef?.current) return
+    setExporting(true)
+    try {
+      const filename = `report-${report.report_date || report.id}-${report.report_type || 'ai'}.pdf`
+      await exportReportPdf(contentRef.current, filename)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('[PDF export]', err)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleExport}
+      disabled={exporting}
+      title="匯出 PDF"
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: '0.65rem',
+        letterSpacing: '0.05em',
+        padding: '2px 7px',
+        background: 'transparent',
+        border: '1px solid rgb(var(--border))',
+        borderRadius: '2px',
+        color: exporting ? 'rgb(var(--muted))' : 'rgb(var(--text))',
+        cursor: exporting ? 'not-allowed' : 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'border-color 0.15s ease, color 0.15s ease',
+        flexShrink: 0,
+      }}
+      onMouseEnter={e => { if (!exporting) e.currentTarget.style.borderColor = 'rgb(var(--accent))' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgb(var(--border))' }}
+    >
+      {exporting ? '產生中…' : '↓ PDF'}
+    </button>
+  )
+}
+
 function ReportCard({ report, isExpanded, onToggle }) {
+  const cardRef = React.useRef(null)
+
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['report-detail', report.id],
     queryFn: () => fetchReportDetail(report.id),
@@ -287,6 +387,7 @@ function ReportCard({ report, isExpanded, onToggle }) {
 
   return (
     <div
+      ref={cardRef}
       style={{
         background: 'rgb(var(--card))',
         border: '1px solid rgb(var(--border))',
@@ -311,7 +412,7 @@ function ReportCard({ report, isExpanded, onToggle }) {
           gap: '0.35rem',
         }}
       >
-        {/* Top row: title + date */}
+        {/* Top row: title + date + PDF export */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', justifyContent: 'space-between' }}>
           <span
             style={{
@@ -325,17 +426,20 @@ function ReportCard({ report, isExpanded, onToggle }) {
           >
             {report.title}
           </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.72rem',
-              color: 'rgb(var(--muted))',
-              whiteSpace: 'nowrap',
-              paddingTop: '2px',
-            }}
-          >
-            {dateStr}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+            <ExportPdfButton report={report} contentRef={cardRef} />
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.72rem',
+                color: 'rgb(var(--muted))',
+                whiteSpace: 'nowrap',
+                paddingTop: '2px',
+              }}
+            >
+              {dateStr}
+            </span>
+          </div>
         </div>
 
         {/* Badge row */}

@@ -208,6 +208,26 @@ _DDL_STATEMENTS = [
     """,
 
     # ------------------------------------------------------------------
+    # ai_score_backtest: compare historical AI ratings with actual returns (Module 2D).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS ai_score_backtest (
+        symbol          TEXT    NOT NULL,
+        report_date     TEXT    NOT NULL,
+        rating          TEXT,
+        confidence      REAL,
+        entry_price     REAL,
+        return_5d       REAL,
+        return_10d      REAL,
+        return_20d      REAL,
+        hit_target      INTEGER DEFAULT 0,
+        hit_stoploss    INTEGER DEFAULT 0,
+        created_at      INTEGER NOT NULL,
+        UNIQUE (symbol, report_date)
+    )
+    """,
+
+    # ------------------------------------------------------------------
     # Indices for common query patterns.
     # ------------------------------------------------------------------
     "CREATE INDEX IF NOT EXISTS idx_sector_data_date      ON sector_data (trade_date DESC)",
@@ -224,6 +244,9 @@ _DDL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_macro_indicator       ON macro_indicators (indicator_id, date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_sector_data_date      ON sector_data (trade_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_sector_mapping_code   ON sector_mapping (sector_code)",
+    "CREATE INDEX IF NOT EXISTS idx_backtest_symbol       ON ai_score_backtest (symbol)",
+    "CREATE INDEX IF NOT EXISTS idx_backtest_date         ON ai_score_backtest (report_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_backtest_rating       ON ai_score_backtest (rating)",
 ]
 
 
