@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 // ---------------------------------------------------------------------------
@@ -20,6 +20,77 @@ async function fetchLatestIndices() {
   const json = await res.json()
   // Unwrap unified envelope
   return Array.isArray(json?.data) ? json.data : []
+}
+
+// ---------------------------------------------------------------------------
+// SSE hook — tries EventSource first, falls back to polling
+// ---------------------------------------------------------------------------
+
+/**
+ * useMarketTickSSE — subscribe to /api/stream/market-ticks.
+ *
+ * Returns { rows, sseActive } where:
+ *   rows       — latest index array (may be empty until first tick)
+ *   sseActive  — true while SSE connection is open
+ *
+ * Automatically falls back to polling via react-query if EventSource
+ * is not supported or the connection fails.
+ */
+function useMarketTickSSE({ enabled = true } = {}) {
+  const [sseRows, setSseRows]       = useState(null)   // null = no SSE data yet
+  const [sseActive, setSseActive]   = useState(false)
+  const [sseFailed, setSseFailed]   = useState(false)
+  const esRef                       = useRef(null)
+
+  // Start SSE connection
+  useEffect(() => {
+    if (!enabled || typeof EventSource === 'undefined') {
+      setSseFailed(true)
+      return
+    }
+
+    const token = localStorage.getItem('auth_token') || ''
+    // EventSource doesn't support custom headers; pass token as query param
+    const url = `${API_BASE}/api/stream/market-ticks${token ? `?token=${encodeURIComponent(token)}` : ''}`
+
+    let es
+    try {
+      es = new EventSource(url)
+      esRef.current = es
+    } catch {
+      setSseFailed(true)
+      return
+    }
+
+    es.onopen = () => {
+      setSseActive(true)
+      setSseFailed(false)
+    }
+
+    es.addEventListener('market_tick', (evt) => {
+      try {
+        const payload = JSON.parse(evt.data)
+        if (Array.isArray(payload?.indices) && payload.indices.length > 0) {
+          setSseRows(payload.indices)
+        }
+      } catch {
+        // ignore malformed frames
+      }
+    })
+
+    es.onerror = () => {
+      setSseActive(false)
+      setSseFailed(true)
+      es.close()
+    }
+
+    return () => {
+      setSseActive(false)
+      es.close()
+    }
+  }, [enabled])
+
+  return { sseRows, sseActive, sseFailed }
 }
 
 // ---------------------------------------------------------------------------
@@ -172,13 +243,24 @@ function TickerSkeleton() {
 export default function GlobalTicker({ className = '', pauseOnHover = true }) {
   const trackRef = useRef(null)
 
-  const { data: rows = [], isLoading, isError } = useQuery({
+  // Try SSE first, fall back to polling
+  const { sseRows, sseActive, sseFailed } = useMarketTickSSE({ enabled: true })
+
+  // Polling fallback — active when SSE has failed or has no data yet
+  const pollEnabled = sseFailed || sseRows === null
+  const { data: pollRows = [], isLoading: pollLoading, isError: pollError } = useQuery({
     queryKey: ['market-indices-latest'],
     queryFn: fetchLatestIndices,
-    staleTime: 60 * 1000,        // 60 s — matches backend cache TTL
-    refetchInterval: 60 * 1000,  // auto-refresh every 60 s
+    staleTime: 60 * 1000,
+    refetchInterval: pollEnabled ? 60 * 1000 : false,
     retry: 1,
+    enabled: pollEnabled,
   })
+
+  // Prefer SSE data; fall back to poll data
+  const rows      = (sseRows && sseRows.length > 0) ? sseRows : pollRows
+  const isLoading = sseRows === null && pollLoading && !sseActive
+  const isError   = sseRows === null && pollError && sseFailed
 
   // Pause/resume scroll animation on hover (CSS var trick)
   useEffect(() => {

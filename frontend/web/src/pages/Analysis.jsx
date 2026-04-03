@@ -18,6 +18,7 @@ import { FileText, ChevronDown, ChevronRight } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
+import EconomicCalendar from '../components/EconomicCalendar'
 
 /* ── Sentiment Badge ──────────────────────────────────────── */
 function SentimentBadge({ sentiment }) {
@@ -587,6 +588,11 @@ export default function AnalysisPage() {
               )}
             </div>
           </div>
+
+          {/* ══════════════════════════════════════════════════════════
+              Economic Calendar (Module 2D)
+              ══════════════════════════════════════════════════════════ */}
+          <EconomicCalendar maxItems={10} />
 
           {/* ══════════════════════════════════════════════════════════
               BOTTOM: Institutional Flow Heatmap
