@@ -36,9 +36,11 @@ def _research_conn_dep():
         finally:
             conn.close()
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        log.error("research.db connection error: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"research.db error: {exc}") from exc
+        log.error("research.db connection error: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
 
 
 # ---------------------------------------------------------------------------

@@ -59,7 +59,7 @@ def _fetch_pending_reports(
     """
     cutoff = (datetime.now(tz=_TZ_TWN) - timedelta(days=28)).strftime("%Y-%m-%d")
     already_done = {
-        row[0] + "|" + row[1]
+        row["symbol"] + "|" + row["report_date"]
         for row in research_conn.execute(
             "SELECT symbol, report_date FROM ai_score_backtest"
         ).fetchall()
@@ -78,15 +78,15 @@ def _fetch_pending_reports(
 
     pending = []
     for row in rows:
-        key = row[0] + "|" + row[1]
+        key = row["symbol"] + "|" + row["trade_date"]
         if key not in already_done:
             pending.append({
-                "symbol":       row[0],
-                "report_date":  row[1],
-                "rating":       row[2],
-                "entry_price":  row[3],
-                "stop_loss":    row[4],
-                "target_price": row[5],
+                "symbol":       row["symbol"],
+                "report_date":  row["trade_date"],
+                "rating":       row["rating"],
+                "entry_price":  row["entry_price"],
+                "stop_loss":    row["stop_loss"],
+                "target_price": row["target_price"],
             })
     return pending
 
@@ -108,7 +108,7 @@ def _fetch_prices_after(
         """,
         (symbol, report_date, n),
     ).fetchall()
-    return [(r[0], float(r[1])) for r in rows]
+    return [(r["trade_date"], float(r["close"])) for r in rows]
 
 
 def _compute_return(entry: float, close: float) -> float:
