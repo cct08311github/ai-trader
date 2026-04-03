@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   ScatterChart,
   Scatter,
@@ -12,6 +13,7 @@ import {
 } from 'recharts'
 import { DataCard } from '../../components/ui/DataCard'
 import { MetricBadge } from '../../components/ui/MetricBadge'
+import { authFetch } from '../../lib/auth'
 
 // BattleTheme colour references — matches CSS variables in the design system
 const COLOR_UP = 'rgb(var(--up, 34 197 94))'
@@ -88,32 +90,16 @@ function FilterBtn({ active, onClick, children }) {
 
 export default function Screener() {
   const navigate = useNavigate()
-  const [scatterData, setScatterData] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    fetch('/api/screener/scatter')
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then((json) => {
-        if (cancelled) return
-        setScatterData(Array.isArray(json.data) ? json.data : [])
-        setLoading(false)
-      })
-      .catch((e) => {
-        if (cancelled) return
-        setError(e.message || '資料載入失敗')
-        setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+  const { data: rawData, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['screener', 'scatter'],
+    queryFn: () => authFetch('/api/screener/scatter').then((r) => r.json()),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const scatterData = Array.isArray(rawData?.data) ? rawData.data : []
+  const error = queryError ? (queryError.message || '資料載入失敗') : null
 
   const handleSymbolClick = useCallback(
     (symbol) => navigate(`/research/stock?symbol=${symbol}`),

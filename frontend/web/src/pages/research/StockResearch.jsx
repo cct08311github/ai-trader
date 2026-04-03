@@ -15,6 +15,7 @@ import { PriceChart } from '../../components/charts/PriceChart'
 import { DataCard } from '../../components/ui/DataCard'
 import { MetricBadge } from '../../components/ui/MetricBadge'
 import { SentimentIndicator } from '../../components/ui/SentimentIndicator'
+import { authFetch, getApiBase } from '../../lib/auth'
 
 // ── BattleTheme colour references ─────────────────────────────────────────────
 const C_UP     = 'rgb(var(--up,    34 197 94))'
@@ -31,7 +32,7 @@ const RATING_COLOR = { A: C_UP, B: C_ACCENT, C: C_WARN, D: C_DOWN }
 // ── API fetchers ──────────────────────────────────────────────────────────────
 
 async function apiFetch(url) {
-  const res = await fetch(url)
+  const res = await authFetch(`${getApiBase()}${url}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
   return json?.data ?? json

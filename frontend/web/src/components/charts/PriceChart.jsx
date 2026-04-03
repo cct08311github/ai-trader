@@ -136,7 +136,7 @@ export function PriceChart({ data = [], symbol = '', height = 320 }) {
       chart.remove()
       chartRef.current = null
     }
-  }, [data, height])
+  }, [data, height, symbol])
 
   return (
     <div className="relative w-full rounded-sm overflow-hidden border border-th-border bg-th-card">
