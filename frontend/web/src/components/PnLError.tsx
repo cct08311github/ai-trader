@@ -1,12 +1,18 @@
 /**
- * PnLError.tsx — Kyo Nakamura
- * Real-time P&L ECG (equity curve) with neon glow treatment.
+ * PnLError.tsx -- Kyo Nakamura
+ * ECG-style equity curve with neon glow, pulsing endpoint,
+ * cardiac flatline warnings, and breathing ambient animation.
  *
- * Shows:
- *   • SVG polyline with up=neon-green glow / down=ember-red glow
- *   • Right-edge pulsing ball
- *   • Large floating P&L number
- *   • ECG ambient pulse animation
+ * Named "PnLError" because in Kyo's philosophy, every loss
+ * is a system error that must be visible and felt.
+ *
+ * Visual features:
+ *   - Segmented polyline: up=neon-green / down=ember-red
+ *   - Right-edge pulsing ball (like cardiac monitor)
+ *   - Large floating P&L number with chromatic glitch
+ *   - Gradient area fill under the curve
+ *   - Drawdown threshold warnings (ECG flatline zone)
+ *   - Breathing ambient glow on the entire component
  */
 
 import { useMemo, useRef, useState, useEffect } from 'react'
@@ -18,28 +24,30 @@ interface EquityPoint {
 
 interface Props {
   data: EquityPoint[]
-  dailyPnl?: number   // standalone daily P&L shown large
+  dailyPnl?: number
   height?: number
-  animate?: boolean   // trigger entry animation
+  animate?: boolean
 }
 
 function formatPnl(v: number) {
   const abs = Math.abs(v)
   const sign = v >= 0 ? '+' : '-'
-  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 }
 
-const PADDING = { top: 32, right: 72, bottom: 32, left: 12 }
+const PADDING = { top: 36, right: 80, bottom: 32, left: 12 }
 
 export default function PnLError({
   data = [],
   dailyPnl,
-  height = 220,
+  height = 240,
   animate = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [W, setW] = useState(500)
   const [animEntry, setAnimEntry] = useState(false)
+  const [glitching, setGlitching] = useState(false)
+  const prevPnlRef = useRef(dailyPnl)
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -47,7 +55,9 @@ export default function PnLError({
       setW(entries[0].contentRect.width)
     })
     ro.observe(containerRef.current)
-    setW(containerRef.current.contentRect.width)
+    if (containerRef.current.getBoundingClientRect) {
+      setW(containerRef.current.getBoundingClientRect().width)
+    }
     return () => ro.disconnect()
   }, [])
 
@@ -58,13 +68,23 @@ export default function PnLError({
     }
   }, [animate, data.length])
 
+  // Chromatic glitch on P&L change
+  useEffect(() => {
+    if (dailyPnl != null && prevPnlRef.current != null && prevPnlRef.current !== dailyPnl) {
+      setGlitching(true)
+      const t = setTimeout(() => setGlitching(false), 350)
+      return () => clearTimeout(t)
+    }
+    prevPnlRef.current = dailyPnl
+  }, [dailyPnl])
+
   const H = height
   const innerW = W - PADDING.left - PADDING.right
   const innerH = H - PADDING.top - PADDING.bottom
 
-  const { points, segments, minY, maxY } = useMemo(() => {
+  const { points, segments, minY, maxY, drawdownPct } = useMemo(() => {
     if (data.length < 2) {
-      return { points: '', segments: [], minY: 0, maxY: 100 }
+      return { points: '', segments: [], minY: 0, maxY: 100, drawdownPct: 0 }
     }
 
     const prices = data.map(d => d.equity)
@@ -80,31 +100,43 @@ export default function PnLError({
 
     const pts = data.map((d, i) => ({ x: scaleX(i), y: scaleY(d.equity) }))
 
-    // Split polyline into up/down segments
+    // Segment by direction
     const segs: { up: boolean; pts: { x: number; y: number }[] }[] = []
     let current: { up: boolean; pts: { x: number; y: number }[] } | null = null
 
     for (let i = 0; i < pts.length; i++) {
       const up = i === 0 ? true : data[i].equity >= data[i - 1].equity
       if (!current || current.up !== up) {
-        if (current) segs.push(current)
-        current = { up, pts: [pts[i]] }
+        // Bridge: carry the previous endpoint into the new segment
+        if (current) {
+          segs.push(current)
+          current = { up, pts: [pts[i - 1], pts[i]] }
+        } else {
+          current = { up, pts: [pts[i]] }
+        }
       } else {
         current.pts.push(pts[i])
       }
     }
     if (current) segs.push(current)
 
-    const points = pts.map(p => `${p.x},${p.y}`).join(' L ')
+    const pointsStr = pts.map(p => `${p.x},${p.y}`).join(' L ')
 
-    return { points, segments: segs, minY: loP, maxY: hiP }
+    // Calculate max drawdown
+    let peak = prices[0]
+    let maxDD = 0
+    for (const p of prices) {
+      if (p > peak) peak = p
+      const dd = (peak - p) / peak
+      if (dd > maxDD) maxDD = dd
+    }
+
+    return { points: pointsStr, segments: segs, minY: loP, maxY: hiP, drawdownPct: maxDD * 100 }
   }, [data, innerW, innerH])
 
   const lastPt = data.length > 0 ? data[data.length - 1] : null
-  const lastX = data.length > 0
-    ? PADDING.left + innerW
-    : PADDING.left
-  const lastY = data.length > 0
+  const lastX = PADDING.left + innerW
+  const lastY = data.length >= 2
     ? (() => {
         const prices = data.map(d => d.equity)
         const lo = Math.min(...prices)
@@ -116,40 +148,52 @@ export default function PnLError({
       })()
     : PADDING.top + innerH / 2
 
-  // Is today up or down?
-  const isUp = lastPt ? data.length < 2 || lastPt.equity >= (data[data.length - 2]?.equity ?? lastPt.equity) : true
+  const isUp = lastPt
+    ? data.length < 2 || lastPt.equity >= (data[data.length - 2]?.equity ?? lastPt.equity)
+    : true
 
-  const strokeColor = isUp ? 'rgb(var(--ecg-up))' : 'rgb(var(--ecg-down))'
-  const glowColor   = isUp ? 'rgba(var(--up-glow))' : 'rgba(var(--down-glow))'
-  const ballColor   = isUp ? 'rgb(var(--ecg-up))'    : 'rgb(var(--ecg-down))'
+  const ballColor = isUp ? 'var(--ecg-up)' : 'var(--ecg-down)'
+
+  // Drawdown severity
+  const ddSeverity = drawdownPct > 10 ? 'critical' : drawdownPct > 5 ? 'warning' : 'normal'
 
   return (
-    <div ref={containerRef} className="relative w-full" style={{ height: H }}>
+    <div
+      ref={containerRef}
+      className="relative w-full"
+      style={{
+        height: H,
+        // Ambient breathing glow around the entire ECG
+        boxShadow: ddSeverity === 'critical'
+          ? '0 0 30px rgba(var(--down), 0.15)'
+          : ddSeverity === 'warning'
+            ? '0 0 20px rgba(var(--warn), 0.08)'
+            : 'none',
+        transition: 'box-shadow 1s ease-in-out',
+      }}
+    >
       <svg width={W} height={H} className="overflow-visible" aria-label="損益ECG曲線">
         <defs>
-          {/* Up glow */}
           <filter id="ecg-glow-up" x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="4" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          {/* Down glow */}
           <filter id="ecg-glow-down" x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="4" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          {/* Ball glow */}
           <filter id="ball-glow" x="-100%" y="-100%" width="300%" height="300%">
             <feGaussianBlur stdDeviation="6" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          {/* Gradient for line glow */}
-          <linearGradient id="ecg-gradient-up" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(var(--up-glow))" />
-            <stop offset="100%" stopColor="rgba(var(--up-glow)) 0%" />
+          {/* Area gradient */}
+          <linearGradient id="ecg-area-up" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(var(--up))" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="rgb(var(--up))" stopOpacity="0.01" />
           </linearGradient>
-          <linearGradient id="ecg-gradient-down" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="rgba(var(--down-glow))" />
-            <stop offset="100%" stopColor="rgba(var(--down-glow)) 0%" />
+          <linearGradient id="ecg-area-down" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="rgb(var(--down))" stopOpacity="0.2" />
+            <stop offset="100%" stopColor="rgb(var(--down))" stopOpacity="0.01" />
           </linearGradient>
         </defs>
 
@@ -162,11 +206,11 @@ export default function PnLError({
               <line
                 x1={PADDING.left} y1={y}
                 x2={W - PADDING.right} y2={y}
-                stroke="rgba(var(--border), 0.35)"
-                strokeDasharray="3 5"
+                stroke="rgba(var(--border), 0.25)"
+                strokeDasharray="2 6"
               />
               <text
-                x={W - PADDING.right + 4} y={y + 4}
+                x={W - PADDING.right + 6} y={y + 4}
                 fontSize={10} fontFamily="var(--font-data)"
                 fill="rgb(var(--muted))"
               >
@@ -176,31 +220,34 @@ export default function PnLError({
           )
         })}
 
-        {/* ── Zero reference ────────────────────────────────────── */}
-        {minY < 0 && maxY > 0 && (() => {
-          const zeroY = PADDING.top + innerH - ((0 - minY) / (maxY - minY)) * innerH
-          return (
-            <line
-              x1={PADDING.left} y1={zeroY}
-              x2={W - PADDING.right} y2={zeroY}
-              stroke="rgba(var(--muted), 0.4)"
-              strokeDasharray="6 3"
-            />
-          )
-        })()}
-
         {/* ── Area fill ─────────────────────────────────────────── */}
         {data.length >= 2 && (
           <path
             d={`M ${PADDING.left} ${PADDING.top + innerH}
                 L ${points}
                 L ${lastX} ${PADDING.top + innerH} Z`}
-            fill={isUp ? 'rgba(var(--up-glow))' : 'rgba(var(--down-glow))'}
-            opacity={0.15}
+            fill={`url(#ecg-area-${isUp ? 'up' : 'down'})`}
           />
         )}
 
-        {/* ── Segmented polyline (up=neon-green / down=ember-red) ── */}
+        {/* ── Drawdown danger zone ─────────────────────────────── */}
+        {ddSeverity !== 'normal' && data.length >= 2 && (() => {
+          const prices = data.map(d => d.equity)
+          const peak = Math.max(...prices)
+          const thresholdY = PADDING.top + innerH - ((peak * 0.95 - (Math.min(...prices) - (Math.max(...prices) - Math.min(...prices)) * 0.15)) / ((Math.max(...prices) - Math.min(...prices)) * 1.3 || 1)) * innerH
+          return (
+            <rect
+              x={PADDING.left} y={Math.max(thresholdY, PADDING.top)}
+              width={innerW} height={innerH - Math.max(thresholdY - PADDING.top, 0)}
+              fill="rgba(var(--down), 0.04)"
+              stroke="rgba(var(--down), 0.15)"
+              strokeDasharray="8 4"
+              strokeWidth={0.5}
+            />
+          )
+        })()}
+
+        {/* ── Segmented polyline ──────────────────────────────── */}
         {segments.map((seg, si) => (
           <polyline
             key={si}
@@ -215,36 +262,27 @@ export default function PnLError({
           />
         ))}
 
-        {/* ── Start dot ────────────────────────────────────────── */}
-        {data.length >= 2 && (
-          <circle
-            cx={PADDING.left}
-            cy={lastY}
-            r={3}
-            fill="rgb(var(--border))"
-          />
-        )}
-
         {/* ── Right-edge pulsing ball ───────────────────────────── */}
         {data.length >= 2 && (
           <g>
-            {/* Ambient pulse rings */}
-            <circle
-              cx={lastX} cy={lastY}
-              r={12}
-              fill="none"
-              stroke={ballColor}
-              strokeWidth={1}
-              opacity={0.3}
+            {/* Outer pulse rings */}
+            <circle cx={lastX} cy={lastY} r={14}
+              fill="none" stroke={ballColor} strokeWidth={1} opacity={0.2}
               className="animate-ecg-pulse"
             />
-            {/* Core ball */}
-            <circle
-              cx={lastX} cy={lastY}
-              r={5}
-              fill={ballColor}
-              filter="url(#ball-glow)"
+            <circle cx={lastX} cy={lastY} r={8}
+              fill="none" stroke={ballColor} strokeWidth={1} opacity={0.4}
               className="animate-ecg-pulse"
+              style={{ animationDelay: '0.3s' }}
+            />
+            {/* Core ball */}
+            <circle cx={lastX} cy={lastY} r={4}
+              fill={ballColor} filter="url(#ball-glow)"
+            />
+            {/* Horizontal price line from ball to right edge */}
+            <line
+              x1={lastX} y1={lastY} x2={W - 4} y2={lastY}
+              stroke={ballColor} strokeWidth={0.8} strokeDasharray="3 3" opacity={0.4}
             />
           </g>
         )}
@@ -253,28 +291,46 @@ export default function PnLError({
       {/* ── Large floating P&L text ────────────────────────────── */}
       {dailyPnl != null && (
         <div
-          className={`pointer-events-none absolute right-16 top-2
+          className={`pointer-events-none absolute right-20 top-2
                       text-right font-mono font-bold tabular-nums
                       ${isUp ? 'text-[rgb(var(--up))]' : 'text-[rgb(var(--down))]'}
-                      ${animEntry ? 'animate-pnl-float' : 'opacity-90'}`}
-          style={{ fontSize: Math.min(28, W * 0.06) }}
+                      ${animEntry ? 'animate-pnl-float' : 'opacity-90'}
+                      ${glitching ? 'animate-chromatic-glitch' : ''}`}
+          style={{ fontSize: Math.min(32, W * 0.065) }}
           aria-label={`今日損益: ${formatPnl(dailyPnl)}`}
         >
-          <div className="text-[10px] uppercase tracking-widest text-[rgb(var(--muted))] mb-0.5">
-            日損益
+          <div className="text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))] mb-0.5 font-normal">
+            DAILY P&L
           </div>
-          <div className="drop-shadow-[0_0_8px_currentColor]">
+          <div style={{
+            filter: `drop-shadow(0 0 ${Math.abs(dailyPnl) > 10000 ? '12px' : '6px'} currentColor)`,
+          }}>
             {formatPnl(dailyPnl)}
           </div>
+        </div>
+      )}
+
+      {/* ── Drawdown warning badge ─────────────────────────────── */}
+      {ddSeverity !== 'normal' && (
+        <div className={`absolute left-3 top-2 flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-mono
+                        ${ddSeverity === 'critical'
+                          ? 'bg-rose-900/30 text-rose-300 border border-rose-700/40 animate-pulse'
+                          : 'bg-amber-900/20 text-amber-300 border border-amber-700/30'
+                        }`}>
+          DD {drawdownPct.toFixed(1)}%
         </div>
       )}
 
       {/* ── Empty state ─────────────────────────────────────────── */}
       {data.length < 2 && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--bg))]/80 px-4 py-2.5 text-center backdrop-blur-sm">
-            <div className="text-xs font-medium text-[rgb(var(--muted))]">
-              💡 首次平倉後將顯示損益曲線
+          <div className="border border-[rgb(var(--border))] bg-[rgb(var(--bg))]/80 px-4 py-2.5 text-center backdrop-blur-sm"
+               style={{ borderRadius: '2px' }}>
+            <div className="text-xs font-medium text-[rgb(var(--muted))] font-mono">
+              AWAITING FIRST TRADE CLOSE
+            </div>
+            <div className="text-[10px] text-[rgb(var(--muted))] opacity-60 mt-1">
+              首次平倉後將顯示損益曲線
             </div>
           </div>
         </div>

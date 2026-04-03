@@ -2,10 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Battle theme defaults (Variant A: War Terminal) ───────── */
+/* ── Battle theme defaults (Variant A: Brutalist Dark) ───────── */
 :root {
   color-scheme: dark;
-  --bg:            8 9 13;
+  --bg:            8 10 15;
   --text:          226 232 240;
   --surface:       15 23 42;
   --border:        51 65 85;
@@ -31,6 +31,10 @@
   --ecg-up:        #10b981;
   --ecg-down:      #e11d48;
   --ecg-ball:      #34d399;
+  --scanline:      0;
+  --noise:         0;
+  --ink-wash:      0;
+  --brutalist-cut: 1;
 }
 :root.light {
   color-scheme: light;
