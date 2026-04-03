@@ -14,7 +14,7 @@
  *   animate  -- trigger zap animation on new data
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 interface KBar {
   date: string
@@ -44,6 +44,7 @@ export default function KLineChart({
   height = 340,
   animate = false,
 }: Props) {
+  const chartId = React.useId?.() || useRef(Math.random().toString(36).slice(2, 8)).current
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(600)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
@@ -152,20 +153,20 @@ export default function KLineChart({
       >
         <defs>
           {/* Glow filters */}
-          <filter id="glow-up" x="-50%" y="-50%" width="200%" height="200%">
+          <filter id={`glow-up-${chartId}`} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="3" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="glow-down" x="-50%" y="-50%" width="200%" height="200%">
+          <filter id={`glow-down-${chartId}`} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur stdDeviation="2.5" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
           {/* Volume gradient */}
-          <linearGradient id="vol-up" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`vol-up-${chartId}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgb(var(--up))" stopOpacity="0.5" />
             <stop offset="100%" stopColor="rgb(var(--up))" stopOpacity="0.08" />
           </linearGradient>
-          <linearGradient id="vol-down" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={`vol-down-${chartId}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="rgb(var(--down))" stopOpacity="0.5" />
             <stop offset="100%" stopColor="rgb(var(--down))" stopOpacity="0.08" />
           </linearGradient>
@@ -184,7 +185,7 @@ export default function KLineChart({
               y={barY}
               width={candleW}
               height={barH}
-              fill={`url(#vol-${up ? 'up' : 'down'})`}
+              fill={`url(#vol-${up ? 'up' : 'down'}-${chartId})`}
               rx={1}
             />
           )
@@ -247,7 +248,7 @@ export default function KLineChart({
           const upColor   = 'rgb(var(--up))'
           const downColor = 'rgb(var(--down))'
           const color     = up ? upColor : downColor
-          const fid = `glow-${up ? 'up' : 'down'}`
+          const fid = `glow-${up ? 'up' : 'down'}-${chartId}`
 
           const isLast = i === data.length - 1
           const animClass = (animate && isLast && zapping) ? 'animate-kline-zap' : ''

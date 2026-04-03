@@ -82,12 +82,7 @@
 import { useEffect } from 'react'
 
 // ── Font URLs ─────────────────────────────────────────────────────────────────
-const FONT_URL = [
-  'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap',
-  'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap',
-  'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap',
-  'https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600;700&display=swap',
-].join('&family=JetBrains+Mono:wght@300;400;500;600;700&family=Fira+Code:wght@300;400;500;600;700&')
+const FONT_URL = 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;700&family=Fira+Code:wght@400;700&display=swap'
 
 // ── Variant token sets ────────────────────────────────────────────────────────
 export const VARIANTS = {
@@ -122,7 +117,7 @@ export const VARIANTS = {
     '--font-data':     '"Fira Code", "JetBrains Mono", monospace',
     '--ecg-up':        '#10b981',
     '--ecg-down':      '#e11d48',
-    '--ecg-ball':      '#34d399',
+    '--ecg-ball':      '52, 211, 153',
     '--scanline':      '0',
     '--noise':         '0',
     '--ink-wash':      '0',
@@ -160,7 +155,7 @@ export const VARIANTS = {
     '--font-data':     '"Fira Code", "JetBrains Mono", monospace',
     '--ecg-up':        '#34d399',
     '--ecg-down':      '#fbbf24',
-    '--ecg-ball':      '#6ee7b7',
+    '--ecg-ball':      '110, 231, 183',
     '--scanline':      '1',
     '--noise':         '1',
     '--ink-wash':      '0',
@@ -198,7 +193,7 @@ export const VARIANTS = {
     '--font-data':     '"Fira Code", "JetBrains Mono", monospace',
     '--ecg-up':        '#7ba05b',
     '--ecg-down':      '#b91c1c',
-    '--ecg-ball':      '#c4a24d',
+    '--ecg-ball':      '196, 162, 77',
     '--scanline':      '0',
     '--noise':         '0',
     '--ink-wash':      '1',
@@ -436,8 +431,6 @@ body {
 `
 
 // ── Component ────────────────────────────────────────────────────────────────
-let cssInjected = false
-
 export function useBattleTheme(variant: 'A' | 'B' | 'C' = 'A') {
   useEffect(() => {
     // Inject fonts
@@ -449,13 +442,12 @@ export function useBattleTheme(variant: 'A' | 'B' | 'C' = 'A') {
       document.head.appendChild(link)
     }
 
-    // Inject global keyframes + overlays (once)
-    if (!cssInjected) {
+    // Inject global keyframes + overlays (once, DOM-based check)
+    if (!document.getElementById('battle-global-css')) {
       const style = document.createElement('style')
       style.id = 'battle-global-css'
       style.textContent = GLOBAL_CSS
       document.head.appendChild(style)
-      cssInjected = true
     }
 
     // Apply variant CSS variables to :root

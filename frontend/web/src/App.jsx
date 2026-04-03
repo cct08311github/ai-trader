@@ -19,8 +19,8 @@ const SettingsPage   = React.lazy(() => import('./pages/Settings'))
 
 // Restore variant preference from sessionStorage
 const STORAGE_KEY = 'ai-trader-theme-variant'
-const savedVariant = sessionStorage.getItem(STORAGE_KEY) as 'A' | 'B' | 'C' | null
-const initialVariant = savedVariant ?? 'A'
+const savedVariant = sessionStorage.getItem(STORAGE_KEY)
+const initialVariant = ['A', 'B', 'C'].includes(savedVariant) ? savedVariant : 'A'
 
 function PageFallback() {
   return (
