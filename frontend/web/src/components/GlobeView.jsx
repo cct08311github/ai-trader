@@ -27,6 +27,11 @@ function getCategoryColor(category) {
   return CATEGORY_COLOR[category] ?? '#71717a'
 }
 
+// HTML escape to prevent XSS in globe tooltip template literals
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 // ── GlobeView ──────────────────────────────────────────────────────────────────
 
 function GlobeView({ events = [], selectedEvent, onSelectEvent }) {
@@ -153,9 +158,9 @@ function GlobeView({ events = [], selectedEvent, onSelectEvent }) {
         font-family: ui-sans-serif, system-ui, sans-serif;
         pointer-events: none;
       ">
-        <div style="font-weight: 600; margin-bottom: 4px; line-height: 1.3;">${ev.title ?? ''}</div>
-        <div style="color: ${point.color}; font-size: 11px;">
-          衝擊指數: ${ev.impact_score ?? '-'}
+        <div style="font-weight: 600; margin-bottom: 4px; line-height: 1.3;">${esc(ev.title)}</div>
+        <div style="color: ${esc(point.color)}; font-size: 11px;">
+          衝擊指數: ${esc(ev.impact_score ?? '-')}
         </div>
       </div>
     `
@@ -217,8 +222,8 @@ function GlobeView({ events = [], selectedEvent, onSelectEvent }) {
           width={undefined}
           height={360}
           backgroundColor="#060b18"
-          globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-          bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+          globeImageUrl="/assets/earth-night.jpg"
+          bumpImageUrl="/assets/earth-topology.png"
           atmosphereColor="#1e3a5f"
           atmosphereAltitude={0.15}
           pointsData={pointsData}

@@ -37,8 +37,7 @@ function isMobile() {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const GEO_URL =
-  'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+const GEO_URL = '/assets/countries-110m.json'
 
 const CATEGORY_CONFIG = {
   conflict:  { color: '#ef4444', label: '衝突',   dot: '#ef4444' },

@@ -251,22 +251,22 @@ def compute_aggregate_stats(research_conn: sqlite3.Connection) -> Dict:
     total_ret_20d: List[float] = []
 
     for row in rows:
-        rating   = row[0] or "?"
-        cnt      = row[1]
-        avg_ret  = round(row[2], 4) if row[2] is not None else None
-        avg_ret5 = round(row[4], 4) if row[4] is not None else None
-        avg_ret10 = round(row[3], 4) if row[3] is not None else None
-        wins     = row[5] or 0
-        win_rate = round(wins / cnt, 4) if cnt > 0 else 0.0
+        rating    = row["rating"] or "?"
+        cnt       = row["cnt"]
+        avg_ret   = round(row["avg_ret_20d"],  4) if row["avg_ret_20d"]  is not None else None
+        avg_ret5  = round(row["avg_ret_5d"],   4) if row["avg_ret_5d"]   is not None else None
+        avg_ret10 = round(row["avg_ret_10d"],  4) if row["avg_ret_10d"]  is not None else None
+        wins      = row["wins"] or 0
+        win_rate  = round(wins / cnt, 4) if cnt > 0 else 0.0
 
         by_rating[rating] = {
-            "count":            cnt,
-            "win_rate":         win_rate,
-            "avg_return_5d":    avg_ret5,
-            "avg_return_10d":   avg_ret10,
-            "avg_return_20d":   avg_ret,
-            "total_hit_target": row[6] or 0,
-            "total_hit_stoploss": row[7] or 0,
+            "count":              cnt,
+            "win_rate":           win_rate,
+            "avg_return_5d":      avg_ret5,
+            "avg_return_10d":     avg_ret10,
+            "avg_return_20d":     avg_ret,
+            "total_hit_target":   row["total_hits_target"]   or 0,
+            "total_hit_stoploss": row["total_hits_stoploss"] or 0,
         }
         total_cnt  += cnt
         total_wins += wins

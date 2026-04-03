@@ -166,6 +166,8 @@ _DDL_STATEMENTS = [
         unit            TEXT,                       -- 'percent', 'index', etc.
         source          TEXT    NOT NULL DEFAULT 'fred',  -- fred, dgbas, cbc, derived
         country         TEXT    NOT NULL DEFAULT 'US',    -- US, TW
+        indicator_name  TEXT,                       -- Human-readable display name
+        frequency       TEXT    NOT NULL DEFAULT 'monthly',  -- daily, weekly, monthly, quarterly
         created_at      INTEGER NOT NULL,           -- Unix timestamp
         UNIQUE (indicator_id, date)
     )
