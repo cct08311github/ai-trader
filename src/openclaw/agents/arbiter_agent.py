@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -14,6 +16,25 @@ from openclaw.agents.bull_agent import BullThesis
 from openclaw.agents.bear_agent import BearThesis
 
 log = logging.getLogger("arbiter_agent")
+
+_EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
+
+def _call_with_timeout(prompt: str, model: str, timeout_s: float = 30.0) -> dict:
+    """Wrap call_agent_llm with a hard timeout via ThreadPoolExecutor."""
+    future = _EXECUTOR.submit(call_agent_llm, prompt, model=model)
+    try:
+        return future.result(timeout=timeout_s)
+    except FuturesTimeout:
+        log.warning("[ArbiterAgent] LLM call timed out after %.1fs", timeout_s)
+        return {"_error": "LLM call timed out", "confidence": 0.0}
+
+
+def _sanitize_for_prompt(text: str, max_len: int = 500) -> str:
+    """Strip control characters and truncate text to prevent prompt injection."""
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(text))
+    return cleaned[:max_len]
+
 
 _ARBITER_SYSTEM_PROMPT = """\
 你是 AI Hedge Fund 的 Arbiter委員（Committee Chair）。
@@ -28,15 +49,21 @@ _ARBITER_SYSTEM_PROMPT = """\
 4. 平手處理：Bull/Bear 勢均力敵時，預設 HOLD
 
 ## Bull委員論點
+<user_data>
 {bull_thesis}
+</user_data>
 （信心度：{bull_confidence}）
 
 ## Bear委員論點
+<user_data>
 {bear_thesis}
+</user_data>
 （信心度：{bear_confidence}）
 
 ## 技術信號摘要
+<user_data>
 {signal_summary}
+</user_data>
 
 ## 任務
 綜合雙方意見，給出最終建議。
@@ -84,11 +111,13 @@ class ArbiterAgent:
     ) -> str:
         return _ARBITER_SYSTEM_PROMPT.format(
             symbol=symbol,
-            bull_thesis=bull.thesis,
+            bull_thesis=_sanitize_for_prompt(bull.thesis),
             bull_confidence=bull.confidence,
-            bear_thesis=bear.thesis,
+            bear_thesis=_sanitize_for_prompt(bear.thesis),
             bear_confidence=bear.confidence,
-            signal_summary=signal_summary or "（無額外信號摘要）",
+            signal_summary=_sanitize_for_prompt(
+                signal_summary or "（無額外信號摘要）",
+            ),
         )
 
     def parse_response(self, raw: Dict[str, Any], symbol: str) -> ArbiterDecision:
@@ -116,7 +145,7 @@ class ArbiterAgent:
         symbol = bull.symbol
         signal_summary = json.dumps(signals, ensure_ascii=False, default=str)[:500]
         prompt = self.build_prompt(symbol, bull, bear, signal_summary)
-        raw = call_agent_llm(prompt, model=self.model)
+        raw = _call_with_timeout(prompt, model=self.model, timeout_s=self.timeout_s)
 
         if raw.get("_error"):
             log.warning("[ArbiterAgent] LLM error for %s: %s", symbol, raw["_error"])

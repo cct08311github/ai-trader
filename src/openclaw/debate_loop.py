@@ -6,13 +6,14 @@ Bull -> Bear -> Arbiter -> Risk Check -> Shadow Decision
 安全約束：
 - 只寫 shadow_decisions，不下真實訂單
 - Risk layer veto = skip，不拋例外
-- .EMERGENCY_STOP 檢查
+- .EMERGENCY_STOP 檢查（入口 + 每輪迭代）
 - LLM timeout 30s，失敗回傳 confidence=0 / action=observe
 """
 from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import time
 import uuid
@@ -29,6 +30,12 @@ from openclaw.path_utils import get_repo_root
 log = logging.getLogger("debate_loop")
 
 _REPO_ROOT = get_repo_root()
+
+
+def _sanitize_for_prompt(text: str, max_len: int = 500) -> str:
+    """Strip control characters and truncate text to prevent prompt injection."""
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(text))
+    return cleaned[:max_len]
 
 
 @dataclass
@@ -112,9 +119,9 @@ def _get_signals(conn: sqlite3.Connection, symbol: str) -> Dict[str, Any]:
         log.debug("[debate_loop] EOD fetch error for %s: %s", symbol, e)
 
     try:
-        # Institution flows
+        # Institution flows — columns match actual DB schema
         fi_rows = conn.execute(
-            """SELECT trade_date, foreign_buy, foreign_sell, net_buy
+            """SELECT trade_date, foreign_net, trust_net, dealer_net, total_net
                FROM eod_institution_flows
                WHERE symbol = ?
                ORDER BY trade_date DESC LIMIT 5""",
@@ -240,6 +247,8 @@ def run_debate_loop(
     """Execute the full multi-agent debate loop for all watchlist symbols.
 
     Returns list of DebateRecord for downstream reporting.
+    The returned list includes VETOED records (recommendation="VETOED") for
+    audit trail purposes; only risk-passed records are persisted to DB.
     """
     from datetime import datetime, timezone, timedelta
 
@@ -271,6 +280,11 @@ def run_debate_loop(
         debates: List[DebateRecord] = []
 
         for symbol in _watchlist:
+            # Check EMERGENCY_STOP at each iteration
+            if _check_emergency_stop():
+                log.warning("EMERGENCY_STOP detected mid-loop, aborting")
+                break
+
             t0 = time.time()
             debate_id = str(uuid.uuid4())
 
@@ -284,7 +298,8 @@ def run_debate_loop(
                     _conn,
                     agent="debate_bull",
                     prompt=f"[Bull] {symbol}",
-                    result={"summary": bull.thesis, "confidence": bull.confidence,
+                    result={"summary": _sanitize_for_prompt(bull.thesis),
+                            "confidence": bull.confidence,
                             "action_type": "observe", "_model": bull_agent.model},
                 )
 
@@ -294,7 +309,8 @@ def run_debate_loop(
                     _conn,
                     agent="debate_bear",
                     prompt=f"[Bear] {symbol}",
-                    result={"summary": bear.thesis, "confidence": bear.confidence,
+                    result={"summary": _sanitize_for_prompt(bear.thesis),
+                            "confidence": bear.confidence,
                             "action_type": "observe", "_model": bear_agent.model},
                 )
 
@@ -304,7 +320,8 @@ def run_debate_loop(
                     _conn,
                     agent="debate_arbiter",
                     prompt=f"[Arbiter] {symbol}",
-                    result={"summary": decision.rationale, "confidence": decision.confidence,
+                    result={"summary": _sanitize_for_prompt(decision.rationale),
+                            "confidence": decision.confidence,
                             "action_type": "suggest", "_model": arbiter.model},
                 )
 

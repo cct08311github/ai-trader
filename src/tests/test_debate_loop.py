@@ -50,8 +50,14 @@ def mem_db():
             low REAL, close REAL, volume INTEGER, change REAL
         );
         CREATE TABLE eod_institution_flows (
-            trade_date TEXT, symbol TEXT, foreign_buy REAL,
-            foreign_sell REAL, net_buy REAL
+            trade_date TEXT NOT NULL,
+            symbol TEXT NOT NULL,
+            name TEXT,
+            foreign_net REAL,
+            trust_net REAL,
+            dealer_net REAL,
+            total_net REAL,
+            PRIMARY KEY (trade_date, symbol)
         );
     """)
     _ensure_debate_records_table(conn)
@@ -311,6 +317,34 @@ class TestDebateLoopIntegration:
         # Vetoed records should NOT be in DB
         row = mem_db.execute("SELECT COUNT(*) FROM debate_records").fetchone()
         assert row[0] == 0
+
+    @patch("openclaw.agents.arbiter_agent.call_agent_llm")
+    @patch("openclaw.agents.bear_agent.call_agent_llm")
+    @patch("openclaw.agents.bull_agent.call_agent_llm")
+    def test_emergency_stop_mid_loop(self, mock_bull, mock_bear, mock_arbiter, mem_db):
+        """EMERGENCY_STOP detected mid-loop aborts remaining symbols."""
+        mock_bull.return_value = {
+            "thesis": "bullish", "confidence": 0.7,
+            "entry_price": 580, "target_price": 620, "catalysts": [],
+        }
+        mock_bear.return_value = {
+            "thesis": "bearish", "confidence": 0.5,
+            "risks": [], "stop_loss": 550,
+        }
+        mock_arbiter.return_value = {
+            "recommendation": "HOLD", "confidence": 0.5,
+            "rationale": "hold", "bull_score": 50, "bear_score": 50,
+        }
+
+        # First call returns False (entry check), second False (loop iter 1), third True (loop iter 2)
+        with patch("openclaw.debate_loop._check_emergency_stop", side_effect=[False, False, True]):
+            debates = run_debate_loop(
+                conn=mem_db, watchlist=["2330", "2317", "2454"],
+                debate_date="2026-04-01",
+            )
+        # Should complete first symbol, then stop before second
+        assert len(debates) == 1
+        assert debates[0].symbol == "2330"
 
 
 # ── Formatter tests ──────────────────────────────────────────────────────────
