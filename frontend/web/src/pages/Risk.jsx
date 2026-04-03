@@ -333,14 +333,13 @@ export default function Risk() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     setLoading(true)
     setError(null)
-    const ctrl = new AbortController()
     try {
       const [snap, st] = await Promise.all([
-        fetchRiskSnapshot(ctrl.signal),
-        fetchStressTest(ctrl.signal),
+        fetchRiskSnapshot(signal),
+        fetchStressTest(signal),
       ])
       setSnapshot(snap)
       setStress(st)
@@ -349,11 +348,12 @@ export default function Risk() {
     } finally {
       setLoading(false)
     }
-    return () => ctrl.abort()
   }, [])
 
   useEffect(() => {
-    load()
+    const ctrl = new AbortController()
+    load(ctrl.signal)
+    return () => ctrl.abort()
   }, [load])
 
   // ── Derived data ─────────────────────────────────────────────────────────
@@ -548,7 +548,7 @@ export default function Risk() {
         >
           快取 5 分鐘 ·{' '}
           <button
-            onClick={load}
+            onClick={() => load(undefined)}
             className="underline hover:opacity-70 transition-opacity"
             style={{ color: 'rgb(var(--accent))' }}
           >

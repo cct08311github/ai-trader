@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from enum import Enum
 from typing import Any, Callable
@@ -48,6 +49,7 @@ class CircuitBreaker:
         self._state: CircuitState = CircuitState.CLOSED
         self._failure_count: int = 0
         self._opened_at: float | None = None
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public interface
@@ -55,8 +57,9 @@ class CircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
-        self._evaluate_timeout()
-        return self._state
+        with self._lock:
+            self._evaluate_timeout()
+            return self._state
 
     def call(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
         """Execute *func* through the circuit breaker.
@@ -65,15 +68,19 @@ class CircuitBreaker:
             CircuitBreakerError: When the circuit is OPEN.
             Exception: Any exception raised by *func* itself (also recorded as failure).
         """
-        self._evaluate_timeout()
+        with self._lock:
+            self._evaluate_timeout()
+            current_state = self._state
 
-        if self._state == CircuitState.OPEN:
+        if current_state == CircuitState.OPEN:
+            with self._lock:
+                secs = self._seconds_until_probe()
             raise CircuitBreakerError(
                 f"[{self.name}] Circuit is OPEN — call rejected. "
-                f"Retry after {self._seconds_until_probe():.0f}s."
+                f"Retry after {secs:.0f}s."
             )
 
-        if self._state == CircuitState.HALF_OPEN:
+        if current_state == CircuitState.HALF_OPEN:
             return self._probe(func, *args, **kwargs)
 
         # CLOSED — normal execution.
@@ -81,9 +88,10 @@ class CircuitBreaker:
 
     def reset(self) -> None:
         """Manually reset the circuit to CLOSED."""
-        self._state = CircuitState.CLOSED
-        self._failure_count = 0
-        self._opened_at = None
+        with self._lock:
+            self._state = CircuitState.CLOSED
+            self._failure_count = 0
+            self._opened_at = None
         logger.info("[%s] Circuit manually reset to CLOSED.", self.name)
 
     # ------------------------------------------------------------------
@@ -125,29 +133,34 @@ class CircuitBreaker:
             raise
 
     def _on_success(self) -> None:
-        if self._failure_count:
-            logger.debug("[%s] Success; failure counter reset.", self.name)
-        self._failure_count = 0
+        with self._lock:
+            if self._failure_count:
+                logger.debug("[%s] Success; failure counter reset.", self.name)
+            self._failure_count = 0
 
     def _on_failure(self, exc: Exception) -> None:
-        self._failure_count += 1
+        with self._lock:
+            self._failure_count += 1
+            count = self._failure_count
+            threshold = self.failure_threshold
         logger.warning(
             "[%s] Failure %d/%d: %s",
             self.name,
-            self._failure_count,
-            self.failure_threshold,
-            exc,
+            count,
+            threshold,
         )
-        if self._failure_count >= self.failure_threshold:
+        if count >= threshold:
             self._trip()
 
     def _trip(self) -> None:
-        self._state = CircuitState.OPEN
-        self._opened_at = time.monotonic()
+        with self._lock:
+            self._state = CircuitState.OPEN
+            self._opened_at = time.monotonic()
+            count = self._failure_count
         logger.error(
             "[%s] Circuit OPEN after %d consecutive failures. Will probe in %ds.",
             self.name,
-            self._failure_count,
+            count,
             self.reset_timeout,
         )
 

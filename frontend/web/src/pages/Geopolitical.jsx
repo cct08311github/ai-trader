@@ -20,7 +20,7 @@ import {
 import { DataCard } from '../components/ui/DataCard'
 import { SentimentIndicator } from '../components/ui/SentimentIndicator'
 import { AlertBadge } from '../components/ui/AlertBadge'
-import { getApiBase } from '../lib/auth'
+import { authFetch, getApiBase } from '../lib/auth'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ const ALL_CATEGORIES = ['conflict', 'trade_war', 'sanctions', 'policy', 'electio
 
 async function fetchLatest() {
   const base = getApiBase()
-  const res = await fetch(`${base}/api/geopolitical/latest`)
+  const res = await authFetch(`${base}/api/geopolitical/latest`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
   if (!json.ok) throw new Error('API returned ok=false')
@@ -49,6 +49,11 @@ async function fetchLatest() {
 }
 
 // ── Utility helpers ───────────────────────────────────────────────────────────
+
+/** Validate external URL — only allow http/https to prevent javascript: XSS */
+function safeHref(url) {
+  return typeof url === 'string' && url.startsWith('http') ? url : '#'
+}
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -73,15 +78,40 @@ function impactColor(score) {
   return '#eab308'
 }
 
-/** Derive market impact summary cards from top events */
+/** Derive market impact summary cards from top events.
+ *  Handles both legacy {sector: number} and structured
+ *  {sectors: [...], assets: [...], direction: "...", note: "..."} formats.
+ */
 function buildMarketImpact(events) {
   const impacts = []
-  for (const ev of events.slice(0, 10)) {
-    const mi = ev.market_impact
-    if (!mi || typeof mi !== 'object') continue
-    Object.entries(mi).forEach(([sector, val]) => {
-      impacts.push({ sector, val, category: ev.category })
-    })
+  for (const ev of events.slice(0, 5)) {
+    let mi = ev.market_impact
+    if (!mi) continue
+    // Parse if stored as JSON string
+    if (typeof mi === 'string') {
+      try { mi = JSON.parse(mi) } catch { continue }
+    }
+    if (typeof mi !== 'object') continue
+
+    // Structured backend format: { sectors: [...], direction: "bullish"|"bearish"|"neutral", ... }
+    if (Array.isArray(mi.sectors)) {
+      mi.sectors.forEach(s => {
+        impacts.push({
+          sector: s,
+          val: mi.direction === 'bearish' ? -1 : 1,
+          category: ev.category,
+          direction: mi.direction || 'neutral',
+          score: ev.impact_score,
+        })
+      })
+    } else {
+      // Legacy format: { sector: number, ... }
+      Object.entries(mi).forEach(([sector, val]) => {
+        if (typeof val === 'number') {
+          impacts.push({ sector, val, category: ev.category })
+        }
+      })
+    }
   }
   return impacts.slice(0, 6)
 }
@@ -220,7 +250,7 @@ function NewsFeedItem({ event, isSelected, onClick }) {
           {links.map((link, i) => (
             <a
               key={i}
-              href={link}
+              href={safeHref(link)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs underline"
@@ -261,7 +291,7 @@ function MarketImpactStrip({ events }) {
       <div className="flex flex-wrap gap-2">
         {impacts.map((item, i) => {
           const val = parseFloat(item.val)
-          const isPositive = val >= 0
+          const isPositive = !isNaN(val) ? val >= 0 : item.direction !== 'bearish'
           const color = isPositive ? 'rgb(var(--up))' : 'rgb(var(--danger))'
           return (
             <div
@@ -279,7 +309,7 @@ function MarketImpactStrip({ events }) {
               <span>最受影響板塊: {item.sector}</span>
               <span style={{ color, fontFamily: 'var(--font-mono)' }}>
                 {isPositive ? '▲' : '▼'}
-                {Math.abs(val).toFixed(1)}%
+                {!isNaN(val) ? `${Math.abs(val).toFixed(1)}%` : (item.direction || '')}
               </span>
             </div>
           )
@@ -761,7 +791,7 @@ export default function Geopolitical() {
                   {links.map((link, i) => (
                     <a
                       key={i}
-                      href={link}
+                      href={safeHref(link)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs underline"

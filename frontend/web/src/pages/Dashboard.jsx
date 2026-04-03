@@ -345,7 +345,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {redAlerts.map((a, i) => (
               <AlertBadge
-                key={`red-${i}`}
+                key={a.id || a.symbol || `red-${i}`}
                 level="red"
                 message={a.message}
                 actionLabel={a.action_label}
@@ -354,7 +354,7 @@ export default function DashboardPage() {
             ))}
             {yellowAlerts.map((a, i) => (
               <AlertBadge
-                key={`yellow-${i}`}
+                key={a.id || a.symbol || `yellow-${i}`}
                 level="yellow"
                 message={a.message}
                 actionLabel={a.action_label}

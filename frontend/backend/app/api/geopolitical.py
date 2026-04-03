@@ -19,23 +19,17 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 import app.db as db
+from app.core.cache import cached
 from app.db.research_db import get_research_conn
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/geopolitical", tags=["geopolitical"])
-
-# ── Cache for /latest ─────────────────────────────────────────────────────────
-
-_LATEST_CACHE: Optional[Dict[str, Any]] = None
-_LATEST_CACHE_TS: float = 0.0
-_LATEST_CACHE_TTL: float = 900.0  # 15 minutes
 
 
 # ── Dependency: research.db connection ───────────────────────────────────────
@@ -169,37 +163,35 @@ def list_events(
     }
 
 
-@router.get("/latest")
-def get_latest(
-    conn: sqlite3.Connection = Depends(research_conn_dep),
-) -> Dict[str, Any]:
-    """Return the latest 20 geopolitical events (cached for 900 s).
+@cached(ttl=900, maxsize=4)
+def _latest_events_cached() -> Dict[str, Any]:
+    """Fetch latest 20 geopolitical events — cacheable helper (TTL 900 s).
 
-    Response envelope: {"ok": true, "cached": <bool>, "data": [<event>, ...]}
+    Uses its own short-lived connection so it can be safely cached without
+    holding a DB connection across the TTL window.  Thread-safe via the
+    Lock inside @cached.
     """
-    global _LATEST_CACHE, _LATEST_CACHE_TS
-
-    now = time.monotonic()
-    if _LATEST_CACHE is not None and (now - _LATEST_CACHE_TS) < _LATEST_CACHE_TTL:
-        return {**_LATEST_CACHE, "cached": True}
-
     try:
-        rows = conn.execute(
-            "SELECT * FROM geopolitical_events ORDER BY event_date DESC, id DESC LIMIT 20"
-        ).fetchall()
+        with get_research_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM geopolitical_events ORDER BY event_date DESC, id DESC LIMIT 20"
+            ).fetchall()
     except sqlite3.OperationalError as e:
         raise HTTPException(status_code=503, detail=f"Query error: {e}")
 
-    result = {
+    return {
         "ok": True,
-        "cached": False,
         "data": [_row_to_event(r) for r in rows],
     }
 
-    _LATEST_CACHE = result
-    _LATEST_CACHE_TS = now
 
-    return result
+@router.get("/latest")
+def get_latest() -> Dict[str, Any]:
+    """Return the latest 20 geopolitical events (cached for 900 s).
+
+    Response envelope: {"ok": true, "data": [<event>, ...]}
+    """
+    return _latest_events_cached()
 
 
 @router.get("/triggers")

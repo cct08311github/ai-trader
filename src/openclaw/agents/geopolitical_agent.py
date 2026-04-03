@@ -26,6 +26,25 @@ from typing import Any, Dict, List, Optional
 from openclaw.agents.base import AgentResult, call_agent_llm, write_trace
 from openclaw.path_utils import get_repo_root
 
+# ── LLM output sanitiser ─────────────────────────────────────────────────────
+
+import re as _re
+
+
+def _sanitize(text: object, max_len: int = 500) -> str:
+    """Strip control characters and truncate LLM-generated text before DB storage.
+
+    Removes ASCII control characters (except TAB/LF/CR) that could cause
+    encoding issues or inject unexpected data into downstream systems.
+    Applied to every title, summary, and source_url field from LLM output.
+    """
+    if not text:
+        return ""
+    text = str(text)
+    # Strip non-printable control chars (keep \t \n \r)
+    text = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    return text[:max_len].strip()
+
 log = logging.getLogger(__name__)
 
 _REPO_ROOT = get_repo_root()
@@ -176,6 +195,10 @@ def _is_duplicate(conn: sqlite3.Connection, url: str, title: str) -> bool:
             return True
     if title:
         h = _title_hash(title)
+        # NOTE: When an event has no URL, _store_events stores _title_hash(title)
+        # in the url_hash column as a fallback dedup key.  Therefore querying
+        # url_hash here is intentional — both URL-based and title-based hashes
+        # share the same column by design.
         row = conn.execute(
             "SELECT 1 FROM geopolitical_events WHERE url_hash = ? LIMIT 1", (h,)
         ).fetchone()
@@ -305,8 +328,10 @@ def _store_events(
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
     for ev in events:
-        url = ev.get("source_url", "") or ""
-        title = ev.get("title", "") or ""
+        # Sanitize all LLM-generated text fields before any DB interaction
+        url = _sanitize(ev.get("source_url", "") or "", max_len=2048)
+        title = _sanitize(ev.get("title", "") or "", max_len=500)
+        summary = _sanitize(ev.get("summary", "") or "", max_len=2000)
 
         if not title:
             continue
@@ -351,7 +376,7 @@ def _store_events(
                 (
                     event_date,
                     title,
-                    ev.get("summary", ""),
+                    summary,
                     region,
                     severity,
                     tags_json,

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useQuery } from '@tanstack/react-query'
 import { DataCard } from '../components/ui/DataCard'
+import { authFetch, getApiBase } from '../lib/auth'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,20 +28,20 @@ const SENTIMENT_COLORS = {
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 async function fetchReportList(type, page = 1, perPage = 20) {
-  const url = `/api/research-reports/list?type=${type}&page=${page}&per_page=${perPage}`
-  const res = await fetch(url)
+  const url = `${getApiBase()}/api/research-reports/list?type=${type}&page=${page}&per_page=${perPage}`
+  const res = await authFetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
 async function fetchReportDetail(id) {
-  const res = await fetch(`/api/research-reports/${id}`)
+  const res = await authFetch(`${getApiBase()}/api/research-reports/${id}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
 async function triggerGenerate(type) {
-  const res = await fetch(`/api/research-reports/generate?type=${type}`, { method: 'POST' })
+  const res = await authFetch(`${getApiBase()}/api/research-reports/generate?type=${type}`, { method: 'POST' })
   if (!res.ok && res.status !== 202) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
@@ -255,11 +256,14 @@ function MarkdownBody({ body }) {
           hr: () => (
             <hr style={{ border: 'none', borderTop: '1px solid rgb(var(--border))', margin: '0.8rem 0' }} />
           ),
-          a: ({ href, children }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'rgb(var(--accent))', textDecoration: 'underline' }}>
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => {
+            const safe = href?.startsWith('http') ? href : '#'
+            return (
+              <a href={safe} target="_blank" rel="noopener noreferrer" style={{ color: 'rgb(var(--accent))', textDecoration: 'underline' }}>
+                {children}
+              </a>
+            )
+          },
         }}
       >
         {body}
