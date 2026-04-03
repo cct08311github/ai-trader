@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -88,9 +88,57 @@ function FilterBtn({ active, onClick, children }) {
   )
 }
 
+function CanvasScatter({ data, width, height }) {
+  const canvasRef = useRef(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !data.length) return
+    const ctx = canvas.getContext('2d')
+    const xMin = Math.min(...data.map(d => d.rsi14 || 0))
+    const xMax = Math.max(...data.map(d => d.rsi14 || 100))
+    const yMin = Math.min(...data.map(d => d.volume_ratio || 0))
+    const yMax = Math.max(...data.map(d => d.volume_ratio || 10))
+
+    ctx.clearRect(0, 0, width, height)
+    // Draw axes
+    ctx.strokeStyle = 'rgba(120,120,120,0.3)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(40, 0)
+    ctx.lineTo(40, height - 20)
+    ctx.lineTo(width, height - 20)
+    ctx.stroke()
+
+    // Draw points
+    data.forEach(d => {
+      const xRange = xMax - xMin || 1
+      const yRange = yMax - yMin || 1
+      const x = 40 + ((( d.rsi14 || 0) - xMin) / xRange) * (width - 50)
+      const y = (height - 20) - (((d.volume_ratio || 0) - yMin) / yRange) * (height - 30)
+      const r = Math.max(3, Math.min(8, (d.score || 50) / 15))
+      ctx.fillStyle = (d.change_5d || 0) >= 0
+        ? 'rgba(34,197,94,0.7)'
+        : 'rgba(239,68,68,0.7)'
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }, [data, width, height])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      style={{ width: '100%', display: 'block' }}
+    />
+  )
+}
+
 export default function Screener() {
   const navigate = useNavigate()
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [canvasMode, setCanvasMode] = useState(false)
 
   const { data: rawData, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['screener', 'scatter'],
@@ -211,14 +259,48 @@ export default function Screener() {
           title="散佈圖 — RSI14 vs 量比（點大小 = 評分）"
           loading={loading}
           error={error}
-          empty={!loading && !error && displayData.length === 0 ? '無符合條件的標的' : undefined}
+          empty={!loading && !error && filtered.length === 0 ? '無符合條件的標的' : undefined}
         >
-          {truncated && (
-            <div className="text-xs text-th-muted mb-2" style={{ fontFamily: 'var(--font-ui)' }}>
-              顯示前 {MAX_SCATTER_POINTS} 筆（共 {filtered.length} 筆）
+          {/* Toggle bar: show when data exceeds MAX_SCATTER_POINTS */}
+          {!loading && !error && filtered.length > 0 && (
+            <div className="flex items-center gap-2 mb-2">
+              {truncated && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setCanvasMode(false)}
+                    className={[
+                      'px-2 py-0.5 text-xs rounded-sm border transition-colors',
+                      !canvasMode
+                        ? 'border-th-accent bg-th-accent/10 text-th-accent'
+                        : 'border-th-border text-th-muted hover:border-th-accent/50',
+                    ].join(' ')}
+                    style={{ fontFamily: 'var(--font-ui)' }}
+                  >
+                    Recharts (前{MAX_SCATTER_POINTS})
+                  </button>
+                  <button
+                    onClick={() => setCanvasMode(true)}
+                    className={[
+                      'px-2 py-0.5 text-xs rounded-sm border transition-colors',
+                      canvasMode
+                        ? 'border-th-accent bg-th-accent/10 text-th-accent'
+                        : 'border-th-border text-th-muted hover:border-th-accent/50',
+                    ].join(' ')}
+                    style={{ fontFamily: 'var(--font-ui)' }}
+                  >
+                    Canvas (全部 {filtered.length})
+                  </button>
+                </div>
+              )}
+              {!truncated && (
+                <span className="text-xs text-th-muted" style={{ fontFamily: 'var(--font-ui)' }}>
+                  顯示全部 {filtered.length} 筆
+                </span>
+              )}
             </div>
           )}
-          {!loading && !error && displayData.length > 0 && (
+
+          {!loading && !error && filtered.length > 0 && !canvasMode && (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
@@ -265,6 +347,12 @@ export default function Screener() {
                   </Scatter>
                 </ScatterChart>
               </ResponsiveContainer>
+            </div>
+          )}
+
+          {!loading && !error && filtered.length > 0 && canvasMode && (
+            <div className="h-80">
+              <CanvasScatter data={filtered} width={800} height={320} />
             </div>
           )}
         </DataCard>
