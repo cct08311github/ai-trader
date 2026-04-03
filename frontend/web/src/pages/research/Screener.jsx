@@ -21,7 +21,7 @@ const COLOR_DOWN = 'rgb(var(--down, 239 68 68))'
 const COLOR_MUTED = 'rgb(var(--muted, 120 120 120))'
 const COLOR_ACCENT = 'rgb(var(--accent, 56 189 248))'
 
-const MAX_SCATTER_POINTS = 300
+const MAX_SCATTER_POINTS = 500
 
 const DEFAULT_FILTERS = {
   rsiMin: 0,
@@ -142,7 +142,7 @@ export default function Screener() {
 
   const { data: rawData, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['screener', 'scatter'],
-    queryFn: () => authFetch('/api/screener/scatter').then((r) => r.json()),
+    queryFn: () => authFetch(`${getApiBase()}/api/screener/scatter`).then((r) => r.json()),
     staleTime: 5 * 60 * 1000,
   })
 
