@@ -24,6 +24,7 @@ const ResearchLayout    = React.lazy(() => import('./layouts/ResearchLayout'))
 const ResearchDashboard = React.lazy(() => import('./pages/research/ResearchDashboard'))
 const StockResearch     = React.lazy(() => import('./pages/research/StockResearch'))
 const Screener          = React.lazy(() => import('./pages/research/Screener'))
+const SectorAnalysis    = React.lazy(() => import('./pages/research/SectorAnalysis'))
 const DashboardPage     = React.lazy(() => import('./pages/Dashboard'))
 const RiskPage          = React.lazy(() => import('./pages/Risk'))
 const GeopoliticalPage  = React.lazy(() => import('./pages/Geopolitical'))
@@ -163,6 +164,14 @@ export default function App() {
               element={
                 <Suspense fallback={<PageFallback />}>
                   <Screener />
+                </Suspense>
+              }
+            />
+            <Route
+              path="sector"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <SectorAnalysis />
                 </Suspense>
               }
             />

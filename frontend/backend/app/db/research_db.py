@@ -152,8 +152,45 @@ _DDL_STATEMENTS = [
     """,
 
     # ------------------------------------------------------------------
+    # sector_mapping: TWSE symbol -> sector classification (Module 2B).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS sector_mapping (
+        symbol      TEXT    PRIMARY KEY,
+        sector_code TEXT    NOT NULL,
+        sector_name TEXT    NOT NULL,
+        sub_sector  TEXT,
+        updated_at  INTEGER NOT NULL
+    )
+    """,
+
+    # ------------------------------------------------------------------
+    # sector_data: daily aggregated sector metrics (Module 2B).
+    # ------------------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS sector_data (
+        trade_date        TEXT    NOT NULL,
+        sector_code       TEXT    NOT NULL,
+        sector_name       TEXT    NOT NULL,
+        market_cap        REAL,
+        turnover          REAL,
+        change_pct        REAL,
+        fund_flow_net     REAL,
+        fund_flow_foreign REAL,
+        fund_flow_trust   REAL,
+        pe_ratio          REAL,
+        stock_count       INTEGER,
+        source            TEXT    NOT NULL DEFAULT 'twse',
+        created_at        INTEGER NOT NULL,
+        UNIQUE (trade_date, sector_code)
+    )
+    """,
+
+    # ------------------------------------------------------------------
     # Indices for common query patterns.
     # ------------------------------------------------------------------
+    "CREATE INDEX IF NOT EXISTS idx_sector_data_date      ON sector_data (trade_date DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_sector_mapping_code   ON sector_mapping (sector_code)",
     "CREATE INDEX IF NOT EXISTS idx_market_indices_date   ON market_indices (trade_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_indices_symbol ON market_indices (symbol)",
     "CREATE INDEX IF NOT EXISTS idx_geo_events_date       ON geopolitical_events (event_date DESC)",
