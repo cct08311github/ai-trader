@@ -1,6 +1,8 @@
 import React, { Suspense, useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { isAuthenticated } from './lib/auth'
+import { queryClient } from './lib/queryClient'
 import DashboardLayout from './layouts/DashboardLayout'
 import LoginPage from './pages/Login'
 
@@ -16,6 +18,16 @@ const SystemPage     = React.lazy(() => import('./pages/System'))
 const AgentsPage     = React.lazy(() => import('./pages/Agents'))
 const AnalysisPage   = React.lazy(() => import('./pages/Analysis'))
 const SettingsPage   = React.lazy(() => import('./pages/Settings'))
+
+// ── Research / new routes (lazy) ────────────────────────────────────────────
+const ResearchLayout    = React.lazy(() => import('./layouts/ResearchLayout'))
+const ResearchDashboard = React.lazy(() => import('./pages/research/ResearchDashboard'))
+const StockResearch     = React.lazy(() => import('./pages/research/StockResearch'))
+const Screener          = React.lazy(() => import('./pages/research/Screener'))
+const DashboardPage     = React.lazy(() => import('./pages/Dashboard'))
+const RiskPage          = React.lazy(() => import('./pages/Risk'))
+const GeopoliticalPage  = React.lazy(() => import('./pages/Geopolitical'))
+const ReportsPage       = React.lazy(() => import('./pages/Reports'))
 
 // Restore variant preference from sessionStorage
 const STORAGE_KEY = 'ai-trader-theme-variant'
@@ -47,7 +59,7 @@ function BattleLayout() {
 
 export default function App() {
   return (
-    <>
+    <QueryClientProvider client={queryClient}>
       {/* Inject Google Fonts + global keyframes once */}
       <BattleTheme />
 
@@ -120,6 +132,75 @@ export default function App() {
               </Suspense>
             }
           />
+
+          {/* Research nested routes */}
+          <Route
+            path="/research"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ResearchLayout />
+              </Suspense>
+            }
+          >
+            <Route
+              index
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <ResearchDashboard />
+                </Suspense>
+              }
+            />
+            <Route
+              path="stock"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <StockResearch />
+                </Suspense>
+              }
+            />
+            <Route
+              path="screener"
+              element={
+                <Suspense fallback={<PageFallback />}>
+                  <Screener />
+                </Suspense>
+              }
+            />
+          </Route>
+
+          {/* Top-level new routes */}
+          <Route
+            path="/dashboard"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <DashboardPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/risk"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <RiskPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/geopolitical"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <GeopoliticalPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ReportsPage />
+              </Suspense>
+            }
+          />
         </Route>
 
         {/* Catch-all */}
@@ -128,6 +209,6 @@ export default function App() {
           element={isAuthenticated() ? <Navigate to="/portfolio" replace /> : <Navigate to="/login" replace />}
         />
       </Routes>
-    </>
+    </QueryClientProvider>
   )
 }

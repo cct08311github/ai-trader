@@ -12,6 +12,8 @@
     "coverage": "vitest --config vitest.config.js run"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.96.1",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.263.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -33,6 +33,31 @@ module.exports = {
         mono: 'var(--font-mono)',
         data: 'var(--font-data)',
       },
+      spacing: {
+        '0.5': '2px',
+        '1':   '4px',
+        '2':   '8px',
+        '3':   '12px',
+        '4':   '16px',
+        '6':   '24px',
+        '8':   '32px',
+        '12':  '48px',
+      },
+      borderRadius: {
+        'none': '0',
+        'sm':   '2px',
+        'md':   '4px',
+        'lg':   '8px',
+      },
+      fontSize: {
+        'xs':   '10px',
+        'sm':   '12px',
+        'base': '14px',
+        'lg':   '16px',
+        'xl':   '20px',
+        '2xl':  '24px',
+        '3xl':  '32px',
+      },
     }
   },
   plugins: []
