@@ -7,6 +7,8 @@ import pytest
 
 from openclaw.agents.stock_research import (
     _ensure_table,
+    _sanitize_for_prompt,
+    _VALID_RATINGS,
     layer1_technical,
     layer2_institutional,
     layer3_llm_synthesis,
@@ -239,8 +241,8 @@ def test_layer3_llm_synthesis(mock_llm):
 def test_layer3_llm_synthesis_fallback(mock_llm):
     mock_llm.return_value = {"summary": "LLM error", "_error": "timeout"}
     result = layer3_llm_synthesis({}, {}, "TEST")
-    assert result["rating"] == "C"  # default fallback
-    assert result["confidence"] == 0.5
+    assert result["rating"] == "C"  # default fallback on error
+    assert result["confidence"] == 0.0  # safe default on LLM error
 
 
 # ── Tests: generate_report ───────────────────────────────────────────────────
@@ -390,3 +392,47 @@ def test_run_stock_research_a_rated_requires_human_approval(mock_wl, mock_llm, m
 
 def test_max_stocks_cap():
     assert _MAX_STOCKS_PER_DAY == 10
+
+# ── Tests: _sanitize_for_prompt ─────────────────────────────────────────────
+
+
+def test_sanitize_for_prompt_strips_control_chars():
+    dirty = "hello\x00world\x1ftest"
+    assert _sanitize_for_prompt(dirty) == "helloworldtest"
+
+
+def test_sanitize_for_prompt_truncates():
+    long_text = "a" * 500
+    assert len(_sanitize_for_prompt(long_text, max_len=100)) == 100
+
+
+def test_sanitize_for_prompt_non_string():
+    assert _sanitize_for_prompt(12345) == "12345"
+
+
+# ── Tests: _VALID_RATINGS ──────────────────────────────────────────────────
+
+
+def test_valid_ratings_whitelist():
+    assert _VALID_RATINGS == {"A", "B", "C", "D"}
+
+
+@patch("openclaw.agents.stock_research.call_agent_llm")
+def test_layer3_invalid_rating_defaults_to_c(mock_llm):
+    mock_llm.return_value = {
+        "rating": "S",  # invalid
+        "confidence": 0.9,
+        "rationale": "test",
+    }
+    result = layer3_llm_synthesis({}, {}, "TEST")
+    assert result["rating"] == "C"  # whitelist fallback
+
+
+@patch("openclaw.agents.stock_research.call_agent_llm")
+def test_layer3_llm_error_returns_safe_defaults(mock_llm):
+    mock_llm.return_value = {"_error": "rate_limit"}
+    result = layer3_llm_synthesis({}, {}, "TEST")
+    assert result["rating"] == "C"
+    assert result["confidence"] == 0.0
+    assert result["entry_price"] is None
+    assert "rate_limit" in result["rationale"]

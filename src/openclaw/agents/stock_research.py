@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import time
 import uuid
@@ -15,6 +16,20 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 log = logging.getLogger(__name__)
+
+_VALID_RATINGS = {"A", "B", "C", "D"}
+
+
+def _sanitize_for_prompt(text: str, max_len: int = 200) -> str:
+    """Strip control characters and truncate DB-sourced text for LLM prompts.
+
+    Prevents prompt injection from untrusted DB data fed into LLM prompts.
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    # Remove control characters (except common whitespace)
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", text)
+    return text[:max_len]
 
 from openclaw.agents.base import (
     AgentResult,
@@ -215,10 +230,14 @@ _LLM_PROMPT = """\
 你是 AI Trader 系統的個股研究分析師。請根據以下數據對 {symbol} 進行綜合評估。
 
 ## 技術面分析
+<data>
 {technical_json}
+</data>
 
 ## 籌碼面分析
+<data>
 {institutional_json}
+</data>
 
 ## 評估要求
 1. 綜合技術面與籌碼面，給出評級：
@@ -250,21 +269,46 @@ def layer3_llm_synthesis(
     symbol: str,
 ) -> Dict:
     """LLM-based synthesis of technical + institutional data."""
+    safe_symbol = _sanitize_for_prompt(symbol, max_len=20)
     prompt = _LLM_PROMPT.format(
-        symbol=symbol,
-        technical_json=json.dumps(technical, ensure_ascii=False, indent=2),
-        institutional_json=json.dumps(institutional, ensure_ascii=False, indent=2),
+        symbol=safe_symbol,
+        technical_json=_sanitize_for_prompt(
+            json.dumps(technical, ensure_ascii=False, indent=2), max_len=2000
+        ),
+        institutional_json=_sanitize_for_prompt(
+            json.dumps(institutional, ensure_ascii=False, indent=2), max_len=2000
+        ),
     )
 
     result = call_agent_llm(prompt, model=DEFAULT_MODEL)
 
+    # Check for LLM error — return safe defaults
+    if result.get("_error"):
+        log.warning(
+            "[stock_research] LLM error for %s: %s", symbol, result.get("_error")
+        )
+        return {
+            "rating": "C",
+            "entry_price": None,
+            "stop_loss": None,
+            "target_price": None,
+            "confidence": 0.0,
+            "rationale": f"LLM error: {result.get('_error', 'unknown')}",
+            "risk_notes": [],
+            "_raw": result,
+        }
+
+    # Validate rating against whitelist
+    raw_rating = result.get("rating", "C")
+    rating = raw_rating if raw_rating in _VALID_RATINGS else "C"
+
     # Ensure required fields with defaults
     return {
-        "rating": result.get("rating", "C"),
+        "rating": rating,
         "entry_price": result.get("entry_price"),
         "stop_loss": result.get("stop_loss"),
         "target_price": result.get("target_price"),
-        "confidence": float(result.get("confidence", 0.5)),
+        "confidence": float(result.get("confidence", 0.0)),
         "rationale": result.get("rationale", result.get("summary", "")),
         "risk_notes": result.get("risk_notes", []),
         "_raw": result,
@@ -328,12 +372,16 @@ def generate_report(symbol: str, layers_result: Dict) -> str:
 
 
 def _load_watchlist() -> List[str]:
-    """Load watchlist from config, capped at _MAX_STOCKS_PER_DAY."""
+    """Load watchlist from config, capped at _MAX_STOCKS_PER_DAY.
+
+    Uses ``manual_watchlist`` key exclusively (consistent with debate_loop).
+    """
     watchlist_path = _REPO_ROOT / "config" / "watchlist.json"
     if not watchlist_path.exists():
         return []
     wl = json.loads(watchlist_path.read_text())
-    symbols = wl.get("manual_watchlist", wl.get("universe", []))
+    # Use only manual_watchlist key for consistency with debate_loop
+    symbols = wl.get("manual_watchlist", [])
     return symbols[:_MAX_STOCKS_PER_DAY]
 
 
@@ -346,7 +394,7 @@ def run_stock_research(
 
     - Max 10 stocks per day (LLM cost control)
     - A/B rated stocks auto-create POSITION_REBALANCE proposal
-      (A-rated requires human approval)
+      (both A and B require human approval)
     """
     _db_path = db_path or str(_REPO_ROOT / "data" / "sqlite" / "trades.db")
     _conn = conn or open_conn(_db_path)
@@ -428,7 +476,7 @@ def run_stock_research(
                     prompt=f"[{symbol}] layer3_llm_synthesis",
                     result={
                         "summary": synthesis.get("rationale", ""),
-                        "confidence": synthesis.get("confidence", 0.5),
+                        "confidence": synthesis.get("confidence", 0.0),
                         "action_type": "suggest" if rating in ("A", "B") else "observe",
                     },
                 )
@@ -451,8 +499,8 @@ def run_stock_research(
                             ensure_ascii=False,
                         ),
                         supporting_evidence=synthesis.get("rationale", ""),
-                        confidence=synthesis.get("confidence", 0.5),
-                        requires_human_approval=1,  # A-rated still needs human approval
+                        confidence=synthesis.get("confidence", 0.0),
+                        requires_human_approval=1,  # Both A and B require human approval
                         proposal_type="POSITION_REBALANCE",
                     )
                     proposal_ids.append(pid)
@@ -465,7 +513,7 @@ def run_stock_research(
                     {
                         "symbol": symbol,
                         "rating": rating,
-                        "confidence": synthesis.get("confidence", 0.5),
+                        "confidence": synthesis.get("confidence", 0.0),
                         "entry_price": entry_price,
                         "stop_loss": stop_loss,
                         "target_price": target_price,
