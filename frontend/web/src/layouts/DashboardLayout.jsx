@@ -7,6 +7,7 @@ import Breadcrumbs from '../components/Breadcrumbs'
 import ThemeToggle from '../components/ThemeToggle'
 import VariantSwitcher from '../components/VariantSwitcher'
 import ChatButton from '../components/chat/ChatButton'
+import GlobalTicker from '../components/GlobalTicker'
 import { logout } from '../lib/auth'
 
 export default function DashboardLayout({ variantSwitcher }) {
@@ -106,6 +107,9 @@ export default function DashboardLayout({ variantSwitcher }) {
               </div>
             </div>
           </div>
+
+          {/* Global market index scrolling ticker bar */}
+          <GlobalTicker className="-mx-4 sm:-mx-6 mb-4 sm:mb-6" />
 
           <Outlet />
 
