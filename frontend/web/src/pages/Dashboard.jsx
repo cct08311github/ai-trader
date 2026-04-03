@@ -383,31 +383,32 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Alert Section (Priority 1) ────────────────────────────────────── */}
-      {(redAlerts.length > 0 || yellowAlerts.length > 0) && (
-        <section>
-          <SectionHeading>警報中心</SectionHeading>
-          <div className="space-y-2">
-            {redAlerts.map((a, i) => (
-              <AlertBadge
-                key={a.id || a.symbol || `red-${i}`}
-                level="red"
-                message={a.message}
-                actionLabel={a.action_label}
-                onAction={a.on_action}
-              />
-            ))}
-            {yellowAlerts.map((a, i) => (
-              <AlertBadge
-                key={a.id || a.symbol || `yellow-${i}`}
-                level="yellow"
-                message={a.message}
-                actionLabel={a.action_label}
-                onAction={a.on_action}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+      <section>
+        <SectionHeading>警報中心</SectionHeading>
+        <div className="space-y-2">
+          {redAlerts.map((a, i) => (
+            <AlertBadge
+              key={a.id || a.symbol || `red-${i}`}
+              level="red"
+              message={a.message}
+              actionLabel={a.action_label}
+              onAction={a.on_action}
+            />
+          ))}
+          {yellowAlerts.map((a, i) => (
+            <AlertBadge
+              key={a.id || a.symbol || `yellow-${i}`}
+              level="yellow"
+              message={a.message}
+              actionLabel={a.action_label}
+              onAction={a.on_action}
+            />
+          ))}
+          {redAlerts.length === 0 && yellowAlerts.length === 0 && (
+            <AlertBadge level="green" message="系統正常 — 無活躍警報" />
+          )}
+        </div>
+      </section>
 
       {/* ── Portfolio + Market — asymmetric grid (3:2) ────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
