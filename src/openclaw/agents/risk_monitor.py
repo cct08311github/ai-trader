@@ -422,6 +422,20 @@ def check_portfolio_risk(
     cash = snapshot["cash"]
     positions = snapshot["positions"]
 
+    # Skip risk checks if no portfolio data (system not initialized or no positions)
+    if nav <= 0 and not positions and cash <= 0:
+        log.info("[RiskMonitor] No portfolio data (NAV=0, no positions, cash=0). Skipping checks.")
+        return RiskMonitorReport(
+            checks=[],
+            worst_breach=SEVERITY_OK,
+            nav=0.0,
+            cash=0.0,
+            gross_exposure=0.0,
+            max_symbol_weight=0.0,
+            daily_pnl_pct=0.0,
+            drawdown_pct=0.0,
+        )
+
     checks = [
         _check_gross_exposure(conn, nav, positions, policy),
         _check_symbol_concentration(nav, positions, policy),

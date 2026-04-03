@@ -233,7 +233,7 @@ def notify_pending_proposals(conn: sqlite3.Connection) -> int:
         # URL 按鈕：點擊開瀏覽器呼叫 api 端點，不產生 callback_query
         # TODO(security): AUTH_TOKEN 直接嵌入 URL 查詢參數有洩露風險（瀏覽器歷史、日誌）。
         #   應改為 HMAC 簽名 token（含 proposal_id + 過期時間），需要較大架構變更。
-        base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader-api")
+        base = os.environ.get("AI_TRADER_API_URL", "https://mac-mini.tailde842d.ts.net/ai-trader")
         auth = os.environ.get("AUTH_TOKEN", "")
         buttons = [
             [
