@@ -128,8 +128,8 @@ async def run_orchestrator() -> None:
     from openclaw.agents.risk_monitor import run_risk_monitor
     from openclaw.agents.strategy_auto_optimizer import run_strategy_auto_optimizer
     from openclaw.agents.stock_research import run_stock_research
-
     from openclaw.competitor_monitor import run_competitor_monitor
+    from openclaw.debate_loop import run_debate_loop
 
     log.info("Agent Orchestrator started | DB=%s", DB_PATH)
 
@@ -161,7 +161,12 @@ async def run_orchestrator() -> None:
                     if _should_run_now("14:30", now_twn):
                         asyncio.create_task(_run_agent("PortfolioReviewAgent", run_portfolio_review))
 
-                    # 每交易日 18:00 TWN → 個股研究（market_data_fetcher 之後、eod_analysis 之前）
+                    # 每交易日 17:30 TWN → Multi-Agent Debate Loop
+                    if _should_run_now("17:30", now_twn):
+                        asyncio.create_task(
+                            _run_agent("DebateLoopAgent", run_debate_loop))
+
+                    # 每交易日 18:00 TWN → 個股研究
                     if _should_run_now("18:00", now_twn):
                         asyncio.create_task(_run_agent("StockResearchAgent", run_stock_research))
 
