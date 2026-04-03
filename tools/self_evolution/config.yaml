@@ -1,0 +1,9 @@
+claude_md_paths:
+  - ~/.claude/CLAUDE.md
+rules_dir: ~/.claude/rules
+memory_dirs:
+  - ~/.claude/projects/-Users-openclaw-workspace-claude-session/memory
+max_proposals: 3
+stale_memory_days: 30
+backup_before_changes: true
+backup_dir: ~/.claude/backups
