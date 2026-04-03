@@ -217,3 +217,13 @@ body {
 .light .bg-black\/60 {
   background-color: rgb(0 0 0 / 0.3) !important;
 }
+
+
+/* ── Accessibility: prefers-reduced-motion ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

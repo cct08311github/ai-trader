@@ -221,6 +221,12 @@ export default function GlobalTicker({ className = '', pauseOnHover = true }) {
             font-size: 10px;
           }
         }
+        /* Accessibility: respect user's reduced-motion preference */
+        @media (prefers-reduced-motion: reduce) {
+          .global-ticker__inner {
+            animation: none !important;
+          }
+        }
       `}</style>
 
       <div
