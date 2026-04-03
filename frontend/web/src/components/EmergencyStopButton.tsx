@@ -15,7 +15,7 @@
  * in a panic. Mobile: touch-hold works identically.
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertOctagon, Skull } from 'lucide-react'
 
 interface Props {
@@ -24,15 +24,28 @@ interface Props {
   label?: string
 }
 
+type Phase = 'idle' | 'arming' | 'detonating' | 'done' | 'error'
+
 export default function EmergencyStopButton({
   onTrigger,
   disabled = false,
   label = '緊急止損',
 }: Props) {
-  const [phase, setPhase] = useState<'idle' | 'arming' | 'detonating' | 'done'>('idle')
+  const [phase, setPhase] = useState<Phase>('idle')
   const [holdTime, setHoldTime] = useState(0)
   const holdInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const detonateTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
   const HOLD_DURATION = 1800
+
+  // C-4: Clear all timers on unmount
+  useEffect(() => {
+    return () => {
+      if (holdInterval.current) clearInterval(holdInterval.current)
+      if (detonateTimeoutRef.current) clearTimeout(detonateTimeoutRef.current)
+      if (resetTimeoutRef.current) clearTimeout(resetTimeoutRef.current)
+    }
+  }, [])
 
   function startHold() {
     if (disabled || phase !== 'idle') return
@@ -44,10 +57,16 @@ export default function EmergencyStopButton({
         if (next >= HOLD_DURATION) {
           clearInterval(holdInterval.current!)
           setPhase('detonating')
-          setTimeout(async () => {
-            try { await onTrigger() } catch (e) { console.error(e) }
-            setPhase('done')
-            setTimeout(() => setPhase('idle'), 1200)
+          detonateTimeoutRef.current = setTimeout(async () => {
+            try {
+              await onTrigger()
+              setPhase('done')
+              resetTimeoutRef.current = setTimeout(() => setPhase('idle'), 3000)
+            } catch (e) {
+              console.error('[EmergencyStop] FAILED:', e)
+              setPhase('error')
+              resetTimeoutRef.current = setTimeout(() => setPhase('idle'), 5000)
+            }
           }, 100)
           return next
         }
@@ -134,9 +153,15 @@ export default function EmergencyStopButton({
         onMouseLeave={cancelHold}
         onTouchStart={startHold}
         onTouchEnd={cancelHold}
-        disabled={disabled || phase === 'detonating' || phase === 'done'}
-        aria-label="緊急止損 -- 按住1.8秒觸發"
-        aria-pressed={phase !== 'idle'}
+        disabled={disabled || phase === 'detonating' || phase === 'done' || phase === 'error'}
+        role="button"
+        aria-label={
+          phase === 'arming' ? '緊急止損 — 持續按住中'
+          : phase === 'detonating' ? '緊急止損 — 執行中'
+          : phase === 'done' ? '緊急止損 — 已完成'
+          : phase === 'error' ? '緊急止損 — 執行失敗，請手動確認倉位'
+          : '緊急止損 — 按住1.8秒觸發'
+        }
         className={`
           relative flex items-center gap-2.5 px-6 py-3
           font-mono text-sm font-black tracking-widest uppercase select-none
@@ -145,23 +170,29 @@ export default function EmergencyStopButton({
             ? 'rounded-xl border border-slate-700 bg-slate-900/50 text-slate-600 cursor-not-allowed'
             : phase === 'done'
               ? 'rounded-xl border-2 border-emerald-500/50 bg-emerald-900/20 text-emerald-400'
-              : 'border-2 border-rose-700 bg-rose-950/60 text-rose-300 cursor-pointer'
+              : phase === 'error'
+                ? 'rounded-xl border-2 border-red-600 bg-red-900/40 text-red-200 cursor-pointer'
+                : 'border-2 border-rose-700 bg-rose-950/60 text-rose-300 cursor-pointer'
           }
         `}
         style={{
-          // Brutalist: no border-radius when not disabled/done
-          borderRadius: disabled || phase === 'done' ? '0.75rem' : '4px',
+          // Brutalist: no border-radius when not disabled/done/error
+          borderRadius: disabled || phase === 'done' || phase === 'error' ? '0.75rem' : '4px',
           // Progress bar fill
           background: disabled ? undefined
             : phase === 'done'
               ? 'rgba(16,185,129,0.1)'
-              : `linear-gradient(to right,
+              : phase === 'error'
+                ? 'rgba(220,38,38,0.15)'
+                : `linear-gradient(to right,
                   rgba(185,28,28,${isHolding ? 0.7 : 0.4}) ${holdPct}%,
                   rgba(13,13,13,0.8) ${holdPct}%)`,
           // Glow intensity scales with hold
           boxShadow: disabled ? 'none'
-            : phase === 'done'
-              ? '0 0 12px rgba(16,185,129,0.4)'
+            : phase === 'error'
+              ? '0 0 16px rgba(220,38,38,0.6)'
+              : phase === 'done'
+                ? '0 0 12px rgba(16,185,129,0.4)'
               : isHolding
                 ? `0 0 ${20 + holdPct * 0.3}px rgba(185,28,28,0.6),
                    0 0 ${40 + holdPct * 0.5}px rgba(185,28,28,0.3),
@@ -204,11 +235,13 @@ export default function EmergencyStopButton({
           }`}
         />
         <span className="relative whitespace-nowrap">
-          {phase === 'done'
-            ? '>>> 已觸發'
-            : phase === 'detonating'
-              ? '執行中...'
-              : label}
+          {phase === 'error'
+            ? '⚠️ 止損失敗 — 請手動確認倉位'
+            : phase === 'done'
+              ? '>>> 已觸發'
+              : phase === 'detonating'
+                ? '執行中...'
+                : label}
         </span>
         {!disabled && phase === 'idle' && (
           <span className="relative text-[9px] text-rose-500/50 ml-1 tracking-normal lowercase">

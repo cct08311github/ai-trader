@@ -74,7 +74,7 @@ export async function fetchPortfolioPositions({ signal } = {}) {
 
 export async function fetchPositionDetail(symbol) {
   const base = getApiBase()
-  const res = await authFetch(`${base}/api/portfolio/position-detail/${symbol}`)
+  const res = await authFetch(`${base}/api/portfolio/position-detail/${encodeURIComponent(symbol)}`)
   if (!res.ok) throw new Error(`Failed to fetch position detail for ${symbol}`)
   const data = await res.json()
   if (data.status === 'ok' && data.data) {

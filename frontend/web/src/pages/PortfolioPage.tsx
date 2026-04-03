@@ -110,39 +110,72 @@ function StatusDot({ active, label }: { active: boolean; label: string }) {
   )
 }
 
+// ── Types ───────────────────────────────────────────────────────────────────
+interface Position {
+  symbol: string
+  name?: string
+  qty: number
+  lastPrice: number
+  avgCost: number
+  chip_score?: number
+  sector?: string
+  last_price?: number
+}
+
+interface BackendKpis {
+  available_cash: number
+  today_trades_count: number
+  overall_win_rate: number
+}
+
+interface FetchState {
+  positions: Position[]
+  source: 'api' | 'mock' | 'error'
+  error: string | null
+  loading: boolean
+  backendKpis: BackendKpis
+}
+
+type FetchAction =
+  | { type: 'FETCH_START' }
+  | { type: 'FETCH_SUCCESS'; positions: Position[]; backendKpis: BackendKpis }
+  | { type: 'FETCH_ERROR'; error: string }
+  | { type: 'SET_MOCK'; positions: Position[] }
+
+function fetchReducer(state: FetchState, action: FetchAction): FetchState {
+  switch (action.type) {
+    case 'FETCH_START':
+      return { ...state, loading: true, error: null }
+    case 'FETCH_SUCCESS':
+      return { ...state, loading: false, error: null, positions: action.positions, backendKpis: action.backendKpis, source: 'api' }
+    case 'FETCH_ERROR':
+      return { ...state, loading: false, positions: [], source: 'error', error: action.error }
+    case 'SET_MOCK':
+      return { ...state, loading: false, error: null, positions: action.positions, source: 'mock' }
+    default:
+      return state
+  }
+}
+
+const initialFetchState: FetchState = {
+  positions: [],
+  source: 'api',
+  error: null,
+  loading: false,
+  backendKpis: { available_cash: 0, today_trades_count: 0, overall_win_rate: 0 },
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PortfolioPage() {
-  const [fetchState, dispatch] = useReducer(
-    (state: any, action: any) => {
-      switch (action.type) {
-        case 'FETCH_START':
-          return { ...state, loading: true, error: null }
-        case 'FETCH_SUCCESS':
-          return { ...state, loading: false, error: null, positions: action.positions, backendKpis: action.backendKpis, source: 'api' }
-        case 'FETCH_ERROR':
-          return { ...state, loading: false, positions: [], source: 'error', error: action.error }
-        case 'SET_MOCK':
-          return { ...state, loading: false, error: null, positions: action.positions, source: 'mock' }
-        default:
-          return state
-      }
-    },
-    {
-      positions: [],
-      source: 'api',
-      error: null,
-      loading: false,
-      backendKpis: { available_cash: 0, today_trades_count: 0, overall_win_rate: 0 },
-    }
-  )
+  const [fetchState, dispatch] = useReducer(fetchReducer, initialFetchState)
   const { positions, source, error, loading, backendKpis } = fetchState
 
   const [preferApi] = useState(true)
   const toast = useToast()
   const [lockedSymbols, setLockedSymbols] = useState(new Set())
-  const [equitySeries, setEquitySeries] = useState<any[]>([])
+  const [equitySeries, setEquitySeries] = useState<{ date: string; equity: number }[]>([])
   const [equitySource, setEquitySource] = useState('讀取中...')
-  const [closeTarget, setCloseTarget] = useState<any>(null)
+  const [closeTarget, setCloseTarget] = useState<Position | null>(null)
   const [closeBusy, setCloseBusy] = useState(false)
   const [sseActive, setSseActive] = useState(false)
 
@@ -169,7 +202,7 @@ export default function PortfolioPage() {
 
   useEffect(() => {
     load(true)
-    fetchEquityCurve({ days: 60, startEquity: 100000 }).then((data: any[]) => {
+    fetchEquityCurve({ days: 60, startEquity: 100000 }).then((data: { date: string; equity: number }[]) => {
       if (data.length > 0) {
         setEquitySeries(data)
         setEquitySource('DB')
@@ -204,13 +237,17 @@ export default function PortfolioPage() {
   const cumulativeTone = kpis.cumulativePnl >= 0 ? 'good' : 'bad'
 
   async function handleEmergencyStop() {
-    toast.warning('緊急止損已觸發 -- 正在平倉所有非鎖定部位...')
-    for (const p of positions) {
-      if (!lockedSymbols.has(p.symbol)) {
-        try { await closePosition(p.symbol) } catch (_) {}
-      }
+    toast.warning('緊急止損觸發中...')
+    const targets = positions.filter((p: Position) => !lockedSymbols.has(p.symbol))
+    const results = await Promise.allSettled(
+      targets.map((p: Position) => closePosition(p.symbol))
+    )
+    const failed = results.filter(r => r.status === 'rejected')
+    if (failed.length === 0) {
+      toast.success(`緊急止損完成 — ${targets.length} 個倉位已關閉`)
+    } else {
+      toast.error(`⚠️ ${failed.length}/${targets.length} 個倉位關閉失敗，請手動確認！`)
     }
-    toast.success('緊急止損完成。請確認部位狀態。')
     await load(preferApi)
   }
 
@@ -266,7 +303,7 @@ export default function PortfolioPage() {
             title={sseActive ? 'SSE 即時串流已連接' : '點擊啟用 SSE 即時報價'}
           >
             <Radio className="h-3 w-3" />
-            {sseActive ? 'LIVE' : 'SSE OFF'}
+            {sseActive ? 'MOCK (模擬)' : 'SSE OFF'}
           </button>
 
           {/* Data source badge */}
@@ -388,7 +425,7 @@ export default function PortfolioPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {positions.map((p: any) => (
+              {positions.map((p: Position) => (
                 <PositionCard
                   key={p.symbol}
                   position={p}
