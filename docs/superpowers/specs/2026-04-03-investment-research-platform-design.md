@@ -2,8 +2,8 @@
 
 **Date:** 2026-04-03
 **Author:** Zug (Claude Code)
-**Status:** v2 — Expert Review Incorporated
-**Issue:** #549 (extended scope), #556 (v2 review)
+**Status:** v3 — Final (Approved with Conditions Incorporated)
+**Issue:** #549 (extended scope), #556 (v2 review), #557 (v3 conditions + plan)
 
 ---
 
@@ -655,7 +655,118 @@ CREATE TABLE IF NOT EXISTS research_reports (
 
 ---
 
-## 14. Success Criteria
+## 14. Expert Review Conditions (Must-Fix Before Implementation)
+
+第二輪專家審查提出 8 項必須在實作前納入的條件，分為三大類：
+
+### Investment Conditions (3)
+
+#### 14.1 K-line Chart Component
+- 使用 `lightweight-charts`（TradingView 開源，40KB gzipped）於 Stock Analysis 頁面
+- 功能：K 線圖 + MA overlay（5/10/20/60 日均線）
+- 整合位置：`src/pages/Research/StockAnalysis.jsx` 的 Fundamentals 區塊下方
+- npm dependency: `lightweight-charts` (Phase 1B)
+
+#### 14.2 Action Queue in Dashboard
+- Red Alerts 需要行動按鈕（執行停損、加碼、忽略），而非僅顯示資訊
+- 兩種方案（擇一）：
+  - **方案 A**：Dashboard 內嵌 Action Queue — Red Alert 旁直接附帶按鈕
+  - **方案 B**：新增 `/action-queue` 路由 — 獨立的待辦行動頁面
+- 推薦方案 A（減少頁面切換，符合「一頁掌握」原則）
+
+#### 14.3 Stock Analysis Portfolio Cross-Reference
+- 當分析的個股為持倉股票時，頁面頂部顯示：
+  - 持倉成本（avg cost）
+  - 未實現損益（unrealized P&L, 金額 + 百分比）
+  - 組合權重（portfolio weight %）
+- 資料來源：trades.db（read-only）的 positions 表
+- 整合位置：StockAnalysis 頁面標題列下方，以 highlight bar 呈現
+
+### System Conditions (3)
+
+#### 14.4 DB Init: WAL Mode
+- research.db 初始化時執行 `PRAGMA journal_mode=WAL`
+- 目的：防止 cron job 寫入時鎖定 API 讀取（writer lock）
+- 實作位置：`frontend/backend/app/core/database.py` 或 DB init script
+- 同時對 trades.db 的 read-only connection 設定 `PRAGMA query_only=ON`
+
+#### 14.5 Scheduling Mechanism Definition
+- 使用 PM2 `cron_restart` 管理各數據 pipeline 排程
+- 排程表：
+
+| Process Name | Schedule | Purpose |
+|-------------|----------|---------|
+| `market-index-fetcher` | `*/5 * * * *` (盤中每 5 分) | 全球指數更新 |
+| `eod-data-pipeline` | `0 22 * * 1-5` (盤後 22:00) | 台股日收盤數據 |
+| `stock-research-agent` | `0 18 * * 1-5` (18:00) | 個股研究報告 |
+| `debate-loop-agent` | `30 17 * * 1-5` (17:30) | 多方辯論 |
+| `geopolitical-agent` | `0 */4 * * *` (每 4 小時) | 地緣政治新聞 |
+| `risk-calculator` | `30 22 * * 1-5` (22:30) | 風險快照 |
+
+- 整合至 `ecosystem.config.js`
+
+#### 14.6 API Deployment Boundary
+- 確認 API 僅透過 localhost 存取（Tailscale 內網）
+- CORS 配置：
+  ```python
+  origins = ["http://localhost:5173", "http://100.x.x.x:5173"]  # Tailscale IP
+  ```
+- 不對外暴露，無需 HTTPS 或 OAuth（Phase 1 單一用戶）
+- 實作位置：FastAPI `CORSMiddleware` 設定
+
+### Frontend Conditions (4)
+
+#### 14.7 ScatterChart 500+ Data Points Performance
+- 超過 300 點時效能劣化，需以下對策：
+  - **推薦方案**：使用 `@visx/visx` canvas scatter（>300 點改 canvas rendering）
+  - **替代方案**：Recharts + `isAnimationActive={false}` + 數據分頁（每頁 100 點）
+- 在 Market Screener 頁面實作
+- 加入效能指標：render time < 200ms for 500 points
+
+#### 14.8 Mobile Responsiveness
+- 定義斷點：
+  - `sm: 640px` — 手機
+  - `md: 768px` — 平板
+  - `lg: 1024px` — 桌面
+- 適配規則：
+  - Dashboard：< 768px 時改為單欄堆疊
+  - WorldMap / ScatterChart：< 768px 時替換為排序列表（sorted list）
+  - GlobalTicker：< 640px 時改為可左右滑動（swipe）
+- 使用 Tailwind responsive utilities（`sm:`, `md:`, `lg:`）
+
+#### 14.9 Design Tokens
+- 加入 `tailwind.config.js` 設計令牌：
+  ```js
+  // Spacing scale (4px base)
+  spacing: { 0.5: '2px', 1: '4px', 2: '8px', 3: '12px', 4: '16px', 6: '24px', 8: '32px' }
+  
+  // Border radius tokens
+  borderRadius: { sm: '4px', md: '8px', lg: '12px', xl: '16px', full: '9999px' }
+  
+  // Typography scale
+  fontSize: { xs: '0.75rem', sm: '0.875rem', base: '1rem', lg: '1.125rem', xl: '1.25rem', '2xl': '1.5rem' }
+  
+  // Shadow tokens
+  boxShadow: { card: '0 1px 3px rgba(0,0,0,0.3)', elevated: '0 4px 12px rgba(0,0,0,0.4)', modal: '0 8px 24px rgba(0,0,0,0.5)' }
+  ```
+- 確保所有元件使用 token 而非 hardcoded 值
+
+#### 14.10 Testing Strategy
+- **Unit / Component Tests**：Vitest + React Testing Library
+  - 所有共享元件（DataCard, MetricBadge 等）
+  - API hook 測試（TanStack Query hooks）
+- **E2E Tests**：Playwright
+  - Critical path 1: Dashboard 載入 + 數據顯示
+  - Critical path 2: Stock Analysis 導航 + 報告渲染
+  - Critical path 3: Market Screener 篩選 + 散佈圖
+- **API Mocking**：MSW (Mock Service Worker)
+  - 攔截所有 `/api/*` 請求
+  - 提供 fixture data 用於開發和測試
+- npm devDependencies: `vitest`, `@testing-library/react`, `@testing-library/jest-dom`, `@playwright/test`, `msw`
+
+---
+
+## 15. Success Criteria
 
 Phase 1 完成後，你應該能夠：
 - [ ] 開啟戰情總覽，一頁看到 Portfolio P&L + 異常個股 + 風險警報 + 關鍵新聞
