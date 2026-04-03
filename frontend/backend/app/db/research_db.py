@@ -79,11 +79,18 @@ _DDL_STATEMENTS = [
         event_date      TEXT    NOT NULL,           -- ISO-8601 YYYY-MM-DD
         title           TEXT    NOT NULL,
         summary         TEXT,
-        region          TEXT,                       -- e.g. "APAC", "MENA", "GLOBAL"
+        region          TEXT,                       -- asia / europe / americas / middle_east / africa / global
         severity        TEXT    NOT NULL DEFAULT 'medium', -- low / medium / high / critical
         tags            TEXT,                       -- JSON array of keyword tags
         source_url      TEXT,
-        created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+        created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+        -- Extended fields added by GeopoliticalAgent (Issue #566)
+        category        TEXT,                       -- trade_war / sanctions / conflict / policy / election
+        impact_score    REAL    DEFAULT 0,          -- 0-10 LLM-evaluated severity
+        market_impact   TEXT,                       -- JSON: {sectors, assets, direction, note}
+        lat             REAL,                       -- approximate latitude for map markers
+        lng             REAL,                       -- approximate longitude for map markers
+        url_hash        TEXT                        -- SHA-256[:32] of source_url or title (dedup key)
     )
     """,
 
@@ -150,6 +157,9 @@ _DDL_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_market_indices_date   ON market_indices (trade_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_indices_symbol ON market_indices (symbol)",
     "CREATE INDEX IF NOT EXISTS idx_geo_events_date       ON geopolitical_events (event_date DESC)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_geo_events_url_hash ON geopolitical_events (url_hash) WHERE url_hash IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_geo_events_category   ON geopolitical_events (category)",
+    "CREATE INDEX IF NOT EXISTS idx_geo_events_region     ON geopolitical_events (region)",
     "CREATE INDEX IF NOT EXISTS idx_research_date         ON research_reports (report_date DESC)",
     "CREATE INDEX IF NOT EXISTS idx_risk_snapshot_at      ON risk_snapshots (snapshot_at DESC)",
 ]
