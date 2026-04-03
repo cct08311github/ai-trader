@@ -28,30 +28,55 @@ async function fetchLatestAnalysis() {
   return res.json()
 }
 
-// ── Mock action queue (structure ready for real data) ────────────────────────
+async function fetchRiskSnapshot() {
+  const res = await authFetch(`${getApiBase()}/api/risk/snapshot`)
+  if (!res.ok) throw new Error(`風險快照載入失敗 (${res.status})`)
+  return res.json()
+}
 
-const MOCK_ACTION_QUEUE = [
-  {
-    id: 'aq-1',
-    type: 'stop_loss',
-    symbol: '華邦電',
-    ticker: '4532',
-    message: '華邦電距停損線 3%，建議執行停損',
-    level: 'red',
-    primaryLabel: '執行停損',
-    secondaryLabel: '忽略',
-  },
-  {
-    id: 'aq-2',
-    type: 'ai_suggest',
-    symbol: '廣達',
-    ticker: '2382',
-    message: 'AI 建議加碼廣達：籌碼集中度上升，本週外資淨買超',
-    level: 'yellow',
-    primaryLabel: '查看分析',
-    secondaryLabel: '稍後',
-  },
-]
+async function fetchResearchStocks() {
+  const res = await authFetch(`${getApiBase()}/api/research/stocks`)
+  if (!res.ok) throw new Error(`研究股票載入失敗 (${res.status})`)
+  return res.json()
+}
+
+// ── Build action queue from real API data ─────────────────────────────────────
+
+function buildActionQueue(riskData, researchData, portfolioSymbols) {
+  const actions = []
+  // Stop-loss alerts
+  if (riskData?.stop_loss_tracking) {
+    riskData.stop_loss_tracking
+      .filter(s => s.distance_pct < 5)
+      .forEach(s => actions.push({
+        id: `sl-${s.symbol}`,
+        type: 'stop_loss',
+        symbol: s.symbol,
+        ticker: s.symbol,
+        level: s.distance_pct < 2 ? 'red' : 'yellow',
+        message: `${s.symbol} 距停損 ${s.distance_pct.toFixed(1)}%`,
+        primaryLabel: '執行停損',
+        secondaryLabel: '忽略',
+      }))
+  }
+  // AI suggestions
+  if (researchData?.data) {
+    researchData.data
+      .filter(r => r.rating === 'A' && !portfolioSymbols.has(r.symbol))
+      .slice(0, 3)
+      .forEach(r => actions.push({
+        id: `ai-${r.symbol}`,
+        type: 'ai_suggest',
+        symbol: r.symbol,
+        ticker: r.symbol,
+        level: 'yellow',
+        message: `AI 建議加碼 ${r.symbol} (${r.rating}, ${(r.confidence * 10).toFixed(1)})`,
+        primaryLabel: '查看分析',
+        secondaryLabel: '稍後',
+      }))
+  }
+  return actions
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -249,6 +274,20 @@ export default function DashboardPage() {
     retry: 1,
   })
 
+  const riskQ = useQuery({
+    queryKey: ['risk-snapshot'],
+    queryFn: fetchRiskSnapshot,
+    staleTime: 60_000,
+    retry: 1,
+  })
+
+  const researchQ = useQuery({
+    queryKey: ['research-stocks'],
+    queryFn: fetchResearchStocks,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+
   // Derived values from API data (with safe fallbacks)
   const indices = indicesQ.data || {}
   const portfolio = portfolioQ.data || {}
@@ -284,9 +323,13 @@ export default function DashboardPage() {
   const analysisSummary = analysis?.strategy?.summary ?? null
   const analysisDate = analysis?.trade_date ?? null
 
-  // Active alerts count KPI (API alerts + mock action queue)
+  // Build action queue from real API data
+  const portfolioSymbols = new Set(positions.map(p => p.symbol))
+  const actionQueue = buildActionQueue(riskQ.data || null, researchQ.data || null, portfolioSymbols)
+
+  // Active alerts count KPI (API alerts + real action queue)
   const activeAlertsCount =
-    redAlerts.length + yellowAlerts.length + MOCK_ACTION_QUEUE.length
+    redAlerts.length + yellowAlerts.length + actionQueue.length
 
   // VIX sentiment mapping
   const vixSentiment =
@@ -540,21 +583,21 @@ export default function DashboardPage() {
       <section>
         <SectionHeading>待辦行動</SectionHeading>
         <div className="space-y-2">
-          {MOCK_ACTION_QUEUE.map((item) => (
+          {actionQueue.map((item) => (
             <ActionItem
               key={item.id}
               item={item}
               dismissed={dismissedActions.has(item.id)}
               onPrimary={() => {
                 if (item.type === 'ai_suggest') {
-                  window.location.href = '/analysis'
+                  window.location.href = `/research/stock?symbol=${item.symbol}`
                 }
                 // stop_loss: real impl would send order via API
               }}
               onSecondary={() => dismissAction(item.id)}
             />
           ))}
-          {MOCK_ACTION_QUEUE.every((i) => dismissedActions.has(i.id)) && (
+          {actionQueue.every((i) => dismissedActions.has(i.id)) && (
             <p
               className="text-xs text-th-muted py-2 text-center"
               style={{ fontFamily: 'var(--font-ui)' }}
