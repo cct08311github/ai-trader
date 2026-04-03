@@ -194,6 +194,15 @@ function MapTooltip({ event, x, y }) {
   )
 }
 
+function deriveSentiment(event) {
+  let mi = event.market_impact
+  if (!mi) return 'neutral'
+  if (typeof mi === 'string') {
+    try { mi = JSON.parse(mi) } catch { return 'neutral' }
+  }
+  return mi?.direction || 'neutral'
+}
+
 /** Single news feed item */
 function NewsFeedItem({ event, isSelected, onClick }) {
   const [expanded, setExpanded] = useState(false)
@@ -231,6 +240,7 @@ function NewsFeedItem({ event, isSelected, onClick }) {
         <div className="flex items-center gap-2 flex-wrap">
           <CategoryBadge category={event.category} />
           <ImpactBadge score={event.impact_score} />
+          <SentimentIndicator sentiment={deriveSentiment(event)} />
         </div>
         <span
           className="text-xs text-th-muted flex-shrink-0"
