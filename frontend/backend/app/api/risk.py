@@ -17,10 +17,31 @@ import os
 import sqlite3
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+import os
+
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.core.cache import cached
 from app.db import get_conn
+
+
+# ---------------------------------------------------------------------------
+# Auth dependency
+# ---------------------------------------------------------------------------
+
+
+def verify_token(authorization: str = Header(default=None)) -> None:
+    """Verify Bearer token from Authorization header.
+
+    Disabled when AUTH_TOKEN env var is unset or empty (dev / local mode).
+    """
+    expected = os.environ.get("AUTH_TOKEN", "")
+    if not expected:
+        return  # auth disabled — no token configured
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    if authorization[7:] != expected:
+        raise HTTPException(status_code=403, detail="Invalid token")
 
 router = APIRouter(prefix="/api/risk", tags=["risk"])
 
@@ -340,7 +361,7 @@ def _stress_cached() -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/snapshot")
+@router.get("/snapshot", dependencies=[Depends(verify_token)])
 def risk_snapshot():
     """
     Return full risk snapshot:
@@ -354,7 +375,7 @@ def risk_snapshot():
     return _snapshot_cached()
 
 
-@router.get("/stress-test")
+@router.get("/stress-test", dependencies=[Depends(verify_token)])
 def risk_stress_test():
     """
     Return estimated P&L impact under 5 macro stress scenarios.

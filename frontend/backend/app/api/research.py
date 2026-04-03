@@ -10,11 +10,14 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+log = logging.getLogger(__name__)
 
 import app.db as db
 from app.core.cache import cached
@@ -57,9 +60,11 @@ def _conn_dep():
     except HTTPException:
         raise
     except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        log.error("DB file not found: %s", e)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+        log.error("DB dependency error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -93,46 +98,57 @@ def _validate_symbol(symbol: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/stocks")
 @cached(ttl=300, maxsize=64)
+def _list_stocks_cached(page: int, per_page: int) -> Dict[str, Any]:
+    """Cacheable helper for list_stocks — does not use FastAPI Depends.
+
+    @cached on a route handler that takes ``conn: sqlite3.Connection = Depends(...)``
+    never hits the cache because each call receives a different connection object,
+    making the cache key unique every time.  Separating the SQL logic into this
+    helper (which opens its own short-lived connection) fixes the cache miss.
+    """
+    offset = (page - 1) * per_page
+    try:
+        with db.get_conn() as conn:
+            total_row = conn.execute(
+                "SELECT COUNT(DISTINCT symbol) AS cnt FROM stock_research_reports"
+            ).fetchone()
+            total: int = total_row["cnt"] if total_row else 0
+
+            rows = conn.execute(
+                """
+                SELECT symbol, rating, confidence, entry_price, stop_loss,
+                       target_price, trade_date
+                FROM stock_research_reports
+                WHERE (symbol, trade_date) IN (
+                    SELECT symbol, MAX(trade_date)
+                    FROM stock_research_reports
+                    GROUP BY symbol
+                )
+                ORDER BY trade_date DESC, symbol
+                LIMIT ? OFFSET ?
+                """,
+                (per_page, offset),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    return {
+        "data": [dict(r) for r in rows],
+        "total": total,
+    }
+
+
+@router.get("/stocks")
 def list_stocks(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     per_page: int = Query(50, ge=1, le=200, description="Records per page"),
-    conn: sqlite3.Connection = Depends(_conn_dep),
 ):
     """Latest research report for each symbol, ordered by trade_date DESC."""
-    offset = (page - 1) * per_page
-    try:
-        total_row = conn.execute(
-            """
-            SELECT COUNT(DISTINCT symbol) AS cnt
-            FROM stock_research_reports
-            """
-        ).fetchone()
-        total: int = total_row["cnt"] if total_row else 0
-
-        rows = conn.execute(
-            """
-            SELECT symbol, rating, confidence, entry_price, stop_loss,
-                   target_price, trade_date
-            FROM stock_research_reports
-            WHERE (symbol, trade_date) IN (
-                SELECT symbol, MAX(trade_date)
-                FROM stock_research_reports
-                GROUP BY symbol
-            )
-            ORDER BY trade_date DESC, symbol
-            LIMIT ? OFFSET ?
-            """,
-            (per_page, offset),
-        ).fetchall()
-    except sqlite3.OperationalError:
-        raise HTTPException(status_code=503, detail="stock_research_reports 表尚未建立")
-
-    data: List[Dict[str, Any]] = [dict(r) for r in rows]
+    result = _list_stocks_cached(page, per_page)
     return api_response(
-        data,
-        total=total,
+        result["data"],
+        total=result["total"],
         page=page,
         per_page=per_page,
         source="sqlite",
@@ -162,7 +178,7 @@ def get_stock_report(
             (sym,),
         ).fetchone()
     except sqlite3.OperationalError:
-        raise HTTPException(status_code=503, detail="stock_research_reports 表尚未建立")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     if row is None:
         raise HTTPException(status_code=404, detail=f"No research report for {sym}")
@@ -227,7 +243,7 @@ def get_stock_history(
             (sym, per_page, offset),
         ).fetchall()
     except sqlite3.OperationalError:
-        raise HTTPException(status_code=503, detail="stock_research_reports 表尚未建立")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     if total == 0:
         raise HTTPException(status_code=404, detail=f"No history found for {sym}")
@@ -262,7 +278,7 @@ def get_debate(
             (sym,),
         ).fetchone()
     except sqlite3.OperationalError:
-        raise HTTPException(status_code=503, detail="debate_records 表尚未建立")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     if row is None:
         raise HTTPException(status_code=404, detail=f"No debate record for {sym}")
@@ -276,10 +292,12 @@ def get_debate(
 def get_watchlist():
     """Return the manual watchlist from config/watchlist.json."""
     if not _WATCHLIST_PATH.exists():
-        raise HTTPException(status_code=503, detail=f"watchlist.json not found at {_WATCHLIST_PATH}")
+        log.error("watchlist.json not found at %s", _WATCHLIST_PATH)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     try:
         payload = json.loads(_WATCHLIST_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to read watchlist: {exc}")
+        log.error("Failed to read watchlist: %s", exc)
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable")
 
     return api_response(payload, source="config")

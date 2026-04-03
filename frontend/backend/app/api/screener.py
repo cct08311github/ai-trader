@@ -9,10 +9,13 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+log = logging.getLogger(__name__)
 
 import app.db as db
 from app.core.cache import cached
@@ -196,8 +199,9 @@ def _build_scatter_data(db_path_str: str) -> List[Dict[str, Any]]:
                 "sector": sector,
                 "reasons": c.get("reasons", []),
             })
-        except Exception:
+        except Exception as e:
             # Skip symbols with broken data rather than failing the whole endpoint
+            log.warning("Skipping %s: %s", symbol, e)
             continue
 
     conn.close()
@@ -223,7 +227,8 @@ def get_candidates(
     try:
         candidates = load_system_candidates_full(conn)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"screener error: {e}")
+        log.error("screener candidates error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable")
 
     if label:
         candidates = [c for c in candidates if c.get("label") == label]
@@ -257,7 +262,8 @@ def get_scatter(
     try:
         data = _build_scatter_data(db_path_str)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"scatter compute error: {e}")
+        log.error("screener scatter error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable")
 
     return api_response(
         data,

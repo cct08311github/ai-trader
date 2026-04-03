@@ -42,9 +42,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._buckets: Dict[str, Bucket] = {}
 
     def _client_key(self, request: Request) -> str:
-        # If behind a reverse proxy, you may need to trust X-Forwarded-For.
-        # For safety we default to direct client host.
-        host = request.client.host if request.client else "unknown"
+        # Prefer X-Forwarded-For when running behind a reverse proxy (nginx, ALB, etc.)
+        # to prevent bypass by clients that all appear as 127.0.0.1.
+        # Take only the first (leftmost) IP which is the original client.
+        forwarded_for = request.headers.get("X-Forwarded-For", "")
+        host = (
+            forwarded_for.split(",")[0].strip()
+            or (request.client.host if request.client else "unknown")
+        )
         return host
 
     def _allow(self, key: str) -> bool:

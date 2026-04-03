@@ -106,7 +106,6 @@ def get_latest_indices(
         rows,
         total=len(rows),
         source="research.db/market_indices",
-        cache_hit=True,
     )
 
 
