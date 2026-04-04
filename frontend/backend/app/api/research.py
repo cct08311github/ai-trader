@@ -117,7 +117,7 @@ def _list_stocks_cached(page: int, per_page: int) -> Dict[str, Any]:
 
             rows = conn.execute(
                 """
-                SELECT symbol, rating, confidence, entry_price, stop_loss,
+                SELECT symbol, rating, entry_price, stop_loss,
                        target_price, trade_date
                 FROM stock_research_reports
                 WHERE (symbol, trade_date) IN (
@@ -130,7 +130,8 @@ def _list_stocks_cached(page: int, per_page: int) -> Dict[str, Any]:
                 """,
                 (per_page, offset),
             ).fetchall()
-    except sqlite3.OperationalError:
+    except sqlite3.OperationalError as e:
+        log.error("research list_stocks OperationalError: %s", e, exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     return {
@@ -233,7 +234,7 @@ def get_stock_history(
 
         rows = conn.execute(
             """
-            SELECT symbol, rating, confidence, entry_price, stop_loss,
+            SELECT symbol, rating, entry_price, stop_loss,
                    target_price, trade_date, report_markdown
             FROM stock_research_reports
             WHERE symbol = ?
