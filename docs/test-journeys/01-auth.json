@@ -2,7 +2,7 @@
   "journey": "authentication-authorization",
   "version": "1.0.0",
   "description": "Authentication and authorization flows for ai-trader frontend. Covers login, logout, protected routes, token persistence, and edge cases.",
-  "baseUrl": "http://localhost:3012",
+  "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
@@ -13,11 +13,29 @@
   "setup": {
     "login": {
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "fill", "selector": "input[name=username]", "value": "{{username}}" },
-        { "action": "fill", "selector": "input[name=password]", "value": "{{password}}" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "{{username}}"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "{{password}}"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        }
       ]
     }
   },
@@ -28,14 +46,44 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "form", "timeout": 5000 },
-        { "action": "assert", "check": "element_exists", "selector": "input[name=username]" },
-        { "action": "assert", "check": "element_exists", "selector": "input[name=password]" },
-        { "action": "assert", "check": "element_exists", "selector": "button[type=submit]" },
-        { "action": "assert", "check": "element_visible", "selector": "input[name=username]" },
-        { "action": "assert", "check": "element_visible", "selector": "input[name=password]" },
-        { "action": "screenshot", "name": "auth-01-login-page-renders" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "form",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_exists",
+          "selector": "input[name=username]"
+        },
+        {
+          "action": "assert",
+          "check": "element_exists",
+          "selector": "input[name=password]"
+        },
+        {
+          "action": "assert",
+          "check": "element_exists",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "input[name=username]"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "input[name=password]"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-01-login-page-renders"
+        }
       ]
     },
     {
@@ -44,15 +92,48 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "input[name=username]", "timeout": 5000 },
-        { "action": "fill", "selector": "input[name=username]", "value": "admin" },
-        { "action": "fill", "selector": "input[name=password]", "value": "test-password" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/" },
-        { "action": "assert", "check": "url_not_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-02-login-success-dashboard" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "input[name=username]",
+          "timeout": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "admin"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "test-password"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/"
+        },
+        {
+          "action": "assert",
+          "check": "url_not_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-02-login-success-dashboard"
+        }
       ]
     },
     {
@@ -61,15 +142,48 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "input[name=username]", "timeout": 5000 },
-        { "action": "fill", "selector": "input[name=username]", "value": "admin" },
-        { "action": "fill", "selector": "input[name=password]", "value": "wrong-password-xyz" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=login-error], .error-message, [role=alert]", "timeout": 5000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=login-error], .error-message, [role=alert]" },
-        { "action": "assert", "check": "url_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-03-login-invalid-credentials-error" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "input[name=username]",
+          "timeout": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "admin"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "wrong-password-xyz"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=login-error], .error-message, [role=alert]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=login-error], .error-message, [role=alert]"
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-03-login-invalid-credentials-error"
+        }
       ]
     },
     {
@@ -78,9 +192,19 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "button[type=submit]", "timeout": 5000 },
-        { "action": "click", "selector": "button[type=submit]" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "button[type=submit]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -92,8 +216,15 @@
             "[role=alert]"
           ]
         },
-        { "action": "assert", "check": "url_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-04-login-empty-fields-validation" }
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-04-login-empty-fields-validation"
+        }
       ]
     },
     {
@@ -102,11 +233,32 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "clear_storage", "keys": ["token", "auth_token", "accessToken"] },
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "input[name=username], input[name=password]", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-05-protected-route-redirects-to-login" }
+        {
+          "action": "clear_storage",
+          "keys": [
+            "token",
+            "auth_token",
+            "accessToken"
+          ]
+        },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "input[name=username], input[name=password]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-05-protected-route-redirects-to-login"
+        }
       ]
     },
     {
@@ -115,15 +267,34 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "click",
           "selector": "[data-testid=logout-button], button[aria-label*=logout i], button[aria-label*=登出]"
         },
-        { "action": "wait", "selector": "input[name=username]", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/login" },
-        { "action": "assert", "check": "local_storage_key_absent", "key": "token" },
-        { "action": "screenshot", "name": "auth-06-logout-redirects-to-login" }
+        {
+          "action": "wait",
+          "selector": "input[name=username]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/login"
+        },
+        {
+          "action": "assert",
+          "check": "local_storage_key_absent",
+          "key": "token"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-06-logout-redirects-to-login"
+        }
       ]
     },
     {
@@ -132,17 +303,37 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "inject_response",
           "url_pattern": "/api/*",
           "status": 401,
-          "body": { "detail": "Unauthorized" }
+          "body": {
+            "detail": "Unauthorized"
+          }
         },
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "input[name=username]", "timeout": 6000 },
-        { "action": "assert", "check": "url_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-07-401-redirects-to-login" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "input[name=username]",
+          "timeout": 6000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-07-401-redirects-to-login"
+        }
       ]
     },
     {
@@ -151,13 +342,38 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "assert", "check": "local_storage_key_exists", "key": "token" },
-        { "action": "reload" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "assert", "check": "url_not_contains", "value": "/login" },
-        { "action": "assert", "check": "local_storage_key_exists", "key": "token" },
-        { "action": "screenshot", "name": "auth-08-token-persists-after-reload" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "local_storage_key_exists",
+          "key": "token"
+        },
+        {
+          "action": "reload"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_not_contains",
+          "value": "/login"
+        },
+        {
+          "action": "assert",
+          "check": "local_storage_key_exists",
+          "key": "token"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-08-token-persists-after-reload"
+        }
       ]
     },
     {
@@ -166,11 +382,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "assert", "check": "url_not_contains", "value": "/login" },
-        { "action": "screenshot", "name": "auth-09-already-authenticated-skips-login" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_not_contains",
+          "value": "/login"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-09-already-authenticated-skips-login"
+        }
       ]
     },
     {
@@ -179,21 +413,53 @@
       "role": "ADMIN",
       "setup": null,
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "wait", "selector": "input[name=password]", "timeout": 5000 },
-        { "action": "fill", "selector": "input[name=password]", "value": "test-password" },
-        { "action": "assert", "check": "attribute_equals", "selector": "input[name=password]", "attribute": "type", "value": "password" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "wait",
+          "selector": "input[name=password]",
+          "timeout": 5000
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "test-password"
+        },
+        {
+          "action": "assert",
+          "check": "attribute_equals",
+          "selector": "input[name=password]",
+          "attribute": "type",
+          "value": "password"
+        },
         {
           "action": "click",
           "selector": "[data-testid=toggle-password], button[aria-label*=show i], button[aria-label*=顯示], .password-toggle"
         },
-        { "action": "assert", "check": "attribute_equals", "selector": "input[name=password]", "attribute": "type", "value": "text" },
+        {
+          "action": "assert",
+          "check": "attribute_equals",
+          "selector": "input[name=password]",
+          "attribute": "type",
+          "value": "text"
+        },
         {
           "action": "click",
           "selector": "[data-testid=toggle-password], button[aria-label*=hide i], button[aria-label*=隱藏], .password-toggle"
         },
-        { "action": "assert", "check": "attribute_equals", "selector": "input[name=password]", "attribute": "type", "value": "password" },
-        { "action": "screenshot", "name": "auth-10-show-hide-password-toggle" }
+        {
+          "action": "assert",
+          "check": "attribute_equals",
+          "selector": "input[name=password]",
+          "attribute": "type",
+          "value": "password"
+        },
+        {
+          "action": "screenshot",
+          "name": "auth-10-show-hide-password-toggle"
+        }
       ]
     }
   ]

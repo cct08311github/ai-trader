@@ -2,7 +2,7 @@
   "journey": "analysis-research",
   "version": "1.0.0",
   "description": "Analysis and Research module journeys for ai-trader frontend. Covers K-line charts, technical indicators, AI strategy recommendations, institutional flow, and the Research sub-pages (stock, macro, screener, sector).",
-  "baseUrl": "http://localhost:3012",
+  "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
@@ -13,11 +13,29 @@
   "setup": {
     "login": {
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "fill", "selector": "input[name=username]", "value": "{{username}}" },
-        { "action": "fill", "selector": "input[name=password]", "value": "{{password}}" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "{{username}}"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "{{password}}"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        }
       ]
     }
   },
@@ -28,11 +46,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/analysis" },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=analysis-page], .analysis-page, main" },
-        { "action": "screenshot", "name": "ana-01-analysis-page-loads" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/analysis"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=analysis-page], .analysis-page, main"
+        },
+        {
+          "action": "screenshot",
+          "name": "ana-01-analysis-page-loads"
+        }
       ]
     },
     {
@@ -41,8 +77,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=kline-chart], .kline-chart, svg.candlestick, canvas[data-chart=kline]",
@@ -53,7 +96,10 @@
           "check": "element_visible",
           "selector": "[data-testid=kline-chart], .kline-chart, svg.candlestick, canvas[data-chart=kline]"
         },
-        { "action": "screenshot", "name": "ana-02-kline-candlestick-chart-renders" }
+        {
+          "action": "screenshot",
+          "name": "ana-02-kline-candlestick-chart-renders"
+        }
       ]
     },
     {
@@ -62,8 +108,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=technical-indicators], .technical-indicators, .indicators-section",
@@ -99,7 +152,10 @@
             "text=布林"
           ]
         },
-        { "action": "screenshot", "name": "ana-03-technical-indicators-rsi-macd-bollinger" }
+        {
+          "action": "screenshot",
+          "name": "ana-03-technical-indicators-rsi-macd-bollinger"
+        }
       ]
     },
     {
@@ -108,8 +164,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=ai-strategy], .ai-strategy-section, .strategy-recommendation, [data-testid=ai-recommendation]",
@@ -120,7 +183,10 @@
           "check": "element_visible",
           "selector": "[data-testid=ai-strategy], .ai-strategy-section, .strategy-recommendation, [data-testid=ai-recommendation]"
         },
-        { "action": "screenshot", "name": "ana-04-ai-strategy-recommendation-renders" }
+        {
+          "action": "screenshot",
+          "name": "ana-04-ai-strategy-recommendation-renders"
+        }
       ]
     },
     {
@@ -129,8 +195,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=sentiment-badge], .sentiment-badge, .sentiment-indicator",
@@ -153,7 +226,10 @@
             "text=中立"
           ]
         },
-        { "action": "screenshot", "name": "ana-05-sentiment-badge-displays" }
+        {
+          "action": "screenshot",
+          "name": "ana-05-sentiment-badge-displays"
+        }
       ]
     },
     {
@@ -162,8 +238,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=institution-heatmap], .institution-heatmap, .chips-heatmap, [data-testid=institutional-flow]",
@@ -174,7 +257,10 @@
           "check": "element_visible",
           "selector": "[data-testid=institution-heatmap], .institution-heatmap, .chips-heatmap, [data-testid=institutional-flow]"
         },
-        { "action": "screenshot", "name": "ana-06-institutional-flow-heatmap-renders" }
+        {
+          "action": "screenshot",
+          "name": "ana-06-institutional-flow-heatmap-renders"
+        }
       ]
     },
     {
@@ -183,8 +269,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/analysis" },
-        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/analysis"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-page], .analysis-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=date-picker], .date-picker, input[type=date], [data-testid=history-selector], select[name=date]",
@@ -204,7 +297,10 @@
           "selector": "[data-testid=analysis-content], .analysis-content, [data-testid=analysis-result]",
           "timeout": 6000
         },
-        { "action": "screenshot", "name": "ana-07-historical-analysis-comparison" }
+        {
+          "action": "screenshot",
+          "name": "ana-07-historical-analysis-comparison"
+        }
       ]
     },
     {
@@ -213,11 +309,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research" },
-        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=research-page], .research-page, main" },
-        { "action": "screenshot", "name": "res-01-research-dashboard-loads" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=research-page], .research-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/research"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=research-page], .research-page, main"
+        },
+        {
+          "action": "screenshot",
+          "name": "res-01-research-dashboard-loads"
+        }
       ]
     },
     {
@@ -226,8 +340,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research" },
-        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=research-page], .research-page, main",
+          "timeout": 5000
+        },
         {
           "action": "click",
           "selector": "[data-testid=tab-stock], a[href*=stock], button[data-tab=stock], [role=tab][data-value=stock]"
@@ -246,7 +367,10 @@
             "[data-panel=stock]"
           ]
         },
-        { "action": "screenshot", "name": "res-02-stock-research-tab-navigates" }
+        {
+          "action": "screenshot",
+          "name": "res-02-stock-research-tab-navigates"
+        }
       ]
     },
     {
@@ -255,8 +379,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/stock" },
-        { "action": "wait", "selector": "[data-testid=stock-research], .stock-research-tab, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/stock"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=stock-research], .stock-research-tab, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=financial-data], .financial-data, .stock-financials, table",
@@ -267,7 +398,10 @@
           "check": "element_visible",
           "selector": "[data-testid=financial-data], .financial-data, .stock-financials, table"
         },
-        { "action": "screenshot", "name": "res-03-stock-research-financial-data" }
+        {
+          "action": "screenshot",
+          "name": "res-03-stock-research-financial-data"
+        }
       ]
     },
     {
@@ -276,9 +410,20 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/macro" },
-        { "action": "wait", "selector": "[data-testid=macro-page], .macro-analysis, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/macro"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=macro-page], .macro-analysis, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/research"
+        },
         {
           "action": "wait",
           "selector": "[data-testid=economic-indicators], .economic-indicators, .macro-indicators",
@@ -289,7 +434,10 @@
           "check": "element_visible",
           "selector": "[data-testid=economic-indicators], .economic-indicators, .macro-indicators"
         },
-        { "action": "screenshot", "name": "res-04-macro-analysis-economic-indicators" }
+        {
+          "action": "screenshot",
+          "name": "res-04-macro-analysis-economic-indicators"
+        }
       ]
     },
     {
@@ -298,9 +446,20 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/screener" },
-        { "action": "wait", "selector": "[data-testid=screener-page], .screener-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/screener"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-page], .screener-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/research"
+        },
         {
           "action": "wait",
           "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel, form.filters",
@@ -311,7 +470,10 @@
           "check": "element_visible",
           "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel, form.filters"
         },
-        { "action": "screenshot", "name": "res-05-screener-tab-filter-controls" }
+        {
+          "action": "screenshot",
+          "name": "res-05-screener-tab-filter-controls"
+        }
       ]
     },
     {
@@ -320,8 +482,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/screener" },
-        { "action": "wait", "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/screener"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel",
+          "timeout": 5000
+        },
         {
           "action": "fill",
           "selector": "[data-testid=rsi-min], input[name=rsi_min], input[placeholder*=RSI]",
@@ -346,7 +515,10 @@
           "check": "element_visible",
           "selector": "[data-testid=screener-results], .screener-results, table tbody"
         },
-        { "action": "screenshot", "name": "res-06-screener-filter-rsi" }
+        {
+          "action": "screenshot",
+          "name": "res-06-screener-filter-rsi"
+        }
       ]
     },
     {
@@ -355,8 +527,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/screener" },
-        { "action": "wait", "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/screener"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel",
+          "timeout": 5000
+        },
         {
           "action": "fill",
           "selector": "[data-testid=pe-max], input[name=pe_max], input[placeholder*=P/E], input[placeholder*=本益比]",
@@ -376,7 +555,10 @@
           "check": "element_visible",
           "selector": "[data-testid=screener-results], .screener-results, table tbody"
         },
-        { "action": "screenshot", "name": "res-07-screener-filter-pe" }
+        {
+          "action": "screenshot",
+          "name": "res-07-screener-filter-pe"
+        }
       ]
     },
     {
@@ -385,8 +567,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/screener" },
-        { "action": "wait", "selector": "[data-testid=screener-page], .screener-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/screener"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-page], .screener-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=screener-results] table, .screener-results table, table.screener-table",
@@ -406,7 +595,10 @@
           "selector": "th[aria-sort=ascending], th[aria-sort=descending], th.sorted-asc, th.sorted-desc",
           "timeout": 3000
         },
-        { "action": "screenshot", "name": "res-08-screener-results-table-sorting" }
+        {
+          "action": "screenshot",
+          "name": "res-08-screener-results-table-sorting"
+        }
       ]
     },
     {
@@ -415,15 +607,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/sector" },
-        { "action": "wait", "selector": "[data-testid=sector-page], .sector-analysis, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/sector"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sector-page], .sector-analysis, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/research"
+        },
         {
           "action": "assert",
           "check": "element_visible",
           "selector": "[data-testid=sector-page], .sector-analysis, main"
         },
-        { "action": "screenshot", "name": "res-09-sector-analysis-tab-loads" }
+        {
+          "action": "screenshot",
+          "name": "res-09-sector-analysis-tab-loads"
+        }
       ]
     },
     {
@@ -432,8 +638,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research/sector" },
-        { "action": "wait", "selector": "[data-testid=sector-page], .sector-analysis, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research/sector"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sector-page], .sector-analysis, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=sector-chart], .sector-performance-chart, svg.sector-chart, canvas[data-chart=sector]",
@@ -444,7 +657,10 @@
           "check": "element_visible",
           "selector": "[data-testid=sector-chart], .sector-performance-chart, svg.sector-chart, canvas[data-chart=sector]"
         },
-        { "action": "screenshot", "name": "res-10-sector-performance-chart-renders" }
+        {
+          "action": "screenshot",
+          "name": "res-10-sector-performance-chart-renders"
+        }
       ]
     },
     {
@@ -453,8 +669,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/research" },
-        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/research"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=research-page], .research-page, main",
+          "timeout": 5000
+        },
         {
           "action": "assert",
           "check": "element_exists",
@@ -487,7 +710,10 @@
           "selector": "[data-testid=sector-page], .sector-analysis, [data-panel=sector]",
           "timeout": 5000
         },
-        { "action": "screenshot", "name": "res-11-research-sub-navigation-tabs" }
+        {
+          "action": "screenshot",
+          "name": "res-11-research-sub-navigation-tabs"
+        }
       ]
     }
   ]
