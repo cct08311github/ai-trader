@@ -22,10 +22,20 @@ async function fetchIndices() {
   const bySymbol = Object.fromEntries(rows.map(r => [r.symbol, r]))
   const vixRow = bySymbol['^VIX'] || bySymbol['VIX'] || null
   const taiexRow = bySymbol['^TWII'] || bySymbol['TAIEX'] || null
+  const nasdaqRow = bySymbol['^IXIC'] || bySymbol['NASDAQ'] || null
+  const sp500Row = bySymbol['^GSPC'] || bySymbol['S&P500'] || null
+  const soxRow = bySymbol['^SOX'] || bySymbol['SOX'] || null
   return {
     vix: vixRow?.close_price ?? null,
     vix_trend: vixRow?.change_pct != null ? (vixRow.change_pct > 0 ? 'up' : vixRow.change_pct < 0 ? 'down' : 'flat') : null,
+    taiex: taiexRow?.close_price ?? null,
     taiex_change_pct: taiexRow?.change_pct ?? null,
+    nasdaq: nasdaqRow?.close_price ?? null,
+    nasdaq_change_pct: nasdaqRow?.change_pct ?? null,
+    sp500: sp500Row?.close_price ?? null,
+    sp500_change_pct: sp500Row?.change_pct ?? null,
+    sox: soxRow?.close_price ?? null,
+    sox_change_pct: soxRow?.change_pct ?? null,
   }
 }
 
