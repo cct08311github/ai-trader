@@ -1,0 +1,494 @@
+{
+  "journey": "analysis-research",
+  "version": "1.0.0",
+  "description": "Analysis and Research module journeys for ai-trader frontend. Covers K-line charts, technical indicators, AI strategy recommendations, institutional flow, and the Research sub-pages (stock, macro, screener, sector).",
+  "baseUrl": "http://localhost:3012",
+  "credentials": {
+    "ADMIN": {
+      "username": "admin",
+      "password": "test-password",
+      "role": "ADMIN"
+    }
+  },
+  "setup": {
+    "login": {
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/login" },
+        { "action": "fill", "selector": "input[name=username]", "value": "{{username}}" },
+        { "action": "fill", "selector": "input[name=password]", "value": "{{password}}" },
+        { "action": "click", "selector": "button[type=submit]" },
+        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 }
+      ]
+    }
+  },
+  "testCases": [
+    {
+      "id": "ANA-01",
+      "name": "Analysis page loads",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        { "action": "assert", "check": "url_contains", "value": "/ai-trader/analysis" },
+        { "action": "assert", "check": "element_visible", "selector": "[data-testid=analysis-page], .analysis-page, main" },
+        { "action": "screenshot", "name": "ana-01-analysis-page-loads" }
+      ]
+    },
+    {
+      "id": "ANA-02",
+      "name": "K-line candlestick chart renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=kline-chart], .kline-chart, svg.candlestick, canvas[data-chart=kline]",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=kline-chart], .kline-chart, svg.candlestick, canvas[data-chart=kline]"
+        },
+        { "action": "screenshot", "name": "ana-02-kline-candlestick-chart-renders" }
+      ]
+    },
+    {
+      "id": "ANA-03",
+      "name": "Technical indicators section displays RSI, MACD, Bollinger",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=technical-indicators], .technical-indicators, .indicators-section",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[data-testid=rsi-indicator]",
+            ".rsi-value",
+            "[data-label=RSI]",
+            "text=RSI"
+          ]
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[data-testid=macd-indicator]",
+            ".macd-value",
+            "[data-label=MACD]",
+            "text=MACD"
+          ]
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[data-testid=bollinger-indicator]",
+            ".bollinger-value",
+            "[data-label=Bollinger]",
+            "text=布林"
+          ]
+        },
+        { "action": "screenshot", "name": "ana-03-technical-indicators-rsi-macd-bollinger" }
+      ]
+    },
+    {
+      "id": "ANA-04",
+      "name": "AI strategy recommendation section renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=ai-strategy], .ai-strategy-section, .strategy-recommendation, [data-testid=ai-recommendation]",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=ai-strategy], .ai-strategy-section, .strategy-recommendation, [data-testid=ai-recommendation]"
+        },
+        { "action": "screenshot", "name": "ana-04-ai-strategy-recommendation-renders" }
+      ]
+    },
+    {
+      "id": "ANA-05",
+      "name": "Sentiment badge shows Bullish/Bearish/Neutral",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sentiment-badge], .sentiment-badge, .sentiment-indicator",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[data-testid=sentiment-badge]",
+            ".sentiment-badge",
+            "[data-sentiment=bullish]",
+            "[data-sentiment=bearish]",
+            "[data-sentiment=neutral]",
+            "text=Bullish",
+            "text=Bearish",
+            "text=Neutral",
+            "text=多頭",
+            "text=空頭",
+            "text=中立"
+          ]
+        },
+        { "action": "screenshot", "name": "ana-05-sentiment-badge-displays" }
+      ]
+    },
+    {
+      "id": "ANA-06",
+      "name": "Institutional flow heatmap renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=institution-heatmap], .institution-heatmap, .chips-heatmap, [data-testid=institutional-flow]",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=institution-heatmap], .institution-heatmap, .chips-heatmap, [data-testid=institutional-flow]"
+        },
+        { "action": "screenshot", "name": "ana-06-institutional-flow-heatmap-renders" }
+      ]
+    },
+    {
+      "id": "ANA-07",
+      "name": "Historical analysis comparison works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/analysis" },
+        { "action": "wait", "selector": "[data-testid=analysis-page], .analysis-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=date-picker], .date-picker, input[type=date], [data-testid=history-selector], select[name=date]",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=date-picker], .date-picker, input[type=date], [data-testid=history-selector], select[name=date]"
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=date-picker], .date-picker, [data-testid=history-selector]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=analysis-content], .analysis-content, [data-testid=analysis-result]",
+          "timeout": 6000
+        },
+        { "action": "screenshot", "name": "ana-07-historical-analysis-comparison" }
+      ]
+    },
+    {
+      "id": "RES-01",
+      "name": "Research dashboard loads with overview",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research" },
+        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
+        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        { "action": "assert", "check": "element_visible", "selector": "[data-testid=research-page], .research-page, main" },
+        { "action": "screenshot", "name": "res-01-research-dashboard-loads" }
+      ]
+    },
+    {
+      "id": "RES-02",
+      "name": "Stock research tab navigates correctly",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research" },
+        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
+        {
+          "action": "click",
+          "selector": "[data-testid=tab-stock], a[href*=stock], button[data-tab=stock], [role=tab][data-value=stock]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=stock-research], .stock-research-tab, [data-panel=stock]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[data-testid=stock-research]",
+            ".stock-research-tab",
+            "[data-panel=stock]"
+          ]
+        },
+        { "action": "screenshot", "name": "res-02-stock-research-tab-navigates" }
+      ]
+    },
+    {
+      "id": "RES-03",
+      "name": "Stock research shows financial data",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/stock" },
+        { "action": "wait", "selector": "[data-testid=stock-research], .stock-research-tab, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=financial-data], .financial-data, .stock-financials, table",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=financial-data], .financial-data, .stock-financials, table"
+        },
+        { "action": "screenshot", "name": "res-03-stock-research-financial-data" }
+      ]
+    },
+    {
+      "id": "RES-04",
+      "name": "Macro analysis tab loads economic indicators",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/macro" },
+        { "action": "wait", "selector": "[data-testid=macro-page], .macro-analysis, main", "timeout": 5000 },
+        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "wait",
+          "selector": "[data-testid=economic-indicators], .economic-indicators, .macro-indicators",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=economic-indicators], .economic-indicators, .macro-indicators"
+        },
+        { "action": "screenshot", "name": "res-04-macro-analysis-economic-indicators" }
+      ]
+    },
+    {
+      "id": "RES-05",
+      "name": "Screener tab loads with filter controls",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/screener" },
+        { "action": "wait", "selector": "[data-testid=screener-page], .screener-page, main", "timeout": 5000 },
+        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel, form.filters",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel, form.filters"
+        },
+        { "action": "screenshot", "name": "res-05-screener-tab-filter-controls" }
+      ]
+    },
+    {
+      "id": "RES-06",
+      "name": "Screener filter by RSI works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/screener" },
+        { "action": "wait", "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel", "timeout": 5000 },
+        {
+          "action": "fill",
+          "selector": "[data-testid=rsi-min], input[name=rsi_min], input[placeholder*=RSI]",
+          "value": "30"
+        },
+        {
+          "action": "fill",
+          "selector": "[data-testid=rsi-max], input[name=rsi_max]",
+          "value": "70"
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=apply-filters], button[type=submit], button[data-action=screen]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-results], .screener-results, table tbody tr",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=screener-results], .screener-results, table tbody"
+        },
+        { "action": "screenshot", "name": "res-06-screener-filter-rsi" }
+      ]
+    },
+    {
+      "id": "RES-07",
+      "name": "Screener filter by P/E works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/screener" },
+        { "action": "wait", "selector": "[data-testid=screener-filters], .screener-filters, .filter-panel", "timeout": 5000 },
+        {
+          "action": "fill",
+          "selector": "[data-testid=pe-max], input[name=pe_max], input[placeholder*=P/E], input[placeholder*=本益比]",
+          "value": "20"
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=apply-filters], button[type=submit], button[data-action=screen]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-results], .screener-results, table tbody tr",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=screener-results], .screener-results, table tbody"
+        },
+        { "action": "screenshot", "name": "res-07-screener-filter-pe" }
+      ]
+    },
+    {
+      "id": "RES-08",
+      "name": "Screener results table renders with sorting",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/screener" },
+        { "action": "wait", "selector": "[data-testid=screener-page], .screener-page, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-results] table, .screener-results table, table.screener-table",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=screener-results] table, .screener-results table, table.screener-table"
+        },
+        {
+          "action": "click",
+          "selector": "th[data-sortable=true], th[role=columnheader], th.sortable, th[aria-sort]"
+        },
+        {
+          "action": "wait",
+          "selector": "th[aria-sort=ascending], th[aria-sort=descending], th.sorted-asc, th.sorted-desc",
+          "timeout": 3000
+        },
+        { "action": "screenshot", "name": "res-08-screener-results-table-sorting" }
+      ]
+    },
+    {
+      "id": "RES-09",
+      "name": "Sector analysis tab loads",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/sector" },
+        { "action": "wait", "selector": "[data-testid=sector-page], .sector-analysis, main", "timeout": 5000 },
+        { "action": "assert", "check": "url_contains", "value": "/ai-trader/research" },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=sector-page], .sector-analysis, main"
+        },
+        { "action": "screenshot", "name": "res-09-sector-analysis-tab-loads" }
+      ]
+    },
+    {
+      "id": "RES-10",
+      "name": "Sector performance comparison chart renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research/sector" },
+        { "action": "wait", "selector": "[data-testid=sector-page], .sector-analysis, main", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sector-chart], .sector-performance-chart, svg.sector-chart, canvas[data-chart=sector]",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=sector-chart], .sector-performance-chart, svg.sector-chart, canvas[data-chart=sector]"
+        },
+        { "action": "screenshot", "name": "res-10-sector-performance-chart-renders" }
+      ]
+    },
+    {
+      "id": "RES-11",
+      "name": "Research sub-navigation tabs work correctly",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        { "action": "navigate", "url": "/ai-trader/research" },
+        { "action": "wait", "selector": "[data-testid=research-page], .research-page, main", "timeout": 5000 },
+        {
+          "action": "assert",
+          "check": "element_exists",
+          "selector": "[data-testid=research-tabs], .research-tabs, nav[aria-label*=research i], [role=tablist]"
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=tab-macro], a[href*=macro], button[data-tab=macro], [role=tab][data-value=macro]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=macro-page], .macro-analysis, [data-panel=macro]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=tab-screener], a[href*=screener], button[data-tab=screener], [role=tab][data-value=screener]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=screener-page], .screener-page, [data-panel=screener]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=tab-sector], a[href*=sector], button[data-tab=sector], [role=tab][data-value=sector]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sector-page], .sector-analysis, [data-panel=sector]",
+          "timeout": 5000
+        },
+        { "action": "screenshot", "name": "res-11-research-sub-navigation-tabs" }
+      ]
+    }
+  ]
+}
