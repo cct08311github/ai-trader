@@ -34,6 +34,7 @@ _BULL_PROMPT = """\
 從技術面與籌碼面找出做多理由，提出今日加碼方向與目標價。
 建議必須符合實際持倉狀態，空倉時勿提「已有部位停利」等操作。
 輸出 JSON：{{"bull_thesis": "...", "confidence": 0.7, "targets": ["2330", ...]}}
+【語言要求】所有分析內容必須使用繁體中文撰寫。
 """
 
 _BEAR_PROMPT = """\
@@ -52,6 +53,7 @@ _BEAR_PROMPT = """\
 找出風險與下跌訊號，反駁或補充看多觀點，提出減碼建議。
 建議必須符合實際持倉狀態，空倉時勿提「減碼已持有部位」等操作。
 輸出 JSON：{{"bear_thesis": "...", "confidence": 0.65, "risks": ["..."]}}
+【語言要求】所有分析內容必須使用繁體中文撰寫。
 """
 
 _ARBITER_PROMPT = """\
@@ -100,6 +102,7 @@ _ARBITER_PROMPT = """\
   ]
 }}
 ```
+【語言要求】所有分析內容（summary、supporting_evidence、key_tradeoffs、data_gaps）必須使用繁體中文撰寫。
     """
 
 _BAROMETER_SYMBOLS = ["0050"]  # 大盤基準指標，不依賴成交量排名強制包含

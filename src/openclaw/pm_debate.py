@@ -86,6 +86,8 @@ def build_debate_prompt(context_json: Dict[str, Any]) -> str:
         "{\"bull_case\": str, \"bear_case\": str, \"neutral_case\": str, "
         "\"consensus_points\": list[str], \"divergence_points\": list[str], "
         "\"recommended_action\": str, \"confidence\": float(0~1), \"adjudication\": str}\n"
+        "【語言要求】所有分析內容（bull_case、bear_case、neutral_case、adjudication、"
+        "recommended_action、consensus_points、divergence_points）必須使用繁體中文撰寫。\n"
         f"context={payload}"
     )
 
