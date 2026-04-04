@@ -6,7 +6,7 @@
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "openclaw2026",
+      "password": "{{ADMIN_PASSWORD}}",
       "role": "ADMIN"
     }
   },

@@ -6,7 +6,7 @@
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "openclaw2026",
+      "password": "{{ADMIN_PASSWORD}}",
       "role": "ADMIN"
     }
   },
@@ -109,7 +109,7 @@
         {
           "action": "fill",
           "selector": "#login-password",
-          "value": "openclaw2026"
+          "value": "{{ADMIN_PASSWORD}}"
         },
         {
           "action": "click",
@@ -418,7 +418,7 @@
         {
           "action": "fill",
           "selector": "#login-password",
-          "value": "openclaw2026"
+          "value": "{{ADMIN_PASSWORD}}"
         },
         {
           "action": "assert",
