@@ -41,7 +41,7 @@ async function apiFetch(url) {
 const fetchWatchlist        = ()       => apiFetch('/api/research/watchlist')
 const fetchStockReport      = (sym)    => apiFetch(`/api/research/stocks/${sym}`)
 const fetchDebate           = (sym)    => apiFetch(`/api/research/debate/${sym}`)
-const fetchPortfolioSummary = ()       => apiFetch('/api/portfolio/summary')
+const fetchPortfolioSummary = ()       => apiFetch('/api/portfolio/kpis')
 const fetchPositionDetail   = (sym)    => apiFetch(`/api/portfolio/position-detail/${encodeURIComponent(sym)}`)
 const fetchStockHistory     = (sym)    => apiFetch(`/api/research/stocks/${sym}/history`)
 

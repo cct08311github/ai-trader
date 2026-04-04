@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
-const DEFAULT_API_BASE = (import.meta?.env?.VITE_API_BASE || (import.meta?.env?.BASE_URL || '/').replace(/\/$/, '')).replace(/\/$/, '')
+import { getToken, getApiBase } from '../lib/auth'
 
-import { getToken } from '../lib/auth'
+const DEFAULT_API_BASE = getApiBase()
 
 function formatTs(ts) {
   const n = Number(ts)

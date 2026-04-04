@@ -105,15 +105,6 @@ def init_readonly_pool(db_path: Path = DB_PATH) -> None:
     """
 
     READONLY_POOL.init(db_path)
-def connect_rw(db_path: Path = DB_PATH) -> sqlite3.Connection:  # pragma: no cover
-    """Open sqlite connection in read-write mode (shadowed by redefinition below).
-
-    NOTE:
-    - Use this ONLY for explicit operator actions (approve/reject).
-    - Keep the scope tight and always commit.
-    """
-
-    READONLY_POOL.init(db_path)  # pragma: no cover
 
 
 @contextmanager
@@ -130,18 +121,16 @@ def get_conn(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:
             conn.close()
 
 
-@contextmanager
-def get_conn_rw(db_path: Path = DB_PATH) -> Iterator[sqlite3.Connection]:  # pragma: no cover
-    """Shadowed by redefinition below."""
-    conn = connect_rw(db_path)  # pragma: no cover
-    try:  # pragma: no cover
-        yield conn  # pragma: no cover
-        conn.commit()  # pragma: no cover
-    finally:  # pragma: no cover
-        conn.close()  # pragma: no cover
+_ALLOWED_TABLES = frozenset({
+    "strategy_proposals", "llm_traces", "orders", "positions",
+    "fills", "decisions", "risk_checks", "incidents",
+    "eod_analysis_reports", "stock_research_reports",
+})
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> List[str]:
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"fetch_rows: table '{table}' not in allowlist")
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return [r[1] for r in rows]  # name
 
@@ -168,6 +157,9 @@ def fetch_rows(
     IMPORTANT: table name is interpolated (cannot be parameterized). Only call this
     for trusted, hard-coded table names.
     """
+
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"fetch_rows: table '{table}' not in allowlist")
 
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))

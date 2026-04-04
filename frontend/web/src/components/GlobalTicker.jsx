@@ -1,16 +1,17 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { getApiBase, getToken } from '../lib/auth'
 
 // ---------------------------------------------------------------------------
 // API fetch
 // ---------------------------------------------------------------------------
 
-const API_BASE = (import.meta?.env?.VITE_API_BASE || (import.meta?.env?.BASE_URL || '/').replace(/\/$/, '')).replace(/\/$/, '')
+const API_BASE = getApiBase()
 
 async function fetchLatestIndices() {
   const res = await fetch(`${API_BASE}/api/indices/latest`, {
     headers: {
-      Authorization: `Bearer ${localStorage.getItem('auth_token') || ''}`,
+      Authorization: `Bearer ${getToken() || ''}`,
     },
   })
   if (!res.ok) {
@@ -49,7 +50,7 @@ function useMarketTickSSE({ enabled = true } = {}) {
       return
     }
 
-    const token = localStorage.getItem('auth_token') || ''
+    const token = getToken() || ''
     // SECURITY NOTE: EventSource API does not support custom headers.
     // Auth token is passed via URL query parameter as a technical limitation.
     // Token will appear in server access logs and browser history.
