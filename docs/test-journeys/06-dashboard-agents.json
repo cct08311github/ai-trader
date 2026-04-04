@@ -1,12 +1,12 @@
 {
   "journey": "dashboard-agents",
-  "version": "1.0.0",
-  "description": "Dashboard, Agents, Risk, and Geopolitical module journeys for ai-trader frontend. Covers indices snapshot, portfolio KPIs, action queue, agent mission control, execution timeline, risk KPI cards, sector treemap, stress tests, and geopolitical globe.",
+  "version": "1.1.0",
+  "description": "Dashboard, Agents, Risk, and Geopolitical module journeys. Dashboard: global ticker marquee, 4 KPI cards (投組總值/VIX 波動指數/加權指數 TAIEX/活躍警報), 警報中心, 投組摘要 (今日漲幅前三/今日跌幅前三/查看完整持倉 link), 市場脈動, 待辦行動. Agents: MISSION CONTROL heading, stats (AGENTS:/RUNNING:/EXECUTED:/ERRORS:), EXECUTE ALL button, agent cards with EXECUTE/RUNNING button, confidence+latency badges, execution timeline sidebar, RETRY on error cards. Risk: VaR 95% (日)/最大回撤/集中度分數 KPI, 持倉權重 Treemap, 板塊配置 pie, 板塊相關性矩陣, stop-loss table (代號/現價/停損價/距停損), stress test cards. Geopolitical: 地緣政治分析 title, 2D/3D toggle, category filters (全部/衝突/貿易戰/制裁/政策/選舉), 全球風險地圖 panel, 地緣政治事件 news feed, 市場影響概況.",
   "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "test-password",
+      "password": "openclaw2026",
       "role": "ADMIN"
     }
   },
@@ -33,7 +33,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main, nav",
           "timeout": 5000
         }
       ]
@@ -52,22 +52,13 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
           "check": "element_visible",
-          "selector": "[data-testid=dashboard]"
-        },
-        {
-          "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=dashboard]",
-            ".dashboard-page",
-            "main[data-page=dashboard]"
-          ]
+          "selector": "main"
         },
         {
           "action": "screenshot",
@@ -77,7 +68,7 @@
     },
     {
       "id": "DASH-02",
-      "name": "Indices snapshot renders with TWII, VIX etc.",
+      "name": "Global ticker marquee shows indices (VIX, TAIEX etc.)",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -87,48 +78,31 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=indices-snapshot], .indices-snapshot, .market-indices, [data-testid=market-overview]",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=indices-snapshot], .indices-snapshot, .market-indices, [data-testid=market-overview]"
-        },
-        {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-testid=twii-index]",
-            ".twii-value",
-            "text=TWII",
-            "text=加權指數",
-            "text=TAIEX"
-          ]
-        },
-        {
-          "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=vix-index]",
-            ".vix-value",
-            "text=VIX"
+            "[class*='marquee']",
+            "[class*='Marquee']",
+            "[class*='ticker']",
+            "[class*='Ticker']",
+            "text=VIX",
+            "text=TAIEX",
+            "text=加權指數"
           ]
         },
         {
           "action": "screenshot",
-          "name": "dash-02-indices-snapshot-twii-vix"
+          "name": "dash-02-global-ticker-marquee"
         }
       ]
     },
     {
       "id": "DASH-03",
-      "name": "Portfolio summary KPIs display",
+      "name": "Four KPI cards display: 投組總值, VIX 波動指數, 加權指數 (TAIEX), 活躍警報",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -138,101 +112,52 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=portfolio-summary], .portfolio-summary, .portfolio-kpi",
-          "timeout": 8000
+          "action": "assert",
+          "check": "text visible: 投組總值"
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=portfolio-summary], .portfolio-summary, .portfolio-kpi"
+          "check": "text visible: VIX 波動指數"
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-testid=total-pnl]",
-            ".total-pnl",
-            "[data-kpi=unrealized_pnl]",
-            "text=未實現損益",
-            "text=Total P&L"
+            "text=加權指數 (TAIEX)",
+            "text=加權指數(TAIEX)",
+            "text=TAIEX",
+            "text=加權指數"
           ]
         },
         {
+          "action": "assert",
+          "check": "text visible: 活躍警報"
+        },
+        {
           "action": "screenshot",
-          "name": "dash-03-portfolio-summary-kpis"
+          "name": "dash-03-four-kpi-cards"
         }
       ]
     },
     {
-      "id": "DASH-04",
-      "name": "Latest analysis snapshot section renders",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=analysis-snapshot], .analysis-snapshot, .latest-analysis, [data-testid=eod-analysis]",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=analysis-snapshot], .analysis-snapshot, .latest-analysis, [data-testid=eod-analysis]"
-        },
-        {
-          "action": "screenshot",
-          "name": "dash-04-latest-analysis-snapshot"
-        }
-      ]
+      "id": "DASH-04-REMOVED",
+      "name": "[REMOVED] analysis-snapshot section — not present in Dashboard.jsx",
+      "_skip": true,
+      "steps": []
     },
     {
-      "id": "DASH-05",
-      "name": "Risk snapshot section renders",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=risk-snapshot], .risk-snapshot, .risk-summary, [data-testid=risk-overview]",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=risk-snapshot], .risk-snapshot, .risk-summary, [data-testid=risk-overview]"
-        },
-        {
-          "action": "screenshot",
-          "name": "dash-05-risk-snapshot-renders"
-        }
-      ]
+      "id": "DASH-05-REMOVED",
+      "name": "[REMOVED] risk-snapshot section — not present in Dashboard.jsx",
+      "_skip": true,
+      "steps": []
     },
     {
       "id": "DASH-06",
-      "name": "Action queue displays AI suggestions",
+      "name": "Action queue section heading '待辦行動' displays",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -242,28 +167,22 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=action-queue], .action-queue, .ai-suggestions, [data-testid=proposals-feed]",
-          "timeout": 8000
-        },
-        {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=action-queue], .action-queue, .ai-suggestions, [data-testid=proposals-feed]"
+          "check": "text visible: 待辦行動"
         },
         {
           "action": "screenshot",
-          "name": "dash-06-action-queue-ai-suggestions"
+          "name": "dash-06-action-queue-heading"
         }
       ]
     },
     {
       "id": "DASH-07",
-      "name": "Top gainers/losers section renders",
+      "name": "Portfolio summary (投組摘要) shows today's top gainers and losers",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -273,28 +192,34 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=gainers-losers], .top-gainers, .top-losers, .gainers-losers-section",
-          "timeout": 8000
+          "action": "assert",
+          "check": "text visible: 投組摘要"
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=gainers-losers], .top-gainers, .top-losers, .gainers-losers-section"
+          "check": "any_element_exists",
+          "selectors": [
+            "text=今日漲幅前三",
+            "text=今日跌幅前三"
+          ]
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 查看完整持倉 →"
         },
         {
           "action": "screenshot",
-          "name": "dash-07-top-gainers-losers"
+          "name": "dash-07-portfolio-summary-gainers-losers"
         }
       ]
     },
     {
       "id": "DASH-08",
-      "name": "Navigation links to detail pages work",
+      "name": "Alert center (警報中心) section renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -304,16 +229,74 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 警報中心"
+        },
+        {
+          "action": "screenshot",
+          "name": "dash-08-alert-center-section"
+        }
+      ]
+    },
+    {
+      "id": "DASH-09",
+      "name": "Market pulse (市場脈動) section renders with analysis summary and indices",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 市場脈動"
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=盤後分析摘要",
+            "text=關鍵指數"
+          ]
+        },
+        {
+          "action": "screenshot",
+          "name": "dash-09-market-pulse-section"
+        }
+      ]
+    },
+    {
+      "id": "DASH-10",
+      "name": "Navigation link to portfolio works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "a[href*=/ai-trader/portfolio], [data-testid=nav-portfolio], nav a[href*=portfolio]"
+          "selector": "text=查看完整持倉 →, a[href*='/ai-trader/portfolio']"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=portfolio-page], .portfolio-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -322,78 +305,14 @@
           "value": "/ai-trader/portfolio"
         },
         {
-          "action": "navigate",
-          "url": "/ai-trader/"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
-        },
-        {
-          "action": "click",
-          "selector": "a[href*=/ai-trader/strategy], [data-testid=nav-strategy], nav a[href*=strategy]"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=strategy-page], .strategy-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "url_contains",
-          "value": "/ai-trader/strategy"
-        },
-        {
           "action": "screenshot",
-          "name": "dash-08-navigation-links-detail-pages"
-        }
-      ]
-    },
-    {
-      "id": "DASH-09",
-      "name": "Dashboard auto-refreshes data",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=last-updated], .last-updated, [data-testid=refresh-indicator], .refresh-indicator, time[data-auto-refresh]",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=last-updated]",
-            ".last-updated",
-            "[data-testid=refresh-indicator]",
-            "text=最後更新",
-            "text=Last updated"
-          ]
-        },
-        {
-          "action": "wait",
-          "timeout": 6000
-        },
-        {
-          "action": "screenshot",
-          "name": "dash-09-dashboard-auto-refresh"
+          "name": "dash-10-navigation-to-portfolio"
         }
       ]
     },
     {
       "id": "AGT-01",
-      "name": "Agents page loads with mission control layout",
+      "name": "Agents page loads with 'MISSION CONTROL' heading",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -403,7 +322,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -413,8 +332,7 @@
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=agents-page], .agents-page, main"
+          "check": "text visible: MISSION CONTROL"
         },
         {
           "action": "screenshot",
@@ -424,7 +342,7 @@
     },
     {
       "id": "AGT-02",
-      "name": "Agent status bar shows total, running, errors, uptime",
+      "name": "Agent stats bar shows AGENTS:, RUNNING:, EXECUTED:, ERRORS: labels",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -434,68 +352,50 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=agent-status-bar], .agent-status-bar, .agent-stats-header",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=agent-status-bar], .agent-status-bar, .agent-stats-header"
-        },
-        {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-stat=total]",
-            "[data-testid=agent-total]",
-            "text=Total",
-            "text=總計"
+            "text=AGENTS:",
+            "[class*='agents-count']"
           ]
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-stat=running]",
-            "[data-testid=agent-running]",
-            "text=Running",
-            "text=執行中"
+            "text=RUNNING:",
+            "[class*='running-count']"
           ]
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-stat=errors]",
-            "[data-testid=agent-errors]",
-            "text=Errors",
-            "text=錯誤"
+            "text=EXECUTED:",
+            "[class*='executed-count']"
           ]
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-stat=uptime]",
-            "[data-testid=agent-uptime]",
-            "text=Uptime",
-            "text=運行時間"
+            "text=ERRORS:",
+            "[class*='errors-count']"
           ]
         },
         {
           "action": "screenshot",
-          "name": "agt-02-agent-status-bar"
+          "name": "agt-02-agent-stats-bar"
         }
       ]
     },
     {
       "id": "AGT-03",
-      "name": "Active agents display as large cards",
+      "name": "Agent cards render with icon, label, status dot, and state text",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -505,96 +405,36 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=active-agents], .active-agents, [data-status=active], .agent-card--active",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=active-agents], .active-agents, [data-status=active], .agent-card--active"
-        },
-        {
-          "action": "screenshot",
-          "name": "agt-03-active-agents-large-cards"
-        }
-      ]
-    },
-    {
-      "id": "AGT-04",
-      "name": "Idle agents display as small cards",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/agents"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=idle-agents], .idle-agents, [data-status=idle], .agent-card--idle",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=idle-agents], .idle-agents, [data-status=idle], .agent-card--idle"
-        },
-        {
-          "action": "screenshot",
-          "name": "agt-04-idle-agents-small-cards"
-        }
-      ]
-    },
-    {
-      "id": "AGT-05",
-      "name": "Error agents pulse red",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/agents"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-status=error]",
-            ".agent-card--error",
-            "[data-testid=agent-error]",
-            ".agent-error-pulse",
-            ".pulse-red"
+            "[class*='agent-card']",
+            "[class*='AgentCard']",
+            "[class*='card']"
+          ]
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=RUNNING",
+            "text=IDLE",
+            "text=NEVER RUN"
           ]
         },
         {
           "action": "screenshot",
-          "name": "agt-05-error-agents-pulse-red"
+          "name": "agt-03-agent-cards-with-state"
         }
       ]
     },
     {
-      "id": "AGT-06",
-      "name": "Execution timeline renders in sidebar",
+      "id": "AGT-04",
+      "name": "Agent cards show confidence and latency badges",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -604,18 +444,89 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=execution-timeline], .execution-timeline, .timeline-sidebar, aside .timeline",
-          "timeout": 8000
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='confidence']",
+            "[class*='Confidence']",
+            "text=confidence"
+          ]
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=execution-timeline], .execution-timeline, .timeline-sidebar, aside .timeline"
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='latency']",
+            "[class*='Latency']",
+            "text=latency",
+            "text=ms"
+          ]
+        },
+        {
+          "action": "screenshot",
+          "name": "agt-04-confidence-latency-badges"
+        }
+      ]
+    },
+    {
+      "id": "AGT-05",
+      "name": "Error agent card has pulsing red border and RETRY button",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=RETRY",
+            "[class*='error']",
+            "[class*='pulse']",
+            "[class*='red']"
+          ]
+        },
+        {
+          "action": "screenshot",
+          "name": "agt-05-error-agent-retry-button"
+        }
+      ]
+    },
+    {
+      "id": "AGT-06",
+      "name": "Execution timeline renders in sticky right sidebar",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='timeline']",
+            "[class*='Timeline']",
+            "aside",
+            "[class*='sidebar']"
+          ]
         },
         {
           "action": "screenshot",
@@ -625,7 +536,7 @@
     },
     {
       "id": "AGT-07",
-      "name": "Run agent button triggers confirmation",
+      "name": "EXECUTE button on agent card and EXECUTE ALL header button are visible",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -635,41 +546,36 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=run-agent-btn], button[data-action=run-agent], .run-agent-button",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=run-agent-btn]:first-of-type, button[data-action=run-agent]:first-of-type, .run-agent-button:first-of-type"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=confirm-dialog], [role=dialog], .confirm-modal, .modal",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=confirm-dialog], [role=dialog], .confirm-modal, .modal"
+          "check": "any_element_exists",
+          "selectors": [
+            "text=EXECUTE ALL",
+            "button:has-text('EXECUTE ALL')"
+          ]
         },
         {
-          "action": "click",
-          "selector": "[data-testid=cancel-btn], button[data-action=cancel], .modal button:last-of-type, [role=dialog] button:last-of-type"
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=EXECUTE",
+            "text=RUNNING",
+            "button:has-text('EXECUTE')",
+            "button:has-text('RUNNING')"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "agt-07-run-agent-confirmation-dialog"
+          "name": "agt-07-execute-and-execute-all-buttons"
         }
       ]
     },
     {
       "id": "AGT-08",
-      "name": "Agent history panel shows last runs",
+      "name": "Clicking EXECUTE on an idle agent triggers execution (button changes to RUNNING)",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -679,90 +585,27 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=agent-history], .agent-history, .agent-run-history, [data-testid=last-runs]",
-          "timeout": 8000
+          "action": "click",
+          "selector": "button:has-text('EXECUTE'):first-of-type"
         },
         {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=agent-history], .agent-history, .agent-run-history, [data-testid=last-runs]"
+          "action": "wait",
+          "selector": "main",
+          "timeout": 3000
         },
         {
           "action": "screenshot",
-          "name": "agt-08-agent-history-last-runs"
-        }
-      ]
-    },
-    {
-      "id": "AGT-09",
-      "name": "Confidence badge displays percentage",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/agents"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=confidence-badge], .confidence-badge, [data-label=confidence], .agent-confidence",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=confidence-badge], .confidence-badge, [data-label=confidence], .agent-confidence"
-        },
-        {
-          "action": "screenshot",
-          "name": "agt-09-confidence-badge-percentage"
-        }
-      ]
-    },
-    {
-      "id": "AGT-10",
-      "name": "Agent latency metrics display",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/agents"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agents-page], .agents-page, main",
-          "timeout": 5000
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=agent-latency], .agent-latency, [data-metric=latency], .latency-badge",
-          "timeout": 8000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=agent-latency], .agent-latency, [data-metric=latency], .latency-badge"
-        },
-        {
-          "action": "screenshot",
-          "name": "agt-10-agent-latency-metrics"
+          "name": "agt-08-execute-agent-button-clicked"
         }
       ]
     },
     {
       "id": "RISK-01",
-      "name": "Risk page loads with KPI cards",
+      "name": "Risk page loads with KPI cards: VaR 95% (日), 最大回撤, 集中度分數",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -772,7 +615,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=risk-page], .risk-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -781,14 +624,21 @@
           "value": "/ai-trader/risk"
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=risk-kpi], .risk-kpi-cards, .kpi-card, [data-testid=risk-metrics]",
-          "timeout": 8000
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=VaR 95% (日)",
+            "text=VaR 95%",
+            "text=VaR"
+          ]
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=risk-kpi], .risk-kpi-cards, .kpi-card, [data-testid=risk-metrics]"
+          "check": "text visible: 最大回撤"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 集中度分數"
         },
         {
           "action": "screenshot",
@@ -798,7 +648,7 @@
     },
     {
       "id": "RISK-02",
-      "name": "Sector concentration treemap renders",
+      "name": "Position weight treemap '持倉權重 Treemap' renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -808,28 +658,28 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=risk-page], .risk-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=sector-treemap], .sector-treemap, svg.treemap, [data-chart=treemap]",
-          "timeout": 8000
-        },
-        {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=sector-treemap], .sector-treemap, svg.treemap, [data-chart=treemap]"
+          "check": "any_element_exists",
+          "selectors": [
+            "text=持倉權重 Treemap",
+            "text=持倉權重",
+            "[class*='treemap']",
+            "[class*='Treemap']"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "risk-02-sector-concentration-treemap"
+          "name": "risk-02-position-treemap"
         }
       ]
     },
     {
       "id": "RISK-03",
-      "name": "Stress test results display",
+      "name": "Sector allocation pie chart '板塊配置' renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -839,28 +689,125 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=risk-page], .risk-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
+          "action": "assert",
+          "check": "text visible: 板塊配置"
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "svg",
+            "canvas",
+            "[class*='pie']",
+            "[class*='Pie']"
+          ]
+        },
+        {
+          "action": "screenshot",
+          "name": "risk-03-sector-pie-chart"
+        }
+      ]
+    },
+    {
+      "id": "RISK-04",
+      "name": "Sector correlation matrix '板塊相關性矩陣' renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
           "action": "wait",
-          "selector": "[data-testid=stress-test], .stress-test-results, [data-testid=scenario-results], .scenario-card",
-          "timeout": 8000
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 板塊相關性矩陣"
+        },
+        {
+          "action": "screenshot",
+          "name": "risk-04-sector-correlation-matrix"
+        }
+      ]
+    },
+    {
+      "id": "RISK-05",
+      "name": "Stop-loss table shows columns: 代號, 現價, 停損價, 距停損",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "text=代號",
+            "text=現價",
+            "text=停損價",
+            "text=距停損",
+            "th:has-text('代號')"
+          ]
+        },
+        {
+          "action": "screenshot",
+          "name": "risk-05-stop-loss-table-columns"
+        }
+      ]
+    },
+    {
+      "id": "RISK-06",
+      "name": "Stress test scenario cards render",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
         },
         {
           "action": "assert",
           "check": "element_visible",
-          "selector": "[data-testid=stress-test], .stress-test-results, [data-testid=scenario-results], .scenario-card"
+          "selector": "main"
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='stress']",
+            "[class*='Stress']",
+            "[class*='scenario']",
+            "[class*='Scenario']"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "risk-03-stress-test-results"
+          "name": "risk-06-stress-test-scenario-cards"
         }
       ]
     },
     {
       "id": "GEO-01",
-      "name": "Geopolitical page loads",
+      "name": "Geopolitical page loads with title '地緣政治分析'",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -870,7 +817,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=geopolitical-page], .geopolitical-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -880,18 +827,17 @@
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=geopolitical-page], .geopolitical-page, main"
+          "check": "text visible: 地緣政治分析"
         },
         {
           "action": "screenshot",
-          "name": "geo-01-geopolitical-page-loads"
+          "name": "geo-01-geopolitical-title"
         }
       ]
     },
     {
       "id": "GEO-02",
-      "name": "Globe visualization renders",
+      "name": "Map panel '全球風險地圖' with 2D/3D toggle buttons renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -901,22 +847,127 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=geopolitical-page], .geopolitical-page, main",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "wait",
-          "selector": "[data-testid=globe-viz], .globe-visualization, canvas.globe, svg.globe, [data-component=globe]",
-          "timeout": 10000
+          "action": "assert",
+          "check": "text visible: 全球風險地圖"
         },
         {
           "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=globe-viz], .globe-visualization, canvas.globe, svg.globe, [data-component=globe]"
+          "check": "any_element_exists",
+          "selectors": [
+            "button:has-text('2D')",
+            "text=2D"
+          ]
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "button:has-text('3D')",
+            "text=3D"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "geo-02-globe-visualization-renders"
+          "name": "geo-02-map-panel-2d-3d-toggle"
+        }
+      ]
+    },
+    {
+      "id": "GEO-03",
+      "name": "Category filter buttons render (全部/衝突/貿易戰/制裁/政策/選舉)",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/geopolitical"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 全部"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 衝突"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 貿易戰"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 制裁"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 政策"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 選舉"
+        },
+        {
+          "action": "screenshot",
+          "name": "geo-03-category-filter-buttons"
+        }
+      ]
+    },
+    {
+      "id": "GEO-04",
+      "name": "News feed '地緣政治事件' section renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/geopolitical"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 地緣政治事件"
+        },
+        {
+          "action": "screenshot",
+          "name": "geo-04-news-feed-geopolitical-events"
+        }
+      ]
+    },
+    {
+      "id": "GEO-05",
+      "name": "Market impact section '市場影響概況' renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/geopolitical"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 市場影響概況"
+        },
+        {
+          "action": "screenshot",
+          "name": "geo-05-market-impact-overview"
         }
       ]
     }

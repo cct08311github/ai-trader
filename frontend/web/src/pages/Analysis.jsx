@@ -345,7 +345,7 @@ export default function AnalysisPage() {
   }
 
   return (
-    <div className="space-y-4 pb-20 lg:pb-4">
+    <div data-testid="analysis-page" className="space-y-4 pb-20 lg:pb-4">
 
       {/* States */}
       {loading && <div className="py-4"><LoadingSpinner label="Loading..." /></div>}
@@ -369,7 +369,7 @@ export default function AnalysisPage() {
             <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-3">
               <div className="flex items-center gap-4">
                 <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">INTELLIGENCE DASHBOARD</span>
-                <SentimentBadge sentiment={report.market_summary?.sentiment} />
+                <span data-testid="sentiment-badge"><SentimentBadge sentiment={report.market_summary?.sentiment} /></span>
                 {report.trade_date && <span className="font-mono text-[10px] text-[rgb(var(--muted))]">{report.trade_date}</span>}
               </div>
               {/* Symbol selector + search */}
@@ -393,7 +393,7 @@ export default function AnalysisPage() {
               </div>
             </div>
             {/* K-line chart */}
-            <div className="p-3">
+            <div data-testid="kline-chart" className="p-3">
               {selectedSymbol && <KlineChart symbol={selectedSymbol} />}
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
             {/* ── LEFT SIDEBAR: Indicator Readings ──────────── */}
-            <div className="lg:col-span-3 space-y-4">
+            <div data-testid="indicators" className="lg:col-span-3 space-y-4">
               <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))] px-1">
                 TECHNICAL INDICATORS
                 {selectedSymbol && <span className="ml-2 text-[rgb(var(--text))]">{selectedSymbol}</span>}

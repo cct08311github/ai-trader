@@ -380,7 +380,7 @@ export default function Risk() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 p-4">
+    <div data-testid="risk-page" className="space-y-4 p-4">
       {/* Page title */}
       <h1
         className="text-lg font-medium text-th-text"
@@ -404,7 +404,7 @@ export default function Risk() {
       )}
 
       {/* ── Top KPI row ──────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div data-testid="risk-kpis" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard
           label="VaR 95% (日)"
           value={
@@ -450,7 +450,7 @@ export default function Risk() {
       </div>
 
       {/* ── Treemap + Sector Pie row ───────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div data-testid="risk-treemap" className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Treemap */}
         <DataCard title="持倉權重 Treemap" loading={loading} error={error} empty={!loading && !error && !positions.length ? '無持倉資料' : undefined}>
           {positions.length > 0 && (
@@ -525,6 +525,7 @@ export default function Risk() {
       </DataCard>
 
       {/* ── Stress test scenarios ──────────────────────────────────────────── */}
+      <div data-testid="stress-tests">
       <DataCard
         title="壓力測試情境"
         loading={loading}
@@ -539,6 +540,7 @@ export default function Risk() {
           </div>
         )}
       </DataCard>
+      </div>
 
       {/* Refresh hint */}
       {!loading && !error && (

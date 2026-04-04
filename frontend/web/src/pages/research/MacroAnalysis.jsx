@@ -489,7 +489,7 @@ export default function MacroAnalysis() {
   }, [])
 
   return (
-    <div className="space-y-4 px-0 sm:px-1">
+    <div data-testid="macro-analysis" className="space-y-4 px-0 sm:px-1">
 
       {/* ── Header ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-th-border">

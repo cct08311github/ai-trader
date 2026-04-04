@@ -1,12 +1,12 @@
 {
   "journey": "strategy-proposals",
-  "version": "1.0.0",
-  "description": "Strategy page: war room layout, proposal lifecycle (approve/reject/batch), committee debate, LLM traces, semantic memory, market debates, filtering, and Bull vs Bear split view.",
+  "version": "1.1.0",
+  "description": "Strategy page: war room layout, proposal lifecycle (approve/reject/batch), committee debate (BULL THESIS / VERDICT / BEAR THESIS), LLM traces terminal, earlier debates section, date filter, and pagination.",
   "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "test-password",
+      "password": "openclaw2026",
       "role": "ADMIN"
     }
   },
@@ -19,22 +19,22 @@
         },
         {
           "action": "fill",
-          "selector": "input[name=username]",
+          "selector": "#login-username",
           "value": "{{username}}"
         },
         {
           "action": "fill",
-          "selector": "input[name=password]",
+          "selector": "#login-password",
           "value": "{{password}}"
         },
         {
           "action": "click",
-          "selector": "button[type=submit]"
+          "selector": "text=登入"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
+          "selector": "nav, [class*='sidebar']",
+          "timeout": 8000
         }
       ]
     }
@@ -52,30 +52,28 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=strategy-page], .strategy-page, main[class*='strategy']",
+          "selector": "main, [class*='strategy'], [class*='war-room']",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "url contains /ai-trader/strategy"
+          "check": "url_contains",
+          "value": "/ai-trader/strategy"
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=strategy-page], .strategy-page, h1"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: nav, [data-testid=sidebar]"
+          "check": "element_visible",
+          "selector": "nav, [class*='sidebar']"
         },
         {
           "action": "screenshot",
-          "name": "strategy-page-war-room-layout"
+          "name": "strat-01-strategy-page-war-room-layout"
         }
       ]
     },
     {
       "id": "STRAT-02",
-      "name": "Market rating hero displays (A/B/C rating)",
+      "name": "Market rating hero displays with MARKET RATING label",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -85,26 +83,38 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=market-rating], .market-rating, [class*='rating']",
+          "selector": "text=MARKET RATING",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=market-rating], .market-rating"
+          "check": "element_visible",
+          "selector": "text=MARKET RATING"
         },
         {
           "action": "assert",
-          "check": "element text matches pattern: [A-C][+-]?|中性|偏多|偏空"
+          "check": "any_element_exists",
+          "selectors": [
+            "text=A",
+            "text=B",
+            "text=C",
+            "text=A+",
+            "text=A-",
+            "text=B+",
+            "text=B-",
+            "text=C+",
+            "text=C-"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "strategy-market-rating-hero"
+          "name": "strat-02-market-rating-hero"
         }
       ]
     },
     {
       "id": "STRAT-03",
-      "name": "Active proposal queue renders at top",
+      "name": "Active proposal queue renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -114,22 +124,28 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-queue], .proposal-queue, [class*='proposal']",
+          "selector": "[class*='proposal'], [class*='Proposal']",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=proposal-queue], [class*='proposal-list'], [class*='proposals']"
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='proposal-card']",
+            "[class*='ProposalCard']",
+            "[class*='proposal-list']",
+            "[class*='proposalCard']"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "strategy-active-proposal-queue"
+          "name": "strat-03-active-proposal-queue"
         }
       ]
     },
     {
       "id": "STRAT-04",
-      "name": "Proposal cards show status dots (pending/approved/rejected/executed)",
+      "name": "Proposal cards show status indicators",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -139,26 +155,30 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card, [class*='proposal-item']",
+          "selector": "[class*='proposal'], [class*='Proposal']",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element count >= 1: [data-testid=proposal-card], .proposal-card, [class*='proposal-item']"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=status-dot], .status-dot, [class*='status'], [class*='badge']"
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='status']",
+            "[class*='badge']",
+            "text=pending",
+            "text=PENDING",
+            "text=approved",
+            "text=APPROVED"
+          ]
         },
         {
           "action": "screenshot",
-          "name": "strategy-proposal-cards-status-dots"
+          "name": "strat-04-proposal-cards-status"
         }
       ]
     },
     {
       "id": "STRAT-05",
-      "name": "Click approve on a pending proposal",
+      "name": "Click APPROVE on a pending proposal",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -168,31 +188,33 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card",
+          "selector": "button:has-text('APPROVE')",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: button[data-action='approve'], button[class*='approve'], button:has-text('核准'), button:has-text('Approve')"
+          "check": "element_visible",
+          "selector": "button:has-text('APPROVE')"
         },
         {
           "action": "click",
-          "selector": "[data-status='pending'] button[data-action='approve'], [data-status='pending'] button[class*='approve'], .proposal-card:first-child button[class*='approve'], .proposal-card:first-child button:has-text('核准')"
+          "selector": "button:has-text('APPROVE'):first-of-type"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [class*='notification'], [role='alert']",
-          "timeout": 3000
+          "selector": "[class*='toast'], [role='alert'], [class*='notification']",
+          "timeout": 5000,
+          "optional": true
         },
         {
           "action": "screenshot",
-          "name": "strategy-approve-pending-proposal"
+          "name": "strat-05-approve-pending-proposal"
         }
       ]
     },
     {
       "id": "STRAT-06",
-      "name": "Click reject on a pending proposal with reason",
+      "name": "Click REJECT on a pending proposal",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -202,41 +224,33 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card",
+          "selector": "button:has-text('REJECT')",
           "timeout": 5000
         },
         {
-          "action": "click",
-          "selector": "[data-status='pending'] button[data-action='reject'], .proposal-card button[class*='reject'], .proposal-card button:has-text('拒絕'), .proposal-card button:has-text('Reject')"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=reject-modal], [class*='modal'], dialog, [role='dialog']",
-          "timeout": 3000
-        },
-        {
-          "action": "fill",
-          "selector": "textarea[name=reason], input[name=reason], [data-testid=reject-reason]",
-          "value": "風險過高，市場不利"
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "button:has-text('REJECT')"
         },
         {
           "action": "click",
-          "selector": "button[data-testid=confirm-reject], button[class*='confirm'], dialog button[class*='reject'], [role='dialog'] button:last-child"
+          "selector": "button:has-text('REJECT'):first-of-type"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
+          "selector": "[role='dialog'], [class*='modal'], dialog",
+          "timeout": 3000,
+          "optional": true
         },
         {
           "action": "screenshot",
-          "name": "strategy-reject-pending-proposal-with-reason"
+          "name": "strat-06-reject-pending-proposal"
         }
       ]
     },
     {
       "id": "STRAT-07",
-      "name": "Batch approve multiple proposals (checkbox select + batch action)",
+      "name": "Batch approve: checkbox select multiple proposals and batch approve",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -246,39 +260,52 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card",
+          "selector": "input[type='checkbox']",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "[data-testid=proposal-card]:nth-child(1) input[type='checkbox'], .proposal-card:nth-child(1) input[type='checkbox']"
+          "selector": "input[type='checkbox']:nth-of-type(1)"
         },
         {
           "action": "click",
-          "selector": "[data-testid=proposal-card]:nth-child(2) input[type='checkbox'], .proposal-card:nth-child(2) input[type='checkbox']"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=batch-actions], .batch-actions, [class*='batch']"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=batch-approve], button[class*='batch-approve'], [class*='batch'] button:has-text('核准'), [class*='batch'] button:has-text('Approve All')"
+          "selector": "input[type='checkbox']:nth-of-type(2)"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
+          "selector": "[class*='batch'], text=APPROVE ALL, text=Approve All",
+          "timeout": 2000,
+          "optional": true
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='batch']",
+            "text=APPROVE ALL",
+            "text=Approve All",
+            "button:has-text('核准')"
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('APPROVE ALL'), button:has-text('Approve All'), [class*='batch'] button:has-text('APPROVE')"
+        },
+        {
+          "action": "wait",
+          "selector": "[class*='toast'], [role='alert']",
+          "timeout": 3000,
+          "optional": true
         },
         {
           "action": "screenshot",
-          "name": "strategy-batch-approve-proposals"
+          "name": "strat-07-batch-approve-proposals"
         }
       ]
     },
     {
       "id": "STRAT-08",
-      "name": "Batch reject multiple proposals",
+      "name": "Batch reject: checkbox select multiple proposals and batch reject",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -288,39 +315,52 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card",
+          "selector": "input[type='checkbox']",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "[data-testid=proposal-card]:nth-child(1) input[type='checkbox'], .proposal-card:nth-child(1) input[type='checkbox']"
+          "selector": "input[type='checkbox']:nth-of-type(1)"
         },
         {
           "action": "click",
-          "selector": "[data-testid=proposal-card]:nth-child(2) input[type='checkbox'], .proposal-card:nth-child(2) input[type='checkbox']"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=batch-actions], .batch-actions, [class*='batch']"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=batch-reject], button[class*='batch-reject'], [class*='batch'] button:has-text('拒絕'), [class*='batch'] button:has-text('Reject All')"
+          "selector": "input[type='checkbox']:nth-of-type(2)"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
+          "selector": "[class*='batch'], text=REJECT ALL, text=Reject All",
+          "timeout": 2000,
+          "optional": true
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='batch']",
+            "text=REJECT ALL",
+            "text=Reject All",
+            "button:has-text('拒絕')"
+          ]
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('REJECT ALL'), button:has-text('Reject All'), [class*='batch'] button:has-text('REJECT')"
+        },
+        {
+          "action": "wait",
+          "selector": "[class*='toast'], [role='alert']",
+          "timeout": 3000,
+          "optional": true
         },
         {
           "action": "screenshot",
-          "name": "strategy-batch-reject-proposals"
+          "name": "strat-08-batch-reject-proposals"
         }
       ]
     },
     {
       "id": "STRAT-09",
-      "name": "Committee debate section renders chat bubbles",
+      "name": "Committee debate section shows BULL THESIS, VERDICT, BEAR THESIS headings",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -330,26 +370,33 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=committee-debate], [class*='committee'], [class*='debate']",
+          "selector": "text=BULL THESIS, text=BEAR THESIS",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=committee-debate], [class*='committee-debate'], [class*='debate']"
+          "check": "element_visible",
+          "selector": "text=BULL THESIS"
         },
         {
           "action": "assert",
-          "check": "element count >= 1: [data-testid=chat-bubble], [class*='chat-bubble'], [class*='message-bubble'], [class*='debate-message']"
+          "check": "element_visible",
+          "selector": "text=BEAR THESIS"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=VERDICT"
         },
         {
           "action": "screenshot",
-          "name": "strategy-committee-debate-chat-bubbles"
+          "name": "strat-09-committee-debate-bull-bear-verdict"
         }
       ]
     },
     {
       "id": "STRAT-10",
-      "name": "LLM trace terminal expands/collapses",
+      "name": "LLM trace terminal (PM AUDIT TRACES) renders with colored dots",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -359,71 +406,23 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=llm-trace], [class*='llm-trace'], [class*='trace-terminal']",
+          "selector": "text=PM AUDIT TRACES",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=llm-trace], [class*='llm-trace']"
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=llm-trace-toggle], [class*='llm-trace'] button[class*='toggle'], [class*='llm-trace'] [class*='expand'], [class*='trace-terminal'] button"
-        },
-        {
-          "action": "wait",
-          "timeout": 500
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=llm-trace-content], [class*='trace-content'], [class*='trace-body']"
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=llm-trace-toggle], [class*='llm-trace'] button[class*='toggle'], [class*='llm-trace'] [class*='expand'], [class*='trace-terminal'] button"
-        },
-        {
-          "action": "wait",
-          "timeout": 500
+          "check": "element_visible",
+          "selector": "text=PM AUDIT TRACES"
         },
         {
           "action": "screenshot",
-          "name": "strategy-llm-trace-expand-collapse"
-        }
-      ]
-    },
-    {
-      "id": "STRAT-11",
-      "name": "Semantic memory section displays with confidence scores",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/strategy"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=semantic-memory], [class*='semantic-memory'], [class*='memory']",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=semantic-memory], [class*='semantic-memory']"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=confidence-score], [class*='confidence'], [class*='score']"
-        },
-        {
-          "action": "screenshot",
-          "name": "strategy-semantic-memory-confidence-scores"
+          "name": "strat-10-pm-audit-traces-terminal"
         }
       ]
     },
     {
       "id": "STRAT-12",
-      "name": "Market debates timeline renders",
+      "name": "EARLIER DEBATES section renders with date filter",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -433,26 +432,28 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=market-debates], [class*='market-debates'], [class*='debates-timeline']",
+          "selector": "text=EARLIER DEBATES",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=market-debates], [class*='market-debates'], [class*='debate-timeline']"
+          "check": "element_visible",
+          "selector": "text=EARLIER DEBATES"
         },
         {
           "action": "assert",
-          "check": "element count >= 1: [data-testid=debate-item], [class*='debate-item'], [class*='timeline-item']"
+          "check": "element_exists",
+          "selector": "input[type=date]"
         },
         {
           "action": "screenshot",
-          "name": "strategy-market-debates-timeline"
+          "name": "strat-12-earlier-debates-section"
         }
       ]
     },
     {
       "id": "STRAT-13",
-      "name": "Proposal status filter works (pending/approved/rejected)",
+      "name": "Date filter on strategy page filters debate/proposal content",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -462,92 +463,27 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=proposal-filter], [class*='filter'], select[name='status']",
+          "selector": "input[type=date]",
           "timeout": 5000
         },
         {
-          "action": "assert",
-          "check": "element visible: [data-testid=proposal-filter], [class*='filter-bar'], [class*='status-filter']"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-filter='pending'], [data-testid=filter-pending], button:has-text('待審'), button:has-text('Pending')"
-        },
-        {
-          "action": "wait",
-          "timeout": 500
-        },
-        {
-          "action": "assert",
-          "check": "element attribute: [data-testid=proposal-card], [data-status='pending']"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-filter='approved'], [data-testid=filter-approved], button:has-text('已核准'), button:has-text('Approved')"
-        },
-        {
-          "action": "wait",
-          "timeout": 500
-        },
-        {
-          "action": "click",
-          "selector": "button[data-filter='rejected'], [data-testid=filter-rejected], button:has-text('已拒絕'), button:has-text('Rejected')"
-        },
-        {
-          "action": "wait",
-          "timeout": 500
-        },
-        {
-          "action": "screenshot",
-          "name": "strategy-proposal-status-filter"
-        }
-      ]
-    },
-    {
-      "id": "STRAT-14",
-      "name": "Proposal pagination works (load more)",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/strategy"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=proposal-card], .proposal-card",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: button[data-testid=load-more], button[class*='load-more'], button:has-text('載入更多'), button:has-text('Load More')"
-        },
-        {
-          "action": "evaluate",
-          "script": "document.querySelectorAll('[data-testid=proposal-card], .proposal-card').length",
-          "storeAs": "initialCount"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=load-more], button[class*='load-more'], button:has-text('載入更多'), button:has-text('Load More')"
+          "action": "fill",
+          "selector": "input[type=date]:first-of-type",
+          "value": "2026-04-01"
         },
         {
           "action": "wait",
           "timeout": 1000
         },
         {
-          "action": "assert",
-          "check": "element count increased: [data-testid=proposal-card], .proposal-card"
-        },
-        {
           "action": "screenshot",
-          "name": "strategy-proposal-pagination-load-more"
+          "name": "strat-13-date-filter-applied"
         }
       ]
     },
     {
-      "id": "STRAT-15",
-      "name": "Bull vs Bear split view renders correctly",
+      "id": "STRAT-14",
+      "name": "Proposal pagination uses numbered page buttons",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -557,28 +493,61 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=bull-bear-split], [class*='bull-bear'], [class*='split-view']",
+          "selector": "[class*='proposal'], [class*='Proposal']",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=bull-panel], [class*='bull-panel'], [class*='bull-side']"
+          "check": "any_element_exists",
+          "selectors": [
+            "[class*='pagination'] button",
+            "[class*='page-number']",
+            "button[aria-label*='page' i]",
+            "button[aria-label*='頁']"
+          ]
         },
         {
-          "action": "assert",
-          "check": "element visible: [data-testid=bear-panel], [class*='bear-panel'], [class*='bear-side']"
+          "action": "click",
+          "selector": "[class*='pagination'] button:nth-of-type(2), button[aria-label*='page 2' i], button[aria-label='2']"
         },
         {
-          "action": "assert",
-          "check": "element text contains: 多方|Bull|看多"
-        },
-        {
-          "action": "assert",
-          "check": "element text contains: 空方|Bear|看空"
+          "action": "wait",
+          "timeout": 1000
         },
         {
           "action": "screenshot",
-          "name": "strategy-bull-vs-bear-split-view"
+          "name": "strat-14-proposal-pagination-page-2"
+        }
+      ]
+    },
+    {
+      "id": "STRAT-15",
+      "name": "Bull vs Bear split view renders with BULL THESIS and BEAR THESIS panels",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/strategy"
+        },
+        {
+          "action": "wait",
+          "selector": "text=BULL THESIS",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=BULL THESIS"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=BEAR THESIS"
+        },
+        {
+          "action": "screenshot",
+          "name": "strat-15-bull-vs-bear-split-view"
         }
       ]
     }

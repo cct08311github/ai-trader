@@ -587,7 +587,7 @@ export default function StockResearch() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4 px-0 sm:px-1">
+    <div data-testid="stock-research" className="space-y-4 px-0 sm:px-1">
 
       {/* ── Top bar ── */}
       <div className="flex flex-wrap items-center gap-3 pb-2 border-b border-th-border">

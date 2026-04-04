@@ -109,7 +109,9 @@ export default function DashboardLayout({ variantSwitcher }) {
           </div>
 
           {/* Global market index scrolling ticker bar */}
-          <GlobalTicker className="-mx-4 sm:-mx-6 mb-4 sm:mb-6" />
+          <div data-testid="global-ticker">
+            <GlobalTicker className="-mx-4 sm:-mx-6 mb-4 sm:mb-6" />
+          </div>
 
           <Outlet />
 

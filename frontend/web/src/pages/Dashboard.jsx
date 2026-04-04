@@ -337,9 +337,9 @@ export default function DashboardPage() {
     vixLevel == null ? 'neutral' : vixLevel > 25 ? 'bearish' : vixLevel < 15 ? 'bullish' : 'neutral'
 
   return (
-    <div className="space-y-5">
+    <div data-testid="dashboard-page" className="space-y-5">
       {/* ── KPI Row ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div data-testid="dashboard-kpis" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiTile
           label="投組總值"
           value={totalValue}
@@ -383,7 +383,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Alert Section (Priority 1) ────────────────────────────────────── */}
-      <section>
+      <section data-testid="alert-section">
         <SectionHeading>警報中心</SectionHeading>
         <div className="space-y-2">
           {redAlerts.map((a, i) => (
@@ -413,7 +413,7 @@ export default function DashboardPage() {
       {/* ── Portfolio + Market — asymmetric grid (3:2) ────────────────────── */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
         {/* Portfolio Summary — 3/5 width on desktop */}
-        <div className="lg:col-span-3 space-y-3">
+        <div data-testid="portfolio-summary" className="lg:col-span-3 space-y-3">
           <SectionHeading>投組摘要</SectionHeading>
 
           {/* P&L summary bar */}
@@ -486,7 +486,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Market Pulse — 2/5 width on desktop */}
-        <div className="lg:col-span-2 space-y-3">
+        <div data-testid="market-pulse" className="lg:col-span-2 space-y-3">
           <SectionHeading>市場脈動</SectionHeading>
 
           {/* Latest analysis snapshot */}
@@ -587,7 +587,7 @@ export default function DashboardPage() {
       </section>
 
       {/* ── Action Queue ─────────────────────────────────────────────────────── */}
-      <section>
+      <section data-testid="action-queue">
         <SectionHeading>待辦行動</SectionHeading>
         <div className="space-y-2">
           {actionQueue.map((item) => (

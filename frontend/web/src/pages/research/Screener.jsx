@@ -166,7 +166,7 @@ export default function Screener() {
   const resetFilters = () => setFilters(DEFAULT_FILTERS)
 
   return (
-    <div className="space-y-4">
+    <div data-testid="screener-page" className="space-y-4">
       <h1 className="text-lg font-medium text-th-text" style={{ fontFamily: 'var(--font-ui)' }}>
         市場選股器
       </h1>
