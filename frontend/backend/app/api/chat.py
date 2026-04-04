@@ -105,7 +105,8 @@ def _pick_streamer(model_override: str):
     if os.environ.get("ANTHROPIC_API_KEY", "").strip():
         return _stream_claude, "claude-sonnet-4-6"
     if os.environ.get("MINIMAX_API_KEY", "").strip():
-        return _stream_minimax, "MiniMax-M2.5"
+        from openclaw.llm_minimax import _DEFAULT_MODEL
+        return _stream_minimax, _DEFAULT_MODEL
     return None, "none"
 
 
