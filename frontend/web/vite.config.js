@@ -12,10 +12,23 @@ const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 const BACKEND = 'https://127.0.0.1:8080'
 
 const proxyConfig = {
+  '/ai-trader/api': {
+    target: BACKEND,
+    changeOrigin: true,
+    secure: false,
+    rewrite: (path) => path.replace(/^\/ai-trader/, ''),
+  },
   '/api': {
     target: BACKEND,
     changeOrigin: true,
     secure: false,          // accept self-signed cert on loopback
+  },
+  '/ai-trader/ws': {
+    target: BACKEND.replace('https', 'wss'),
+    changeOrigin: true,
+    secure: false,
+    ws: true,
+    rewrite: (path) => path.replace(/^\/ai-trader/, ''),
   },
   '/ws': {
     target: BACKEND.replace('https', 'wss'),

@@ -121,7 +121,7 @@ export default function DashboardLayout({ variantSwitcher }) {
           <footer className="mt-10 border-t border-[rgb(var(--border))] pt-6 text-xs text-[rgb(var(--muted))]">
             Sprint 1 · API:{' '}
             <code className="text-[rgb(var(--text))]">
-              {(import.meta?.env?.VITE_API_BASE || 'http://localhost:8080').replace(/\/$/, '')}/api/portfolio/positions
+              {(import.meta?.env?.VITE_API_BASE || (import.meta?.env?.BASE_URL || '/')).replace(/\/$/, '')}/api/portfolio/positions
             </code>
           </footer>
         </main>

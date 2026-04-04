@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 // API fetch
 // ---------------------------------------------------------------------------
 
-const API_BASE = (import.meta?.env?.VITE_API_BASE ?? 'http://localhost:8080').replace(/\/$/, '')
+const API_BASE = (import.meta?.env?.VITE_API_BASE || (import.meta?.env?.BASE_URL || '/').replace(/\/$/, '')).replace(/\/$/, '')
 
 async function fetchLatestIndices() {
   const res = await fetch(`${API_BASE}/api/indices/latest`, {

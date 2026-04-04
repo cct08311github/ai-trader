@@ -18,7 +18,7 @@ async function fetchIndices() {
 }
 
 async function fetchPortfolioSummary() {
-  const res = await authFetch(`${getApiBase()}/api/portfolio/summary`)
+  const res = await authFetch(`${getApiBase()}/api/portfolio/kpis`)
   if (!res.ok) throw new Error(`投組摘要載入失敗 (${res.status})`)
   return res.json()
 }
