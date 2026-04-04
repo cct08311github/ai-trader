@@ -413,5 +413,10 @@
         }
       ]
     }
-  ]
+  ],
+  "execution": {
+    "mode": "sequential",
+    "isolation": "context",
+    "notes": "Each journey MUST run in its own browser context. Do NOT share browser tabs across journeys."
+  }
 }

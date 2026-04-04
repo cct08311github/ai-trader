@@ -233,6 +233,10 @@
       "setup": null,
       "steps": [
         {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
           "action": "clear_storage",
           "keys": [
             "token",
@@ -266,6 +270,10 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
         {
           "action": "wait",
           "selector": "nav, [class*='sidebar']",
@@ -304,6 +312,10 @@
       "note": "BLOCKED — requires network interception (Playwright route or similar). Cannot be tested with basic navigate/click actions. Skip or implement with a dedicated E2E framework that supports request interception.",
       "steps": [
         {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
           "action": "screenshot",
           "name": "auth-07-blocked-requires-route-interception"
         }
@@ -315,6 +327,10 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
         {
           "action": "wait",
           "selector": "nav, [class*='sidebar']",
@@ -355,6 +371,10 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
         {
           "action": "wait",
           "selector": "nav, [class*='sidebar']",
@@ -435,5 +455,10 @@
         }
       ]
     }
-  ]
+  ],
+  "execution": {
+    "mode": "sequential",
+    "isolation": "context",
+    "notes": "Each journey MUST run in its own browser context. Do NOT share browser tabs across journeys."
+  }
 }
