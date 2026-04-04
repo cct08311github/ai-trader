@@ -492,6 +492,129 @@ def get_portfolio_kpis():
         }
     }
 
+
+@router.get("/summary")
+def get_portfolio_summary():
+    """
+    Combined portfolio summary: positions + KPI metrics in a single response.
+
+    Returns total_value, total_cost, unrealized_pnl, daily_change_pct,
+    available_cash, today_trades_count, overall_win_rate, positions[], and alerts[].
+    """
+    import datetime
+
+    today = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d")
+
+    # ── Cash & KPI defaults ──────────────────────────────────────────────────
+    cap_path = os.path.join(os.path.dirname(__file__), "../../../../config/capital.json")
+    try:
+        with open(cap_path, "r") as f:
+            cap_data = json.load(f)
+            available_cash = float(cap_data.get("total_capital_twd", 500000.0))
+    except (OSError, ValueError):
+        available_cash = 500000.0
+
+    today_trades_count = 0
+    overall_win_rate = 0.0
+
+    # ── Positions from DB ────────────────────────────────────────────────────
+    positions: list = []
+    try:
+        with get_conn() as conn:
+            rows = conn.execute(
+                "SELECT p.symbol, p.quantity, p.avg_price, p.current_price, "
+                "p.unrealized_pnl, "
+                "e.name AS stock_name, e.close AS eod_close "
+                "FROM positions p "
+                "LEFT JOIN ("
+                "  SELECT ep.symbol, ep.name, ep.close "
+                "  FROM eod_prices ep "
+                "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
+                "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
+                ") e ON p.symbol = e.symbol "
+                "WHERE p.quantity > 0 ORDER BY p.symbol"
+            ).fetchall()
+
+            for r in rows:
+                avg_price = float(r["avg_price"] or 0)
+                last_price = (
+                    float(r["current_price"])
+                    if r["current_price"] is not None
+                    else (float(r["eod_close"]) if r["eod_close"] is not None else avg_price)
+                )
+                qty = int(r["quantity"])
+                if r["unrealized_pnl"] is not None:
+                    upnl = float(r["unrealized_pnl"])
+                elif last_price and avg_price:
+                    upnl = round((last_price - avg_price) * qty, 2)
+                else:
+                    upnl = 0.0
+                change_pct = round((last_price - avg_price) / avg_price * 100, 2) if avg_price > 0 else 0.0
+                name = r["stock_name"] if r["stock_name"] and r["stock_name"] != r["symbol"] else None
+                positions.append({
+                    "symbol": r["symbol"],
+                    "name": name,
+                    "qty": qty,
+                    "avg_price": avg_price,
+                    "last_price": last_price,
+                    "unrealized_pnl": upnl,
+                    "change_pct": change_pct,
+                })
+
+            # Today's trade count
+            today_count_row = conn.execute(
+                """SELECT COUNT(DISTINCT o.order_id) AS cnt
+                   FROM orders o JOIN fills f ON f.order_id=o.order_id
+                   WHERE DATE(o.ts_submit)=?
+                     AND o.status IN ('filled','partially_filled')""",
+                (today,),
+            ).fetchone()
+            if today_count_row:
+                today_trades_count = today_count_row["cnt"]
+
+            # Overall win rate
+            try:
+                from openclaw.pnl_engine import get_overall_win_rate as _win_rate
+                overall_win_rate = _win_rate(conn)
+            except Exception:  # noqa: BLE001
+                pass
+
+            # Prefer cash from position_snapshots when available
+            try:
+                snapshot_row = conn.execute(
+                    "SELECT available_cash FROM position_snapshots ORDER BY timestamp DESC LIMIT 1"
+                ).fetchone()
+                if snapshot_row and snapshot_row["available_cash"] is not None:
+                    available_cash = snapshot_row["available_cash"]
+            except sqlite3.Error:
+                pass
+
+    except sqlite3.Error:
+        pass
+
+    # ── Aggregate metrics ────────────────────────────────────────────────────
+    total_cost = sum(p["qty"] * p["avg_price"] for p in positions)
+    total_market = sum(p["qty"] * p["last_price"] for p in positions)
+    unrealized_pnl = round(sum(p["unrealized_pnl"] for p in positions), 2)
+    total_value = round(total_market + available_cash, 2)
+    daily_change_pct = round(unrealized_pnl / total_cost * 100, 2) if total_cost > 0 else None
+
+    return {
+        "status": "ok",
+        "data": {
+            "total_value": total_value,
+            "total_cost": round(total_cost, 2),
+            "unrealized_pnl": unrealized_pnl,
+            "daily_change_pct": daily_change_pct,
+            "available_cash": available_cash,
+            "today_trades_count": today_trades_count,
+            "overall_win_rate": overall_win_rate,
+            "positions": positions,
+            "alerts": [],
+        },
+    }
+
+
 @router.get("/monthly-summary")
 def get_monthly_summary(month: str = "2026-02"):
     """

@@ -14,13 +14,26 @@ import EconomicCalendar from '../components/EconomicCalendar'
 async function fetchIndices() {
   const res = await authFetch(`${getApiBase()}/api/indices/latest`)
   if (!res.ok) throw new Error(`指數載入失敗 (${res.status})`)
-  return res.json()
+  const json = await res.json()
+  // API returns { data: [{symbol, close_price, change_pct, ...}] }
+  // Dashboard expects { vix, vix_trend, taiex_change_pct }
+  const rows = json.data ?? json
+  if (!Array.isArray(rows)) return rows
+  const bySymbol = Object.fromEntries(rows.map(r => [r.symbol, r]))
+  const vixRow = bySymbol['^VIX'] || bySymbol['VIX'] || null
+  const taiexRow = bySymbol['^TWII'] || bySymbol['TAIEX'] || null
+  return {
+    vix: vixRow?.close_price ?? null,
+    vix_trend: vixRow?.change_pct != null ? (vixRow.change_pct > 0 ? 'up' : vixRow.change_pct < 0 ? 'down' : 'flat') : null,
+    taiex_change_pct: taiexRow?.change_pct ?? null,
+  }
 }
 
 async function fetchPortfolioSummary() {
-  const res = await authFetch(`${getApiBase()}/api/portfolio/kpis`)
+  const res = await authFetch(`${getApiBase()}/api/portfolio/summary`)
   if (!res.ok) throw new Error(`投組摘要載入失敗 (${res.status})`)
-  return res.json()
+  const json = await res.json()
+  return json.data ?? json
 }
 
 async function fetchLatestAnalysis() {
