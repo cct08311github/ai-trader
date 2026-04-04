@@ -385,10 +385,12 @@ def _get_portfolio_snapshot(conn: sqlite3.Connection) -> Dict[str, Any]:
     if _table_exists(conn, "daily_nav"):
         try:
             row = conn.execute(
-                "SELECT nav FROM daily_nav ORDER BY trade_date DESC LIMIT 1"
+                "SELECT nav, cash FROM daily_nav ORDER BY trade_date DESC LIMIT 1"
             ).fetchone()
             if row:
                 nav = float(row[0] or 0.0)
+                if cash <= 0:
+                    cash = float(row[1] or 0.0)
         except Exception:
             pass
 
@@ -403,7 +405,7 @@ def _get_portfolio_snapshot(conn: sqlite3.Connection) -> Dict[str, Any]:
     if cash <= 0:
         try:
             capital = json.loads((_REPO_ROOT / "config" / "capital.json").read_text())
-            cash = float(capital.get("available_cash", 0))
+            cash = float(capital.get("available_cash", 0) or capital.get("total_capital_twd", 0))
         except Exception:
             pass
 
@@ -522,6 +524,7 @@ def alert_if_needed(
     Returns True if a notification was sent.
     """
     if report.worst_breach == SEVERITY_OK:
+        _clear_reduce_only(conn)
         return False
 
     policy = _load_policy(policy_path)
@@ -618,6 +621,43 @@ def _set_reduce_only(conn: sqlite3.Connection) -> None:
         log.error("[risk_monitor] failed to set reduce_only: %s", e)
 
 
+def _clear_reduce_only(conn: sqlite3.Connection) -> None:
+    """Auto-clear reduce_only in system_state when risk returns to OK.
+
+    Only clears if reduce_only_reason == 'risk_monitor_emergency' to avoid
+    overriding manually set reduce_only.
+    Uses file lock (fcntl.flock) + atomic write (tmp + os.replace).
+    """
+    try:
+        state_path = _REPO_ROOT / "config" / "system_state.json"
+        if not state_path.exists():
+            return
+
+        with open(state_path, "r+") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            try:
+                state = json.load(f)
+            except json.JSONDecodeError:
+                state = {}
+
+            # Only clear if we were the ones who set it
+            if state.get("reduce_only_reason") != "risk_monitor_emergency":
+                return
+            if not state.get("reduce_only_mode", False):
+                return
+
+            state["reduce_only_mode"] = False
+            state["reduce_only_reason"] = None
+            state["reduce_only_cleared_at"] = int(time.time())
+            tmp = state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+            os.replace(str(tmp), str(state_path))
+
+        log.info("[risk_monitor] reduce_only_mode CLEARED — risk indicators normal")
+    except Exception as e:
+        log.error("[risk_monitor] failed to clear reduce_only: %s", e)
+
+
 # ── Log to DB ────────────────────────────────────────────────────────────────
 
 def _log_to_db(
@@ -669,6 +709,8 @@ def run_risk_monitor(
         report = check_portfolio_risk(_conn, policy_path=policy_path)
 
         notified = alert_if_needed(report, _conn, policy_path=policy_path)
+        if report.worst_breach == SEVERITY_OK:
+            _clear_reduce_only(_conn)
         _log_to_db(_conn, report, notified)
 
         breach_count = sum(1 for c in report.checks if c.severity != SEVERITY_OK)
