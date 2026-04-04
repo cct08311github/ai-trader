@@ -2,7 +2,7 @@
   "journey": "portfolio-trades",
   "version": "1.0.0",
   "description": "Portfolio and Trades page flows for ai-trader frontend. Covers position list, KPI cards, charts, position detail drawer, chip health, trade filtering, sorting, export, and causal chain viewer.",
-  "baseUrl": "http://localhost:3012",
+  "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
@@ -13,11 +13,29 @@
   "setup": {
     "login": {
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "fill", "selector": "input[name=username]", "value": "{{username}}" },
-        { "action": "fill", "selector": "input[name=password]", "value": "{{password}}" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "{{username}}"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "{{password}}"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        }
       ]
     }
   },
@@ -28,11 +46,30 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list", "timeout": 8000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list" },
-        { "action": "assert", "check": "element_count_gte", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "count": 0 },
-        { "action": "screenshot", "name": "port-01-portfolio-position-list" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list"
+        },
+        {
+          "action": "assert",
+          "check": "element_count_gte",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "count": 0
+        },
+        {
+          "action": "screenshot",
+          "name": "port-01-portfolio-position-list"
+        }
       ]
     },
     {
@@ -41,8 +78,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=kpi-cards], .kpi-card, [data-testid=kpi-total-value]", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=kpi-cards], .kpi-card, [data-testid=kpi-total-value]",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -54,7 +98,10 @@
             ".kpi-card"
           ]
         },
-        { "action": "screenshot", "name": "port-02-kpi-cards" }
+        {
+          "action": "screenshot",
+          "name": "port-02-kpi-cards"
+        }
       ]
     },
     {
@@ -63,8 +110,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=sector-chart], [data-testid=sector-allocation], .sector-chart, canvas, svg", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=sector-chart], [data-testid=sector-allocation], .sector-chart, canvas, svg",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -74,7 +128,10 @@
             ".sector-chart"
           ]
         },
-        { "action": "screenshot", "name": "port-03-sector-allocation-chart" }
+        {
+          "action": "screenshot",
+          "name": "port-03-sector-allocation-chart"
+        }
       ]
     },
     {
@@ -83,8 +140,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=equity-curve], [data-testid=pnl-chart], .equity-curve, canvas, svg", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=equity-curve], [data-testid=pnl-chart], .equity-curve, canvas, svg",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -95,7 +159,10 @@
             ".pnl-chart"
           ]
         },
-        { "action": "screenshot", "name": "port-04-equity-curve-chart" }
+        {
+          "action": "screenshot",
+          "name": "port-04-equity-curve-chart"
+        }
       ]
     },
     {
@@ -104,12 +171,33 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]", "timeout": 5000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]" },
-        { "action": "screenshot", "name": "port-05-position-detail-drawer-open" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]"
+        },
+        {
+          "action": "screenshot",
+          "name": "port-05-position-detail-drawer-open"
+        }
       ]
     },
     {
@@ -118,12 +206,33 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=quote-panel], .quote-panel", "timeout": 5000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=quote-panel], .quote-panel" },
-        { "action": "screenshot", "name": "port-06-position-drawer-quote-panel" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=quote-panel], .quote-panel",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=quote-panel], .quote-panel"
+        },
+        {
+          "action": "screenshot",
+          "name": "port-06-position-drawer-quote-panel"
+        }
       ]
     },
     {
@@ -132,10 +241,24 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=kline-chart], .kline-chart, [data-testid=position-detail-drawer] svg, [data-testid=position-detail-drawer] canvas", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=kline-chart], .kline-chart, [data-testid=position-detail-drawer] svg, [data-testid=position-detail-drawer] canvas",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -145,7 +268,10 @@
             "[data-testid=position-detail-drawer] svg"
           ]
         },
-        { "action": "screenshot", "name": "port-07-position-drawer-kline-chart" }
+        {
+          "action": "screenshot",
+          "name": "port-07-position-drawer-kline-chart"
+        }
       ]
     },
     {
@@ -154,17 +280,37 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]", "timeout": 5000 },
-        { "action": "click", "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]"
+        },
         {
           "action": "wait",
           "selector": "[data-testid=lock-success], [data-testid=position-locked], .locked-badge, [aria-label*=locked i]",
           "timeout": 5000
         },
-        { "action": "screenshot", "name": "port-08-position-locked" }
+        {
+          "action": "screenshot",
+          "name": "port-08-position-locked"
+        }
       ]
     },
     {
@@ -173,10 +319,24 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=unlock-position-btn], [data-testid=lock-position-btn], button[aria-label*=unlock i], button[aria-label*=解鎖]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=unlock-position-btn], [data-testid=lock-position-btn], button[aria-label*=unlock i], button[aria-label*=解鎖]",
+          "timeout": 5000
+        },
         {
           "action": "click",
           "selector": "[data-testid=unlock-position-btn], button[aria-label*=unlock i], button[aria-label*=解鎖]"
@@ -186,7 +346,10 @@
           "selector": "[data-testid=unlock-success], [data-testid=position-unlocked], [data-testid=lock-position-btn]",
           "timeout": 5000
         },
-        { "action": "screenshot", "name": "port-09-position-unlocked" }
+        {
+          "action": "screenshot",
+          "name": "port-09-position-unlocked"
+        }
       ]
     },
     {
@@ -195,14 +358,42 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]", "timeout": 5000 },
-        { "action": "click", "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]" },
-        { "action": "wait", "selector": "[data-testid=close-position-modal], [role=dialog], .modal", "timeout": 5000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=close-position-modal], [role=dialog], .modal" },
-        { "action": "screenshot", "name": "port-10-close-position-modal" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=close-position-modal], [role=dialog], .modal",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=close-position-modal], [role=dialog], .modal"
+        },
+        {
+          "action": "screenshot",
+          "name": "port-10-close-position-modal"
+        }
       ]
     },
     {
@@ -211,19 +402,46 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]", "timeout": 5000 },
-        { "action": "click", "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]" },
-        { "action": "wait", "selector": "[data-testid=close-position-modal], [role=dialog], .modal", "timeout": 5000 },
-        { "action": "click", "selector": "[data-testid=confirm-close-btn], button[data-testid*=confirm], button[aria-label*=confirm i], button[aria-label*=確認]" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=close-position-modal], [role=dialog], .modal",
+          "timeout": 5000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=confirm-close-btn], button[data-testid*=confirm], button[aria-label*=confirm i], button[aria-label*=確認]"
+        },
         {
           "action": "wait",
           "selector": "[data-testid=close-success-toast], [data-testid=close-position-modal]:not([class*=open]), .toast",
           "timeout": 8000
         },
-        { "action": "screenshot", "name": "port-11-close-position-submitted" }
+        {
+          "action": "screenshot",
+          "name": "port-11-close-position-submitted"
+        }
       ]
     },
     {
@@ -232,10 +450,24 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/portfolio" },
-        { "action": "wait", "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]", "timeout": 8000 },
-        { "action": "click", "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child" },
-        { "action": "wait", "selector": "[data-testid=chip-health], [data-testid=chip-score], .chip-health, .chip-score", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/portfolio"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "timeout": 8000
+        },
+        {
+          "action": "click",
+          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=chip-health], [data-testid=chip-score], .chip-health, .chip-score",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -246,7 +478,10 @@
             ".chip-score"
           ]
         },
-        { "action": "screenshot", "name": "port-12-chip-health-score" }
+        {
+          "action": "screenshot",
+          "name": "port-12-chip-health-score"
+        }
       ]
     },
     {
@@ -255,10 +490,24 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list, .trade-card", "timeout": 8000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list" },
-        { "action": "screenshot", "name": "trade-01-trades-page-loads" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list, .trade-card",
+          "timeout": 8000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list"
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-01-trades-page-loads"
+        }
       ]
     },
     {
@@ -267,8 +516,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "fill",
           "selector": "[data-testid=date-from], input[name=date_from], input[type=date]:first-of-type",
@@ -283,8 +539,15 @@
           "action": "click",
           "selector": "[data-testid=apply-filter], button[aria-label*=filter i], button[aria-label*=篩選], button[type=submit]"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list, [data-testid=trade-card]", "timeout": 5000 },
-        { "action": "screenshot", "name": "trade-02-date-range-filter" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list, [data-testid=trade-card]",
+          "timeout": 5000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-02-date-range-filter"
+        }
       ]
     },
     {
@@ -293,15 +556,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "fill",
           "selector": "[data-testid=symbol-filter], input[name=symbol], input[placeholder*=symbol i], input[placeholder*=股票]",
           "value": "2330"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-03-symbol-filter-2330" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-03-symbol-filter-2330"
+        }
       ]
     },
     {
@@ -310,20 +587,41 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "click",
           "selector": "[data-testid=type-filter-buy], button[value=buy], [aria-label*=buy i], [data-value=buy]"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-04-type-filter-buy" },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-04-type-filter-buy"
+        },
         {
           "action": "click",
           "selector": "[data-testid=type-filter-sell], button[value=sell], [aria-label*=sell i], [data-value=sell]"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-04-type-filter-sell" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-04-type-filter-sell"
+        }
       ]
     },
     {
@@ -332,8 +630,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "click",
           "selector": "[data-testid=status-filter], select[name=status], [aria-label*=status i]"
@@ -343,8 +648,15 @@
           "selector": "select[name=status], [data-testid=status-filter] select",
           "value": "filled"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-05-status-filter-filled" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-05-status-filter-filled"
+        }
       ]
     },
     {
@@ -353,20 +665,41 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "click",
           "selector": "[data-testid=sort-time], th[data-sort=time], button[aria-label*=sort by time i], [data-testid=col-time]"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-06-sorted-by-time-asc" },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-06-sorted-by-time-asc"
+        },
         {
           "action": "click",
           "selector": "[data-testid=sort-time], th[data-sort=time], button[aria-label*=sort by time i], [data-testid=col-time]"
         },
-        { "action": "wait", "selector": "[data-testid=trade-list], .trade-list", "timeout": 3000 },
-        { "action": "screenshot", "name": "trade-06-sorted-by-time-desc" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-list], .trade-list",
+          "timeout": 3000
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-06-sorted-by-time-desc"
+        }
       ]
     },
     {
@@ -375,8 +708,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "element_exists",
@@ -392,7 +732,10 @@
           "timeout": 5000,
           "optional": true
         },
-        { "action": "screenshot", "name": "trade-07-export-csv-clicked" }
+        {
+          "action": "screenshot",
+          "name": "trade-07-export-csv-clicked"
+        }
       ]
     },
     {
@@ -401,8 +744,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trade-card], [data-testid=trade-row], .trade-card, .trade-row", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trade-card], [data-testid=trade-row], .trade-card, .trade-row",
+          "timeout": 8000
+        },
         {
           "action": "click",
           "selector": "[data-testid=trade-card]:first-child [data-testid=causal-chain-btn], [data-testid=trade-row]:first-child [data-testid=causal-chain-btn], button[aria-label*=causal i], button[aria-label*=決策鏈]"
@@ -421,7 +771,10 @@
             ".causal-chain"
           ]
         },
-        { "action": "screenshot", "name": "trade-08-causal-chain-viewer-open" }
+        {
+          "action": "screenshot",
+          "name": "trade-08-causal-chain-viewer-open"
+        }
       ]
     },
     {
@@ -430,8 +783,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -442,7 +802,10 @@
             ".pnl-summary-bar"
           ]
         },
-        { "action": "screenshot", "name": "trade-09-daily-pnl-summary-bar" }
+        {
+          "action": "screenshot",
+          "name": "trade-09-daily-pnl-summary-bar"
+        }
       ]
     },
     {
@@ -451,8 +814,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/trades" },
-        { "action": "wait", "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list", "timeout": 8000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/trades"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "timeout": 8000
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -465,7 +835,10 @@
             ".stats-panel"
           ]
         },
-        { "action": "screenshot", "name": "trade-10-order-stats-panel" }
+        {
+          "action": "screenshot",
+          "name": "trade-10-order-stats-panel"
+        }
       ]
     }
   ]

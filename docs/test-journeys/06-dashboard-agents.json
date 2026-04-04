@@ -2,7 +2,7 @@
   "journey": "dashboard-agents",
   "version": "1.0.0",
   "description": "Dashboard, Agents, Risk, and Geopolitical module journeys for ai-trader frontend. Covers indices snapshot, portfolio KPIs, action queue, agent mission control, execution timeline, risk KPI cards, sector treemap, stress tests, and geopolitical globe.",
-  "baseUrl": "http://localhost:3012",
+  "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
@@ -13,11 +13,29 @@
   "setup": {
     "login": {
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/login" },
-        { "action": "fill", "selector": "input[name=username]", "value": "{{username}}" },
-        { "action": "fill", "selector": "input[name=password]", "value": "{{password}}" },
-        { "action": "click", "selector": "button[type=submit]" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/login"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=username]",
+          "value": "{{username}}"
+        },
+        {
+          "action": "fill",
+          "selector": "input[name=password]",
+          "value": "{{password}}"
+        },
+        {
+          "action": "click",
+          "selector": "button[type=submit]"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        }
       ]
     }
   },
@@ -28,9 +46,20 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=dashboard]" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=dashboard]"
+        },
         {
           "action": "assert",
           "check": "any_element_exists",
@@ -40,7 +69,10 @@
             "main[data-page=dashboard]"
           ]
         },
-        { "action": "screenshot", "name": "dash-01-dashboard-page-loads" }
+        {
+          "action": "screenshot",
+          "name": "dash-01-dashboard-page-loads"
+        }
       ]
     },
     {
@@ -49,8 +81,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=indices-snapshot], .indices-snapshot, .market-indices, [data-testid=market-overview]",
@@ -81,7 +120,10 @@
             "text=VIX"
           ]
         },
-        { "action": "screenshot", "name": "dash-02-indices-snapshot-twii-vix" }
+        {
+          "action": "screenshot",
+          "name": "dash-02-indices-snapshot-twii-vix"
+        }
       ]
     },
     {
@@ -90,8 +132,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=portfolio-summary], .portfolio-summary, .portfolio-kpi",
@@ -113,7 +162,10 @@
             "text=Total P&L"
           ]
         },
-        { "action": "screenshot", "name": "dash-03-portfolio-summary-kpis" }
+        {
+          "action": "screenshot",
+          "name": "dash-03-portfolio-summary-kpis"
+        }
       ]
     },
     {
@@ -122,8 +174,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=analysis-snapshot], .analysis-snapshot, .latest-analysis, [data-testid=eod-analysis]",
@@ -134,7 +193,10 @@
           "check": "element_visible",
           "selector": "[data-testid=analysis-snapshot], .analysis-snapshot, .latest-analysis, [data-testid=eod-analysis]"
         },
-        { "action": "screenshot", "name": "dash-04-latest-analysis-snapshot" }
+        {
+          "action": "screenshot",
+          "name": "dash-04-latest-analysis-snapshot"
+        }
       ]
     },
     {
@@ -143,8 +205,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=risk-snapshot], .risk-snapshot, .risk-summary, [data-testid=risk-overview]",
@@ -155,7 +224,10 @@
           "check": "element_visible",
           "selector": "[data-testid=risk-snapshot], .risk-snapshot, .risk-summary, [data-testid=risk-overview]"
         },
-        { "action": "screenshot", "name": "dash-05-risk-snapshot-renders" }
+        {
+          "action": "screenshot",
+          "name": "dash-05-risk-snapshot-renders"
+        }
       ]
     },
     {
@@ -164,8 +236,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=action-queue], .action-queue, .ai-suggestions, [data-testid=proposals-feed]",
@@ -176,7 +255,10 @@
           "check": "element_visible",
           "selector": "[data-testid=action-queue], .action-queue, .ai-suggestions, [data-testid=proposals-feed]"
         },
-        { "action": "screenshot", "name": "dash-06-action-queue-ai-suggestions" }
+        {
+          "action": "screenshot",
+          "name": "dash-06-action-queue-ai-suggestions"
+        }
       ]
     },
     {
@@ -185,8 +267,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=gainers-losers], .top-gainers, .top-losers, .gainers-losers-section",
@@ -197,7 +286,10 @@
           "check": "element_visible",
           "selector": "[data-testid=gainers-losers], .top-gainers, .top-losers, .gainers-losers-section"
         },
-        { "action": "screenshot", "name": "dash-07-top-gainers-losers" }
+        {
+          "action": "screenshot",
+          "name": "dash-07-top-gainers-losers"
+        }
       ]
     },
     {
@@ -206,23 +298,56 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "click",
           "selector": "a[href*=/ai-trader/portfolio], [data-testid=nav-portfolio], nav a[href*=portfolio]"
         },
-        { "action": "wait", "selector": "[data-testid=portfolio-page], .portfolio-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/portfolio" },
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "wait",
+          "selector": "[data-testid=portfolio-page], .portfolio-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/portfolio"
+        },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "click",
           "selector": "a[href*=/ai-trader/strategy], [data-testid=nav-strategy], nav a[href*=strategy]"
         },
-        { "action": "wait", "selector": "[data-testid=strategy-page], .strategy-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/strategy" },
-        { "action": "screenshot", "name": "dash-08-navigation-links-detail-pages" }
+        {
+          "action": "wait",
+          "selector": "[data-testid=strategy-page], .strategy-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/strategy"
+        },
+        {
+          "action": "screenshot",
+          "name": "dash-08-navigation-links-detail-pages"
+        }
       ]
     },
     {
@@ -231,8 +356,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/" },
-        { "action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=dashboard]",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=last-updated], .last-updated, [data-testid=refresh-indicator], .refresh-indicator, time[data-auto-refresh]",
@@ -249,8 +381,14 @@
             "text=Last updated"
           ]
         },
-        { "action": "wait", "timeout": 6000 },
-        { "action": "screenshot", "name": "dash-09-dashboard-auto-refresh" }
+        {
+          "action": "wait",
+          "timeout": 6000
+        },
+        {
+          "action": "screenshot",
+          "name": "dash-09-dashboard-auto-refresh"
+        }
       ]
     },
     {
@@ -259,11 +397,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/agents" },
-        { "action": "assert", "check": "element_visible", "selector": "[data-testid=agents-page], .agents-page, main" },
-        { "action": "screenshot", "name": "agt-01-agents-page-mission-control" }
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/agents"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "[data-testid=agents-page], .agents-page, main"
+        },
+        {
+          "action": "screenshot",
+          "name": "agt-01-agents-page-mission-control"
+        }
       ]
     },
     {
@@ -272,8 +428,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=agent-status-bar], .agent-status-bar, .agent-stats-header",
@@ -324,7 +487,10 @@
             "text=運行時間"
           ]
         },
-        { "action": "screenshot", "name": "agt-02-agent-status-bar" }
+        {
+          "action": "screenshot",
+          "name": "agt-02-agent-status-bar"
+        }
       ]
     },
     {
@@ -333,8 +499,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=active-agents], .active-agents, [data-status=active], .agent-card--active",
@@ -345,7 +518,10 @@
           "check": "element_visible",
           "selector": "[data-testid=active-agents], .active-agents, [data-status=active], .agent-card--active"
         },
-        { "action": "screenshot", "name": "agt-03-active-agents-large-cards" }
+        {
+          "action": "screenshot",
+          "name": "agt-03-active-agents-large-cards"
+        }
       ]
     },
     {
@@ -354,8 +530,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=idle-agents], .idle-agents, [data-status=idle], .agent-card--idle",
@@ -366,7 +549,10 @@
           "check": "element_visible",
           "selector": "[data-testid=idle-agents], .idle-agents, [data-status=idle], .agent-card--idle"
         },
-        { "action": "screenshot", "name": "agt-04-idle-agents-small-cards" }
+        {
+          "action": "screenshot",
+          "name": "agt-04-idle-agents-small-cards"
+        }
       ]
     },
     {
@@ -375,8 +561,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=agents-page], .agents-page, main",
@@ -393,7 +586,10 @@
             ".pulse-red"
           ]
         },
-        { "action": "screenshot", "name": "agt-05-error-agents-pulse-red" }
+        {
+          "action": "screenshot",
+          "name": "agt-05-error-agents-pulse-red"
+        }
       ]
     },
     {
@@ -402,8 +598,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=execution-timeline], .execution-timeline, .timeline-sidebar, aside .timeline",
@@ -414,7 +617,10 @@
           "check": "element_visible",
           "selector": "[data-testid=execution-timeline], .execution-timeline, .timeline-sidebar, aside .timeline"
         },
-        { "action": "screenshot", "name": "agt-06-execution-timeline-sidebar" }
+        {
+          "action": "screenshot",
+          "name": "agt-06-execution-timeline-sidebar"
+        }
       ]
     },
     {
@@ -423,8 +629,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=run-agent-btn], button[data-action=run-agent], .run-agent-button",
@@ -448,7 +661,10 @@
           "action": "click",
           "selector": "[data-testid=cancel-btn], button[data-action=cancel], .modal button:last-of-type, [role=dialog] button:last-of-type"
         },
-        { "action": "screenshot", "name": "agt-07-run-agent-confirmation-dialog" }
+        {
+          "action": "screenshot",
+          "name": "agt-07-run-agent-confirmation-dialog"
+        }
       ]
     },
     {
@@ -457,8 +673,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=agent-history], .agent-history, .agent-run-history, [data-testid=last-runs]",
@@ -469,7 +692,10 @@
           "check": "element_visible",
           "selector": "[data-testid=agent-history], .agent-history, .agent-run-history, [data-testid=last-runs]"
         },
-        { "action": "screenshot", "name": "agt-08-agent-history-last-runs" }
+        {
+          "action": "screenshot",
+          "name": "agt-08-agent-history-last-runs"
+        }
       ]
     },
     {
@@ -478,8 +704,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=confidence-badge], .confidence-badge, [data-label=confidence], .agent-confidence",
@@ -490,7 +723,10 @@
           "check": "element_visible",
           "selector": "[data-testid=confidence-badge], .confidence-badge, [data-label=confidence], .agent-confidence"
         },
-        { "action": "screenshot", "name": "agt-09-confidence-badge-percentage" }
+        {
+          "action": "screenshot",
+          "name": "agt-09-confidence-badge-percentage"
+        }
       ]
     },
     {
@@ -499,8 +735,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/agents" },
-        { "action": "wait", "selector": "[data-testid=agents-page], .agents-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/agents"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=agents-page], .agents-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=agent-latency], .agent-latency, [data-metric=latency], .latency-badge",
@@ -511,7 +754,10 @@
           "check": "element_visible",
           "selector": "[data-testid=agent-latency], .agent-latency, [data-metric=latency], .latency-badge"
         },
-        { "action": "screenshot", "name": "agt-10-agent-latency-metrics" }
+        {
+          "action": "screenshot",
+          "name": "agt-10-agent-latency-metrics"
+        }
       ]
     },
     {
@@ -520,9 +766,20 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/risk" },
-        { "action": "wait", "selector": "[data-testid=risk-page], .risk-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/risk" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=risk-page], .risk-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/risk"
+        },
         {
           "action": "wait",
           "selector": "[data-testid=risk-kpi], .risk-kpi-cards, .kpi-card, [data-testid=risk-metrics]",
@@ -533,7 +790,10 @@
           "check": "element_visible",
           "selector": "[data-testid=risk-kpi], .risk-kpi-cards, .kpi-card, [data-testid=risk-metrics]"
         },
-        { "action": "screenshot", "name": "risk-01-risk-page-kpi-cards" }
+        {
+          "action": "screenshot",
+          "name": "risk-01-risk-page-kpi-cards"
+        }
       ]
     },
     {
@@ -542,8 +802,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/risk" },
-        { "action": "wait", "selector": "[data-testid=risk-page], .risk-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=risk-page], .risk-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=sector-treemap], .sector-treemap, svg.treemap, [data-chart=treemap]",
@@ -554,7 +821,10 @@
           "check": "element_visible",
           "selector": "[data-testid=sector-treemap], .sector-treemap, svg.treemap, [data-chart=treemap]"
         },
-        { "action": "screenshot", "name": "risk-02-sector-concentration-treemap" }
+        {
+          "action": "screenshot",
+          "name": "risk-02-sector-concentration-treemap"
+        }
       ]
     },
     {
@@ -563,8 +833,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/risk" },
-        { "action": "wait", "selector": "[data-testid=risk-page], .risk-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/risk"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=risk-page], .risk-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=stress-test], .stress-test-results, [data-testid=scenario-results], .scenario-card",
@@ -575,7 +852,10 @@
           "check": "element_visible",
           "selector": "[data-testid=stress-test], .stress-test-results, [data-testid=scenario-results], .scenario-card"
         },
-        { "action": "screenshot", "name": "risk-03-stress-test-results" }
+        {
+          "action": "screenshot",
+          "name": "risk-03-stress-test-results"
+        }
       ]
     },
     {
@@ -584,15 +864,29 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/geopolitical" },
-        { "action": "wait", "selector": "[data-testid=geopolitical-page], .geopolitical-page, main", "timeout": 5000 },
-        { "action": "assert", "check": "url_contains", "value": "/ai-trader/geopolitical" },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/geopolitical"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=geopolitical-page], .geopolitical-page, main",
+          "timeout": 5000
+        },
+        {
+          "action": "assert",
+          "check": "url_contains",
+          "value": "/ai-trader/geopolitical"
+        },
         {
           "action": "assert",
           "check": "element_visible",
           "selector": "[data-testid=geopolitical-page], .geopolitical-page, main"
         },
-        { "action": "screenshot", "name": "geo-01-geopolitical-page-loads" }
+        {
+          "action": "screenshot",
+          "name": "geo-01-geopolitical-page-loads"
+        }
       ]
     },
     {
@@ -601,8 +895,15 @@
       "role": "ADMIN",
       "setup": "login",
       "steps": [
-        { "action": "navigate", "url": "/ai-trader/geopolitical" },
-        { "action": "wait", "selector": "[data-testid=geopolitical-page], .geopolitical-page, main", "timeout": 5000 },
+        {
+          "action": "navigate",
+          "url": "/ai-trader/geopolitical"
+        },
+        {
+          "action": "wait",
+          "selector": "[data-testid=geopolitical-page], .geopolitical-page, main",
+          "timeout": 5000
+        },
         {
           "action": "wait",
           "selector": "[data-testid=globe-viz], .globe-visualization, canvas.globe, svg.globe, [data-component=globe]",
@@ -613,7 +914,10 @@
           "check": "element_visible",
           "selector": "[data-testid=globe-viz], .globe-visualization, canvas.globe, svg.globe, [data-component=globe]"
         },
-        { "action": "screenshot", "name": "geo-02-globe-visualization-renders" }
+        {
+          "action": "screenshot",
+          "name": "geo-02-globe-visualization-renders"
+        }
       ]
     }
   ]
