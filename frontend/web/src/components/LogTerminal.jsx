@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 
-const DEFAULT_API_BASE = (typeof window !== 'undefined' && window.location.hostname.includes('tail'))
-  ? `https://${window.location.hostname}:8080`
-  : 'http://localhost:8080'
+const DEFAULT_API_BASE = (import.meta?.env?.VITE_API_BASE || (import.meta?.env?.BASE_URL || '/').replace(/\/$/, '')).replace(/\/$/, '')
 
 import { getToken } from '../lib/auth'
 
