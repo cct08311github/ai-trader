@@ -1,0 +1,259 @@
+{
+  "journey": "system-settings",
+  "version": "1.0.0",
+  "description": "System page: service status, health metrics, quota monitoring, risk assessment, events log, incident cluster, quarantine actions, remediation history. Settings page: danger zone, emergency stop, trading mode toggle, capital/position fields, save/persist.",
+  "baseUrl": "http://localhost:3012",
+  "credentials": {
+    "ADMIN": {
+      "username": "admin",
+      "password": "test-password",
+      "role": "ADMIN"
+    }
+  },
+  "setup": {
+    "login": {
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/login"},
+        {"action": "fill", "selector": "input[name=username]", "value": "{{username}}"},
+        {"action": "fill", "selector": "input[name=password]", "value": "{{password}}"},
+        {"action": "click", "selector": "button[type=submit]"},
+        {"action": "wait", "selector": "[data-testid=dashboard]", "timeout": 5000}
+      ]
+    }
+  },
+  "testCases": [
+    {
+      "id": "SYS-01",
+      "name": "System page loads with service status panel",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=system-page], .system-page, [class*='system']", "timeout": 5000},
+        {"action": "assert", "check": "url contains /ai-trader/system"},
+        {"action": "assert", "check": "element visible: [data-testid=service-status], [class*='service-status'], [class*='services-panel']"},
+        {"action": "assert", "check": "element count >= 1: [data-testid=service-item], [class*='service-item'], [class*='service-row']"},
+        {"action": "screenshot", "name": "system-page-service-status-panel"}
+      ]
+    },
+    {
+      "id": "SYS-02",
+      "name": "Health metrics display (CPU, memory, disk)",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=health-metrics], [class*='health-metrics'], [class*='metrics']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=health-metrics], [class*='health-metrics']"},
+        {"action": "assert", "check": "element text contains: CPU, cpu, 處理器"},
+        {"action": "assert", "check": "element text contains: Memory, memory, 記憶體"},
+        {"action": "assert", "check": "element text contains: Disk, disk, 磁碟"},
+        {"action": "screenshot", "name": "system-health-metrics-cpu-memory-disk"}
+      ]
+    },
+    {
+      "id": "SYS-03",
+      "name": "Quota monitoring shows API usage",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=quota-monitor], [class*='quota'], [class*='api-usage']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=quota-monitor], [class*='quota-monitor'], [class*='api-quota']"},
+        {"action": "assert", "check": "element visible: [class*='usage-bar'], [class*='progress'], [role='progressbar']"},
+        {"action": "screenshot", "name": "system-quota-monitoring-api-usage"}
+      ]
+    },
+    {
+      "id": "SYS-04",
+      "name": "Risk assessment section renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=risk-assessment], [class*='risk-assessment'], [class*='risk']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=risk-assessment], [class*='risk-assessment']"},
+        {"action": "screenshot", "name": "system-risk-assessment-section"}
+      ]
+    },
+    {
+      "id": "SYS-05",
+      "name": "System events log displays",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=system-events], [class*='system-events'], [class*='event-log']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=system-events], [class*='system-events'], [class*='events-log']"},
+        {"action": "assert", "check": "element count >= 1: [data-testid=event-item], [class*='event-item'], [class*='log-entry']"},
+        {"action": "screenshot", "name": "system-events-log"}
+      ]
+    },
+    {
+      "id": "SYS-06",
+      "name": "Incident cluster section renders",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=incident-cluster], [class*='incident-cluster'], [class*='incidents']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=incident-cluster], [class*='incident-cluster'], [class*='incident']"},
+        {"action": "screenshot", "name": "system-incident-cluster-section"}
+      ]
+    },
+    {
+      "id": "SYS-07",
+      "name": "Quarantine status displays",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=quarantine-status], [class*='quarantine'], [class*='quarantine-panel']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=quarantine-status], [class*='quarantine-status'], [class*='quarantine']"},
+        {"action": "screenshot", "name": "system-quarantine-status"}
+      ]
+    },
+    {
+      "id": "SYS-08",
+      "name": "Quarantine apply action works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=quarantine-status], [class*='quarantine']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: button[data-testid=quarantine-apply], button[class*='quarantine-apply'], button:has-text('隔離'), button:has-text('Quarantine'), button:has-text('Apply')"},
+        {"action": "click", "selector": "button[data-testid=quarantine-apply], button[class*='quarantine-apply'], [class*='quarantine'] button:has-text('Apply'), [class*='quarantine'] button:has-text('隔離')"},
+        {"action": "wait", "selector": "[data-testid=toast], [class*='toast'], [role='alert'], [class*='confirm-modal']", "timeout": 3000},
+        {"action": "screenshot", "name": "system-quarantine-apply-action"}
+      ]
+    },
+    {
+      "id": "SYS-09",
+      "name": "Quarantine clear action works",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=quarantine-status], [class*='quarantine']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: button[data-testid=quarantine-clear], button[class*='quarantine-clear'], button:has-text('清除隔離'), button:has-text('Clear'), button:has-text('解除')"},
+        {"action": "click", "selector": "button[data-testid=quarantine-clear], button[class*='quarantine-clear'], [class*='quarantine'] button:has-text('Clear'), [class*='quarantine'] button:has-text('清除')"},
+        {"action": "wait", "selector": "[data-testid=toast], [class*='toast'], [role='alert']", "timeout": 3000},
+        {"action": "screenshot", "name": "system-quarantine-clear-action"}
+      ]
+    },
+    {
+      "id": "SYS-10",
+      "name": "Remediation history shows",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=remediation-history], [class*='remediation'], [class*='history']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=remediation-history], [class*='remediation-history']"},
+        {"action": "screenshot", "name": "system-remediation-history"}
+      ]
+    },
+    {
+      "id": "SET-01",
+      "name": "Settings page loads with danger zone",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=settings-page], [data-testid=system-page], [class*='settings'], [class*='system-page']", "timeout": 5000},
+        {"action": "assert", "check": "url contains /ai-trader/system"},
+        {"action": "assert", "check": "element visible: [data-testid=danger-zone], [class*='danger-zone'], section:has(h2:has-text('危險')), section:has(h2:has-text('Danger'))"},
+        {"action": "screenshot", "name": "settings-page-with-danger-zone"}
+      ]
+    },
+    {
+      "id": "SET-02",
+      "name": "Emergency stop toggle visible",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=emergency-stop], [class*='emergency-stop'], button[class*='emergency']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=emergency-stop], [class*='emergency-stop'], button:has-text('緊急停止'), button:has-text('Emergency Stop')"},
+        {"action": "screenshot", "name": "settings-emergency-stop-toggle"}
+      ]
+    },
+    {
+      "id": "SET-03",
+      "name": "Trading mode toggle (paper/live) visible",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=trading-mode], [class*='trading-mode'], [class*='simulation']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=trading-mode-toggle], [class*='trading-mode'], [class*='simulation-toggle']"},
+        {"action": "assert", "check": "element text contains: 模擬|Paper|Simulation|實盤|Live"},
+        {"action": "screenshot", "name": "settings-trading-mode-toggle-visible"}
+      ]
+    },
+    {
+      "id": "SET-04",
+      "name": "Capital/initial balance field editable",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance'], input[placeholder*='資本'], input[placeholder*='capital']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=capital-field], input[name='capital'], input[name='initial_balance']"},
+        {"action": "triple-click", "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance']"},
+        {"action": "fill", "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance']", "value": "1000000"},
+        {"action": "assert", "check": "element value: 1000000"},
+        {"action": "screenshot", "name": "settings-capital-field-editable"}
+      ]
+    },
+    {
+      "id": "SET-05",
+      "name": "Max position size field editable",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']", "timeout": 5000},
+        {"action": "assert", "check": "element visible: [data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']"},
+        {"action": "triple-click", "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']"},
+        {"action": "fill", "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']", "value": "50000"},
+        {"action": "assert", "check": "element value: 50000"},
+        {"action": "screenshot", "name": "settings-max-position-size-editable"}
+      ]
+    },
+    {
+      "id": "SET-06",
+      "name": "Save settings button works (dirty tracking)",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "input[name='capital'], input[name='max_position_size'], [data-testid=capital-field]", "timeout": 5000},
+        {"action": "triple-click", "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]"},
+        {"action": "fill", "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]", "value": "2000000"},
+        {"action": "assert", "check": "element visible: button[data-testid=save-settings]:not([disabled]), button[class*='save']:not([disabled]), button:has-text('儲存'), button:has-text('Save')"},
+        {"action": "click", "selector": "button[data-testid=save-settings], button[class*='save-settings'], button:has-text('儲存設定'), button:has-text('Save Settings'), button:has-text('Save')"},
+        {"action": "wait", "selector": "[data-testid=toast], [class*='toast'], [role='alert']", "timeout": 3000},
+        {"action": "screenshot", "name": "settings-save-button-dirty-tracking"}
+      ]
+    },
+    {
+      "id": "SET-07",
+      "name": "Settings persist after page reload",
+      "role": "ADMIN",
+      "setup": "login",
+      "steps": [
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "input[name='capital'], [data-testid=capital-field]", "timeout": 5000},
+        {"action": "triple-click", "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]"},
+        {"action": "fill", "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]", "value": "3000000"},
+        {"action": "click", "selector": "button[data-testid=save-settings], button[class*='save-settings'], button:has-text('儲存設定'), button:has-text('Save Settings'), button:has-text('Save')"},
+        {"action": "wait", "selector": "[data-testid=toast], [class*='toast'], [role='alert']", "timeout": 3000},
+        {"action": "navigate", "url": "/ai-trader/system"},
+        {"action": "wait", "selector": "input[name='capital'], [data-testid=capital-field]", "timeout": 5000},
+        {"action": "assert", "check": "element value equals: 3000000"},
+        {"action": "screenshot", "name": "settings-persist-after-reload"}
+      ]
+    }
+  ]
+}
