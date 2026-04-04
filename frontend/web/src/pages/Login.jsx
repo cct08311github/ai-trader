@@ -53,13 +53,14 @@ export default function LoginPage() {
 
                 {/* Login card */}
                 <form
+                    data-testid="login-form"
                     onSubmit={handleSubmit}
                     className="rounded-2xl border border-slate-800/80 bg-slate-900/60 p-8 shadow-2xl backdrop-blur-xl"
                 >
                     <h2 className="mb-6 text-lg font-semibold text-slate-200">登入系統</h2>
 
                     {error && (
-                        <div className="mb-4 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
+                        <div data-testid="login-error" className="mb-4 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
                             <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                             <span>{error}</span>
                         </div>
@@ -74,6 +75,7 @@ export default function LoginPage() {
                             <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                             <input
                                 id="login-username"
+                                data-testid="login-username"
                                 type="text"
                                 autoComplete="username"
                                 required
@@ -94,6 +96,7 @@ export default function LoginPage() {
                             <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                             <input
                                 id="login-password"
+                                data-testid="login-password"
                                 type={showPassword ? 'text' : 'password'}
                                 autoComplete="current-password"
                                 required
@@ -104,6 +107,7 @@ export default function LoginPage() {
                             />
                             <button
                                 type="button"
+                                data-testid="toggle-password"
                                 onClick={() => setShowPassword(!showPassword)}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
                                 aria-label={showPassword ? '隱藏密碼' : '顯示密碼'}
@@ -116,6 +120,7 @@ export default function LoginPage() {
                     {/* Submit */}
                     <button
                         type="submit"
+                        data-testid="login-submit"
                         disabled={loading}
                         className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all hover:shadow-emerald-500/30 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                     >

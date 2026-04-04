@@ -652,7 +652,7 @@ export default function Geopolitical() {
   const showGlobe = use3D && webglAvailable
 
   return (
-    <div className="space-y-4 p-4">
+    <div data-testid="geopolitical-page" className="space-y-4 p-4">
       {/* Page title */}
       <div className="flex items-center justify-between">
         <h1
@@ -703,7 +703,7 @@ export default function Geopolitical() {
       {/* Desktop: 60/40 split layout */}
       <div className="hidden md:grid gap-4" style={{ gridTemplateColumns: '60% 1fr' }}>
         {/* Left: World Map (2D) or Globe (3D) */}
-        <div>
+        <div data-testid="world-map">
           {isLoading ? (
             <DataCard title="全球風險地圖" loading />
           ) : showGlobe ? (
@@ -740,7 +740,7 @@ export default function Geopolitical() {
         </div>
 
         {/* Right: News Feed */}
-        <div>
+        <div data-testid="geo-events">
           {isLoading ? (
             <DataCard title="地緣政治事件" loading />
           ) : (

@@ -131,7 +131,7 @@ function DebateHeroSection() {
           {latest && (
             <div className="grid grid-cols-1 gap-0 lg:grid-cols-12">
               {/* Bull thesis */}
-              <div className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
+              <div data-testid="bull-thesis" className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
                    style={{ borderRadius: '4px 0 0 4px', borderLeft: '3px solid rgb(var(--up))' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="h-3 w-3 rounded-full bg-[rgb(var(--up))]" style={{ boxShadow: '0 0 6px rgba(var(--up),0.4)' }} />
@@ -143,7 +143,7 @@ function DebateHeroSection() {
               </div>
 
               {/* Arbiter verdict -- center column */}
-              <div className="lg:col-span-2 border-y border-[rgba(var(--grid),0.2)] bg-[rgba(var(--surface),0.5)] flex flex-col items-center justify-center px-4 py-5">
+              <div data-testid="verdict" className="lg:col-span-2 border-y border-[rgba(var(--grid),0.2)] bg-[rgba(var(--surface),0.5)] flex flex-col items-center justify-center px-4 py-5">
                 <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))] mb-3">VERDICT</div>
                 {/* Confidence bar -- vertical */}
                 <div className="relative w-4 h-24 border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.3)] overflow-hidden" style={{ borderRadius: '2px' }}>
@@ -164,7 +164,7 @@ function DebateHeroSection() {
               </div>
 
               {/* Bear thesis */}
-              <div className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
+              <div data-testid="bear-thesis" className="lg:col-span-5 border border-[rgba(var(--grid),0.2)] p-5"
                    style={{ borderRadius: '0 4px 4px 0', borderRight: '3px solid rgb(var(--danger))' }}>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="h-3 w-3 rounded-full bg-[rgb(var(--danger))]" style={{ boxShadow: '0 0 6px rgba(var(--danger),0.4)' }} />
@@ -625,13 +625,13 @@ export default function StrategyPage() {
   }, [rows])
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-4">
+    <div data-testid="strategy-page" className="space-y-6 pb-20 lg:pb-4">
 
       {/* ══════════════════════════════════════════════════════════
           HERO: Rating + Active Proposal (side by side)
           ══════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-4">
+        <div data-testid="market-rating" className="lg:col-span-4">
           <RatingHero rating={marketRating?.rating} basis={marketRating?.basis} />
         </div>
         <div className="lg:col-span-8">
@@ -683,12 +683,14 @@ export default function StrategyPage() {
       {/* ══════════════════════════════════════════════════════════
           BULL vs BEAR DEBATE -- split view
           ══════════════════════════════════════════════════════════ */}
-      <DebateHeroSection />
+      <div data-testid="committee-debate">
+        <DebateHeroSection />
+      </div>
 
       {/* ══════════════════════════════════════════════════════════
           PROPOSAL QUEUE -- compact rows with status dots
           ══════════════════════════════════════════════════════════ */}
-      <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px' }}>
+      <div data-testid="proposal-list" className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '4px' }}>
         <div className="flex items-center justify-between border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">PROPOSAL QUEUE</span>
           <span className="font-mono text-[10px] text-[rgb(var(--muted))]">{rows.length} TOTAL</span>
@@ -823,7 +825,9 @@ export default function StrategyPage() {
           DUPLICATE FEED + LLM TRACES (terminal-style)
           ══════════════════════════════════════════════════════════ */}
       <DuplicateAlertFeed logs={logs} />
-      <PmTraceTerminal />
+      <div data-testid="llm-traces">
+        <PmTraceTerminal />
+      </div>
 
       {/* ── Proposal Modal ─────────────────────────────────────── */}
       <ProposalModal open={modalOpen} onClose={closeDetail} proposal={selected} busy={loading.act} onApprove={() => doApprove(selected)} onReject={() => doReject(selected)} />

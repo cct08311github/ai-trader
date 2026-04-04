@@ -343,12 +343,12 @@ export default function TradesPage() {
   }, [items])
 
   return (
-    <div className="space-y-4 pb-24 lg:pb-4">
+    <div data-testid="trades-page" className="space-y-4 pb-24 lg:pb-4">
 
       {/* ══════════════════════════════════════════════════════════
           COMMAND BAR -- filters as monospace toggle buttons
           ══════════════════════════════════════════════════════════ */}
-      <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '3px' }}>
+      <div data-testid="trades-filters" className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)]" style={{ borderRadius: '3px' }}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">TRADING TERMINAL</span>
@@ -410,10 +410,10 @@ export default function TradesPage() {
                   className="px-3 py-1.5 font-mono text-[10px] text-[rgb(var(--muted))] border border-[rgba(var(--grid),0.3)]"
                   style={{ borderRadius: '2px' }}
                 >CLEAR</button>
-                <button onClick={exportCsv} className="px-2 py-1.5 font-mono text-[10px] text-[rgb(var(--muted))] border border-[rgba(var(--grid),0.3)]" style={{ borderRadius: '2px' }}>
+                <button data-testid="export-csv" onClick={exportCsv} className="px-2 py-1.5 font-mono text-[10px] text-[rgb(var(--muted))] border border-[rgba(var(--grid),0.3)]" style={{ borderRadius: '2px' }}>
                   <Download className="h-3 w-3 inline mr-1" />CSV
                 </button>
-                <button onClick={exportExcel} className="px-2 py-1.5 font-mono text-[10px] text-[rgb(var(--muted))] border border-[rgba(var(--grid),0.3)]" style={{ borderRadius: '2px' }}>
+                <button data-testid="export-excel" onClick={exportExcel} className="px-2 py-1.5 font-mono text-[10px] text-[rgb(var(--muted))] border border-[rgba(var(--grid),0.3)]" style={{ borderRadius: '2px' }}>
                   <Download className="h-3 w-3 inline mr-1" />XLS
                 </button>
               </div>
@@ -430,7 +430,7 @@ export default function TradesPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
         {/* ── LEFT COLUMN: Live Order Stats ──────────────────── */}
-        <div className="lg:col-span-4 space-y-3">
+        <div data-testid="trades-stats" className="lg:col-span-4 space-y-3">
           <div className="flex items-center justify-between px-1">
             <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[rgb(var(--muted))]">ORDER STATS</span>
             <span className="font-mono text-[10px] tabular-nums text-[rgb(var(--muted))]">{formatNumber(total)} TOTAL</span>
@@ -476,7 +476,7 @@ export default function TradesPage() {
               <EmptyState icon={FileText} title="NO TRADES" description="Trade records will appear here after execution" />
             </div>
           ) : (
-            <div className="space-y-2">
+            <div data-testid="trade-list" className="space-y-2">
               {items.map(t => (
                 <TradeMiniCard key={t.id} trade={t} symbolNames={symbolNames} onClick={handleTradeSelect} />
               ))}
@@ -509,7 +509,7 @@ export default function TradesPage() {
       {/* ══════════════════════════════════════════════════════════
           BOTTOM: Fixed Daily P&L Summary Bar
           ══════════════════════════════════════════════════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t-2 border-[rgba(var(--grid),0.3)] bg-[rgb(var(--bg))] backdrop-blur-xl lg:left-64">
+      <div data-testid="daily-pnl" className="fixed bottom-0 left-0 right-0 z-40 border-t-2 border-[rgba(var(--grid),0.3)] bg-[rgb(var(--bg))] backdrop-blur-xl lg:left-64">
         <div className="flex items-center justify-between px-6 py-3">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">

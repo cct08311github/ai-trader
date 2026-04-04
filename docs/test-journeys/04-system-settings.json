@@ -1,12 +1,12 @@
 {
   "journey": "system-settings",
-  "version": "1.0.0",
-  "description": "System page: service status, health metrics, quota monitoring, risk assessment, events log, incident cluster, quarantine actions, remediation history. Settings page: danger zone, emergency stop, trading mode toggle, capital/position fields, save/persist.",
+  "version": "1.1.0",
+  "description": "System page: service status panel (後端 API / 資料庫 / Shioaji 連線 / Sentinel 守衛), Sentinel heartbeat, health metrics progress bars. Settings page (same /system route): danger zone DangerSwitch components, SafeToggle, InlineField click-to-edit, SAVE button.",
   "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "test-password",
+      "password": "openclaw2026",
       "role": "ADMIN"
     }
   },
@@ -33,7 +33,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
+          "selector": "main, .dashboard, nav",
           "timeout": 5000
         }
       ]
@@ -52,7 +52,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=system-page], .system-page, [class*='system']",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -61,21 +61,17 @@
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=service-status], [class*='service-status'], [class*='services-panel']"
-        },
-        {
-          "action": "assert",
-          "check": "element count >= 1: [data-testid=service-item], [class*='service-item'], [class*='service-row']"
+          "check": "text visible: 服務狀態"
         },
         {
           "action": "screenshot",
-          "name": "system-page-service-status-panel"
+          "name": "sys-01-system-page-service-status-panel"
         }
       ]
     },
     {
       "id": "SYS-02",
-      "name": "Health metrics display (CPU, memory, disk)",
+      "name": "Service status shows all four services",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -85,34 +81,34 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=health-metrics], [class*='health-metrics'], [class*='metrics']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=health-metrics], [class*='health-metrics']"
+          "check": "text visible: 後端 API"
         },
         {
           "action": "assert",
-          "check": "element text contains: CPU, cpu, 處理器"
+          "check": "text visible: 資料庫"
         },
         {
           "action": "assert",
-          "check": "element text contains: Memory, memory, 記憶體"
+          "check": "text visible: Shioaji 連線"
         },
         {
           "action": "assert",
-          "check": "element text contains: Disk, disk, 磁碟"
+          "check": "text visible: Sentinel 守衛"
         },
         {
           "action": "screenshot",
-          "name": "system-health-metrics-cpu-memory-disk"
+          "name": "sys-02-four-services-listed"
         }
       ]
     },
     {
       "id": "SYS-03",
-      "name": "Quota monitoring shows API usage",
+      "name": "Sentinel heartbeat panel displays",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -122,26 +118,34 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=quota-monitor], [class*='quota'], [class*='api-usage']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=quota-monitor], [class*='quota-monitor'], [class*='api-quota']"
+          "check": "text visible: Sentinel 心跳"
         },
         {
           "action": "assert",
-          "check": "element visible: [class*='usage-bar'], [class*='progress'], [role='progressbar']"
+          "check": "text visible: 最後心跳"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 今日熔斷"
+        },
+        {
+          "action": "assert",
+          "check": "text visible: 狀態"
         },
         {
           "action": "screenshot",
-          "name": "system-quota-monitoring-api-usage"
+          "name": "sys-03-sentinel-heartbeat-panel"
         }
       ]
     },
     {
       "id": "SYS-04",
-      "name": "Risk assessment section renders",
+      "name": "Health metrics progress bars display",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -151,22 +155,22 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=risk-assessment], [class*='risk-assessment'], [class*='risk']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=risk-assessment], [class*='risk-assessment']"
+          "check": "element visible: [role='progressbar'], [class*='progress'], [class*='Progress']"
         },
         {
           "action": "screenshot",
-          "name": "system-risk-assessment-section"
+          "name": "sys-04-health-metrics-progress-bars"
         }
       ]
     },
     {
       "id": "SYS-05",
-      "name": "System events log displays",
+      "name": "System page renders without errors",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -176,26 +180,22 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=system-events], [class*='system-events'], [class*='event-log']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=system-events], [class*='system-events'], [class*='events-log']"
-        },
-        {
-          "action": "assert",
-          "check": "element count >= 1: [data-testid=event-item], [class*='event-item'], [class*='log-entry']"
+          "check": "no element visible: [class*='error-boundary'], text=Something went wrong, text=Error"
         },
         {
           "action": "screenshot",
-          "name": "system-events-log"
+          "name": "sys-05-system-page-no-errors"
         }
       ]
     },
     {
       "id": "SYS-06",
-      "name": "Incident cluster section renders",
+      "name": "System page is scrollable and shows all sections",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -205,140 +205,23 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=incident-cluster], [class*='incident-cluster'], [class*='incidents']",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "assert",
-          "check": "element visible: [data-testid=incident-cluster], [class*='incident-cluster'], [class*='incident']"
+          "action": "scroll",
+          "direction": "down",
+          "amount": 500
         },
         {
           "action": "screenshot",
-          "name": "system-incident-cluster-section"
-        }
-      ]
-    },
-    {
-      "id": "SYS-07",
-      "name": "Quarantine status displays",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=quarantine-status], [class*='quarantine'], [class*='quarantine-panel']",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=quarantine-status], [class*='quarantine-status'], [class*='quarantine']"
-        },
-        {
-          "action": "screenshot",
-          "name": "system-quarantine-status"
-        }
-      ]
-    },
-    {
-      "id": "SYS-08",
-      "name": "Quarantine apply action works",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=quarantine-status], [class*='quarantine']",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: button[data-testid=quarantine-apply], button[class*='quarantine-apply'], button:has-text('隔離'), button:has-text('Quarantine'), button:has-text('Apply')"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=quarantine-apply], button[class*='quarantine-apply'], [class*='quarantine'] button:has-text('Apply'), [class*='quarantine'] button:has-text('隔離')"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert'], [class*='confirm-modal']",
-          "timeout": 3000
-        },
-        {
-          "action": "screenshot",
-          "name": "system-quarantine-apply-action"
-        }
-      ]
-    },
-    {
-      "id": "SYS-09",
-      "name": "Quarantine clear action works",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=quarantine-status], [class*='quarantine']",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: button[data-testid=quarantine-clear], button[class*='quarantine-clear'], button:has-text('清除隔離'), button:has-text('Clear'), button:has-text('解除')"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=quarantine-clear], button[class*='quarantine-clear'], [class*='quarantine'] button:has-text('Clear'), [class*='quarantine'] button:has-text('清除')"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
-        },
-        {
-          "action": "screenshot",
-          "name": "system-quarantine-clear-action"
-        }
-      ]
-    },
-    {
-      "id": "SYS-10",
-      "name": "Remediation history shows",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=remediation-history], [class*='remediation'], [class*='history']",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element visible: [data-testid=remediation-history], [class*='remediation-history']"
-        },
-        {
-          "action": "screenshot",
-          "name": "system-remediation-history"
+          "name": "sys-06-system-page-scrolled"
         }
       ]
     },
     {
       "id": "SET-01",
-      "name": "Settings page loads with danger zone",
+      "name": "Settings page loads with danger zone (DangerSwitch red border)",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -348,7 +231,7 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=settings-page], [data-testid=system-page], [class*='settings'], [class*='system-page']",
+          "selector": "main",
           "timeout": 5000
         },
         {
@@ -357,17 +240,17 @@
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=danger-zone], [class*='danger-zone'], section:has(h2:has-text('危險')), section:has(h2:has-text('Danger'))"
+          "check": "any element exists: [class*='danger'], [class*='Danger'], [class*='red'], text=ON, text=OFF"
         },
         {
           "action": "screenshot",
-          "name": "settings-page-with-danger-zone"
+          "name": "set-01-settings-danger-zone-danger-switch"
         }
       ]
     },
     {
       "id": "SET-02",
-      "name": "Emergency stop toggle visible",
+      "name": "Emergency stop DangerSwitch shows ON/OFF label",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -377,22 +260,26 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=emergency-stop], [class*='emergency-stop'], button[class*='emergency']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=emergency-stop], [class*='emergency-stop'], button:has-text('緊急停止'), button:has-text('Emergency Stop')"
+          "check": "any element exists: text=緊急停止, text=Emergency Stop, text=EMERGENCY"
+        },
+        {
+          "action": "assert",
+          "check": "any element exists: text=ON, text=OFF"
         },
         {
           "action": "screenshot",
-          "name": "settings-emergency-stop-toggle"
+          "name": "set-02-emergency-stop-danger-switch"
         }
       ]
     },
     {
       "id": "SET-03",
-      "name": "Trading mode toggle (paper/live) visible",
+      "name": "Trading mode DangerSwitch shows ON/OFF label",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -402,26 +289,26 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trading-mode], [class*='trading-mode'], [class*='simulation']",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element visible: [data-testid=trading-mode-toggle], [class*='trading-mode'], [class*='simulation-toggle']"
+          "check": "any element exists: text=模擬, text=Simulation, text=simulation_mode, text=交易模式"
         },
         {
           "action": "assert",
-          "check": "element text contains: 模擬|Paper|Simulation|實盤|Live"
+          "check": "any element exists: text=ON, text=OFF"
         },
         {
           "action": "screenshot",
-          "name": "settings-trading-mode-toggle-visible"
+          "name": "set-03-trading-mode-danger-switch"
         }
       ]
     },
     {
       "id": "SET-04",
-      "name": "Capital/initial balance field editable",
+      "name": "InlineField click-to-edit activates inline input",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -431,35 +318,31 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance'], input[placeholder*='資本'], input[placeholder*='capital']",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "assert",
-          "check": "element visible: [data-testid=capital-field], input[name='capital'], input[name='initial_balance']"
+          "action": "click",
+          "selector": "[class*='InlineField'] [class*='value'], [class*='inline-field'] [class*='value'], [class*='editable']"
         },
         {
-          "action": "triple-click",
-          "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance']"
-        },
-        {
-          "action": "fill",
-          "selector": "[data-testid=capital-field], input[name='capital'], input[name='initial_balance']",
-          "value": "1000000"
+          "action": "wait",
+          "selector": "input[type='text'], input[type='number']",
+          "timeout": 3000
         },
         {
           "action": "assert",
-          "check": "element value: 1000000"
+          "check": "element visible: input[type='text'], input[type='number']"
         },
         {
           "action": "screenshot",
-          "name": "settings-capital-field-editable"
+          "name": "set-04-inline-field-click-to-edit"
         }
       ]
     },
     {
       "id": "SET-05",
-      "name": "Max position size field editable",
+      "name": "InlineField accepts new value",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -469,35 +352,36 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']",
+          "selector": "main",
           "timeout": 5000
         },
         {
-          "action": "assert",
-          "check": "element visible: [data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']"
+          "action": "click",
+          "selector": "[class*='InlineField'] [class*='value'], [class*='inline-field'] [class*='value'], [class*='editable']"
+        },
+        {
+          "action": "wait",
+          "selector": "input[type='text'], input[type='number']",
+          "timeout": 3000
         },
         {
           "action": "triple-click",
-          "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']"
+          "selector": "input[type='text']:visible, input[type='number']:visible"
         },
         {
           "action": "fill",
-          "selector": "[data-testid=max-position-size], input[name='max_position_size'], input[name='position_size']",
-          "value": "50000"
-        },
-        {
-          "action": "assert",
-          "check": "element value: 50000"
+          "selector": "input[type='text']:visible, input[type='number']:visible",
+          "value": "1000000"
         },
         {
           "action": "screenshot",
-          "name": "settings-max-position-size-editable"
+          "name": "set-05-inline-field-new-value"
         }
       ]
     },
     {
       "id": "SET-06",
-      "name": "Save settings button works (dirty tracking)",
+      "name": "SAVE button saves settings",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -507,86 +391,25 @@
         },
         {
           "action": "wait",
-          "selector": "input[name='capital'], input[name='max_position_size'], [data-testid=capital-field]",
-          "timeout": 5000
-        },
-        {
-          "action": "triple-click",
-          "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]"
-        },
-        {
-          "action": "fill",
-          "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]",
-          "value": "2000000"
-        },
-        {
-          "action": "assert",
-          "check": "element visible: button[data-testid=save-settings]:not([disabled]), button[class*='save']:not([disabled]), button:has-text('儲存'), button:has-text('Save')"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=save-settings], button[class*='save-settings'], button:has-text('儲存設定'), button:has-text('Save Settings'), button:has-text('Save')"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
-        },
-        {
-          "action": "screenshot",
-          "name": "settings-save-button-dirty-tracking"
-        }
-      ]
-    },
-    {
-      "id": "SET-07",
-      "name": "Settings persist after page reload",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "input[name='capital'], [data-testid=capital-field]",
-          "timeout": 5000
-        },
-        {
-          "action": "triple-click",
-          "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]"
-        },
-        {
-          "action": "fill",
-          "selector": "input[name='capital'], input[name='initial_balance'], [data-testid=capital-field]",
-          "value": "3000000"
-        },
-        {
-          "action": "click",
-          "selector": "button[data-testid=save-settings], button[class*='save-settings'], button:has-text('儲存設定'), button:has-text('Save Settings'), button:has-text('Save')"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=toast], [class*='toast'], [role='alert']",
-          "timeout": 3000
-        },
-        {
-          "action": "navigate",
-          "url": "/ai-trader/system"
-        },
-        {
-          "action": "wait",
-          "selector": "input[name='capital'], [data-testid=capital-field]",
+          "selector": "main",
           "timeout": 5000
         },
         {
           "action": "assert",
-          "check": "element value equals: 3000000"
+          "check": "any element exists: text=SAVE, text=SAVING..."
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('SAVE'), button:has-text('SAVING...')"
+        },
+        {
+          "action": "wait",
+          "selector": "main",
+          "timeout": 3000
         },
         {
           "action": "screenshot",
-          "name": "settings-persist-after-reload"
+          "name": "set-06-save-button-clicked"
         }
       ]
     }

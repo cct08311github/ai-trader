@@ -276,7 +276,7 @@ export default function PortfolioPage() {
   }, [positions.length])
 
   return (
-    <div className="space-y-4 pb-20 lg:pb-4">
+    <div data-testid="portfolio-page" className="space-y-4 pb-20 lg:pb-4">
 
       {/* ══════════════════════════════════════════════════════════
           TOP COMMAND BAR -- PM status, SSE, Emergency, Refresh
@@ -326,6 +326,7 @@ export default function PortfolioPage() {
           />
           <button
             type="button"
+            data-testid="refresh-btn"
             onClick={() => load(preferApi)}
             disabled={loading}
             className="flex items-center gap-1.5 border border-[rgb(var(--border))]
@@ -343,7 +344,7 @@ export default function PortfolioPage() {
       {/* ══════════════════════════════════════════════════════════
           KPI STRIP -- 6 cards, asymmetric widths
           ══════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div data-testid="portfolio-kpis" className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         <KpiCard
           title="總資產"
           value={<AnimatedNumber value={kpis.total} format={v => formatCurrency(v)} className="font-mono" />}
@@ -424,10 +425,11 @@ export default function PortfolioPage() {
               />
             </div>
           ) : (
-            <div className="space-y-2">
+            <div data-testid="position-list" className="space-y-2">
               {positions.map((p: Position) => (
                 <PositionCard
                   key={p.symbol}
+                  data-testid={`position-card-${p.symbol}`}
                   position={p}
                   isLocked={lockedSymbols.has(p.symbol)}
                   onClose={() => setCloseTarget(p)}
@@ -488,17 +490,21 @@ export default function PortfolioPage() {
 
           {/* Allocation + legacy trend (2 columns on xl) */}
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <Panel title="SECTOR CONCENTRATION">
-              {positions.length > 0 ? (
-                <AllocationDonut data={buildAllocationData(positions)} warnThreshold={40} />
-              ) : (
-                <EmptyState icon={Shield} title="NO DATA" description="無持倉資料" />
-              )}
-            </Panel>
+            <div data-testid="sector-chart">
+              <Panel title="SECTOR CONCENTRATION">
+                {positions.length > 0 ? (
+                  <AllocationDonut data={buildAllocationData(positions)} warnThreshold={40} />
+                ) : (
+                  <EmptyState icon={Shield} title="NO DATA" description="無持倉資料" />
+                )}
+              </Panel>
+            </div>
 
-            <Panel title="EQUITY TREND" right={equitySource}>
-              <PnlLineChart data={equitySeries} />
-            </Panel>
+            <div data-testid="equity-trend">
+              <Panel title="EQUITY TREND" right={equitySource}>
+                <PnlLineChart data={equitySeries} />
+              </Panel>
+            </div>
           </div>
         </div>
       </div>
@@ -517,6 +523,7 @@ export default function PortfolioPage() {
       {/* ── Close Position Modal ─────────────────────────────────── */}
       {closeTarget && (
         <div
+          data-testid="close-position-modal"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
           onMouseDown={() => setCloseTarget(null)}
         >
@@ -555,6 +562,7 @@ export default function PortfolioPage() {
 
             <div className="flex gap-3">
               <button
+                data-testid="cancel-close"
                 onClick={() => setCloseTarget(null)}
                 disabled={closeBusy}
                 className="flex-1 border border-[rgb(var(--border))] py-2.5 text-xs font-mono font-medium
@@ -564,6 +572,7 @@ export default function PortfolioPage() {
                 CANCEL
               </button>
               <button
+                data-testid="confirm-close"
                 onClick={handleCloseConfirm}
                 disabled={closeBusy}
                 className="flex-1 border-2 border-rose-600 bg-rose-900/40 py-2.5 text-xs font-mono font-bold

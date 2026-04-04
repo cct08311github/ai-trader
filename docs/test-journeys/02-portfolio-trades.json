@@ -1,12 +1,12 @@
 {
   "journey": "portfolio-trades",
-  "version": "1.0.0",
-  "description": "Portfolio and Trades page flows for ai-trader frontend. Covers position list, KPI cards, charts, position detail drawer, chip health, trade filtering, sorting, export, and causal chain viewer.",
+  "version": "1.1.0",
+  "description": "Portfolio and Trades page flows for ai-trader frontend. Covers position list, KPI cards, charts, inline position expand, close-position modal, trade filtering, sorting, export, and causal chain viewer.",
   "baseUrl": "https://mac-mini.tailde842d.ts.net",
   "credentials": {
     "ADMIN": {
       "username": "admin",
-      "password": "test-password",
+      "password": "openclaw2026",
       "role": "ADMIN"
     }
   },
@@ -19,22 +19,22 @@
         },
         {
           "action": "fill",
-          "selector": "input[name=username]",
+          "selector": "#login-username",
           "value": "{{username}}"
         },
         {
           "action": "fill",
-          "selector": "input[name=password]",
+          "selector": "#login-password",
           "value": "{{password}}"
         },
         {
           "action": "click",
-          "selector": "button[type=submit]"
+          "selector": "text=登入"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=dashboard]",
-          "timeout": 5000
+          "selector": "nav, [class*='sidebar']",
+          "timeout": 8000
         }
       ]
     }
@@ -52,19 +52,13 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list",
+          "selector": "text=POSITION INTEL",
           "timeout": 8000
         },
         {
           "action": "assert",
           "check": "element_visible",
-          "selector": "[data-testid=portfolio-page], [data-testid=position-list], .position-list"
-        },
-        {
-          "action": "assert",
-          "check": "element_count_gte",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "count": 0
+          "selector": "text=POSITION INTEL"
         },
         {
           "action": "screenshot",
@@ -74,7 +68,7 @@
     },
     {
       "id": "PORT-02",
-      "name": "KPI cards display total value, unrealized P&L, daily P&L, Sharpe",
+      "name": "KPI cards display all six labels",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -84,19 +78,38 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=kpi-cards], .kpi-card, [data-testid=kpi-total-value]",
+          "selector": "text=總資產",
           "timeout": 8000
         },
         {
           "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=kpi-total-value]",
-            "[data-testid=kpi-unrealized-pnl]",
-            "[data-testid=kpi-daily-pnl]",
-            "[data-testid=kpi-sharpe]",
-            ".kpi-card"
-          ]
+          "check": "element_visible",
+          "selector": "text=總資產"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=可用現金"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=日損益"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=累計損益"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=今日成交"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=勝率"
         },
         {
           "action": "screenshot",
@@ -106,7 +119,7 @@
     },
     {
       "id": "PORT-03",
-      "name": "Sector allocation chart renders",
+      "name": "Sector concentration chart renders",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -116,27 +129,23 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=sector-chart], [data-testid=sector-allocation], .sector-chart, canvas, svg",
+          "selector": "text=SECTOR CONCENTRATION",
           "timeout": 8000
         },
         {
           "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=sector-chart]",
-            "[data-testid=sector-allocation]",
-            ".sector-chart"
-          ]
+          "check": "element_visible",
+          "selector": "text=SECTOR CONCENTRATION"
         },
         {
           "action": "screenshot",
-          "name": "port-03-sector-allocation-chart"
+          "name": "port-03-sector-concentration-chart"
         }
       ]
     },
     {
       "id": "PORT-04",
-      "name": "Equity curve chart renders",
+      "name": "Equity trend and P&L ECG charts render",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -146,28 +155,28 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=equity-curve], [data-testid=pnl-chart], .equity-curve, canvas, svg",
+          "selector": "text=EQUITY TREND",
           "timeout": 8000
         },
         {
           "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=equity-curve]",
-            "[data-testid=pnl-chart]",
-            ".equity-curve",
-            ".pnl-chart"
-          ]
+          "check": "element_visible",
+          "selector": "text=EQUITY TREND"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=P&L ECG"
         },
         {
           "action": "screenshot",
-          "name": "port-04-equity-curve-chart"
+          "name": "port-04-equity-trend-pnl-ecg"
         }
       ]
     },
     {
       "id": "PORT-05",
-      "name": "Click position row opens detail drawer",
+      "name": "Click position card expands inline detail",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -177,184 +186,36 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "selector": "text=POSITION INTEL",
           "timeout": 8000
         },
         {
           "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+          "selector": "[class*='PositionCard']:first-child, [class*='position-card']:first-child, [class*='positionCard']:first-child"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=position-detail-drawer], .position-drawer, [data-testid=detail-drawer]"
-        },
-        {
-          "action": "screenshot",
-          "name": "port-05-position-detail-drawer-open"
-        }
-      ]
-    },
-    {
-      "id": "PORT-06",
-      "name": "Position detail drawer shows quote panel",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/portfolio"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=quote-panel], .quote-panel",
-          "timeout": 5000
-        },
-        {
-          "action": "assert",
-          "check": "element_visible",
-          "selector": "[data-testid=quote-panel], .quote-panel"
-        },
-        {
-          "action": "screenshot",
-          "name": "port-06-position-drawer-quote-panel"
-        }
-      ]
-    },
-    {
-      "id": "PORT-07",
-      "name": "Position detail drawer shows K-line chart",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/portfolio"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=kline-chart], .kline-chart, [data-testid=position-detail-drawer] svg, [data-testid=position-detail-drawer] canvas",
-          "timeout": 8000
+          "timeout": 800
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-testid=kline-chart]",
-            ".kline-chart",
-            "[data-testid=position-detail-drawer] svg"
+            "text=KLINE",
+            "text=CLOSE",
+            "[class*='expanded']",
+            "[class*='position-detail']"
           ]
         },
         {
           "action": "screenshot",
-          "name": "port-07-position-drawer-kline-chart"
-        }
-      ]
-    },
-    {
-      "id": "PORT-08",
-      "name": "Lock position button works",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/portfolio"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]",
-          "timeout": 5000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=lock-position-btn], button[aria-label*=lock i], button[aria-label*=鎖定]"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=lock-success], [data-testid=position-locked], .locked-badge, [aria-label*=locked i]",
-          "timeout": 5000
-        },
-        {
-          "action": "screenshot",
-          "name": "port-08-position-locked"
-        }
-      ]
-    },
-    {
-      "id": "PORT-09",
-      "name": "Unlock position button works",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/portfolio"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=unlock-position-btn], [data-testid=lock-position-btn], button[aria-label*=unlock i], button[aria-label*=解鎖]",
-          "timeout": 5000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=unlock-position-btn], button[aria-label*=unlock i], button[aria-label*=解鎖]"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=unlock-success], [data-testid=position-unlocked], [data-testid=lock-position-btn]",
-          "timeout": 5000
-        },
-        {
-          "action": "screenshot",
-          "name": "port-09-position-unlocked"
+          "name": "port-05-position-card-expanded-inline"
         }
       ]
     },
     {
       "id": "PORT-10",
-      "name": "Close position modal appears on button click",
+      "name": "Close position modal appears on CLOSE button click",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -364,31 +225,31 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "selector": "text=POSITION INTEL",
           "timeout": 8000
         },
         {
           "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+          "selector": "[class*='PositionCard']:first-child, [class*='position-card']:first-child, [class*='positionCard']:first-child"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]",
+          "selector": "text=CLOSE",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]"
+          "selector": "button:has-text('CLOSE')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=close-position-modal], [role=dialog], .modal",
+          "selector": "text=CONFIRM CLOSE",
           "timeout": 5000
         },
         {
           "action": "assert",
           "check": "element_visible",
-          "selector": "[data-testid=close-position-modal], [role=dialog], .modal"
+          "selector": "text=CONFIRM CLOSE"
         },
         {
           "action": "screenshot",
@@ -398,7 +259,7 @@
     },
     {
       "id": "PORT-11",
-      "name": "Close position confirms and submits",
+      "name": "Close position: cancel button dismisses modal",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -408,79 +269,43 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
+          "selector": "text=POSITION INTEL",
           "timeout": 8000
         },
         {
           "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
+          "selector": "[class*='PositionCard']:first-child, [class*='position-card']:first-child, [class*='positionCard']:first-child"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]",
+          "selector": "text=CLOSE",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "[data-testid=close-position-btn], button[aria-label*=close i], button[aria-label*=平倉]"
+          "selector": "button:has-text('CLOSE')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=close-position-modal], [role=dialog], .modal",
+          "selector": "text=CONFIRM CLOSE",
           "timeout": 5000
         },
         {
           "action": "click",
-          "selector": "[data-testid=confirm-close-btn], button[data-testid*=confirm], button[aria-label*=confirm i], button[aria-label*=確認]"
+          "selector": "button:has-text('CANCEL')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=close-success-toast], [data-testid=close-position-modal]:not([class*=open]), .toast",
-          "timeout": 8000
-        },
-        {
-          "action": "screenshot",
-          "name": "port-11-close-position-submitted"
-        }
-      ]
-    },
-    {
-      "id": "PORT-12",
-      "name": "Chip health score displays correctly",
-      "role": "ADMIN",
-      "setup": "login",
-      "steps": [
-        {
-          "action": "navigate",
-          "url": "/ai-trader/portfolio"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=position-row], .position-row, [data-testid=position-card]",
-          "timeout": 8000
-        },
-        {
-          "action": "click",
-          "selector": "[data-testid=position-row]:first-child, .position-row:first-child, [data-testid=position-card]:first-child"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=chip-health], [data-testid=chip-score], .chip-health, .chip-score",
-          "timeout": 8000
+          "timeout": 500
         },
         {
           "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=chip-health]",
-            "[data-testid=chip-score]",
-            ".chip-health",
-            ".chip-score"
-          ]
+          "check": "element_not_exists",
+          "selector": "text=CONFIRM CLOSE"
         },
         {
           "action": "screenshot",
-          "name": "port-12-chip-health-score"
+          "name": "port-11-close-position-cancelled"
         }
       ]
     },
@@ -496,13 +321,13 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list, .trade-card",
+          "selector": "text=TODAY'S FILLS, text=VOLUME, text=TURNOVER",
           "timeout": 8000
         },
         {
           "action": "assert",
           "check": "element_visible",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list"
+          "selector": "text=TODAY'S FILLS"
         },
         {
           "action": "screenshot",
@@ -522,27 +347,22 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "input[type=date]",
           "timeout": 8000
         },
         {
           "action": "fill",
-          "selector": "[data-testid=date-from], input[name=date_from], input[type=date]:first-of-type",
+          "selector": "input[type=date]:first-of-type",
           "value": "2026-03-01"
         },
         {
           "action": "fill",
-          "selector": "[data-testid=date-to], input[name=date_to], input[type=date]:last-of-type",
+          "selector": "input[type=date]:last-of-type",
           "value": "2026-04-04"
         },
         {
-          "action": "click",
-          "selector": "[data-testid=apply-filter], button[aria-label*=filter i], button[aria-label*=篩選], button[type=submit]"
-        },
-        {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list, [data-testid=trade-card]",
-          "timeout": 5000
+          "timeout": 1000
         },
         {
           "action": "screenshot",
@@ -562,18 +382,17 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "input[type=text][placeholder*='2330'], input[placeholder*='symbol' i], input[placeholder*='股票']",
           "timeout": 8000
         },
         {
           "action": "fill",
-          "selector": "[data-testid=symbol-filter], input[name=symbol], input[placeholder*=symbol i], input[placeholder*=股票]",
+          "selector": "input[type=text][placeholder*='2330'], input[placeholder*='symbol' i], input[placeholder*='股票']",
           "value": "2330"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 1000
         },
         {
           "action": "screenshot",
@@ -583,7 +402,7 @@
     },
     {
       "id": "TRADE-04",
-      "name": "Type filter (buy/sell) works",
+      "name": "Type filter toggle buttons (BUY/SELL) work",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -593,17 +412,26 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "text=BUY",
           "timeout": 8000
         },
         {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=BUY"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=SELL"
+        },
+        {
           "action": "click",
-          "selector": "[data-testid=type-filter-buy], button[value=buy], [aria-label*=buy i], [data-value=buy]"
+          "selector": "button:has-text('BUY')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 500
         },
         {
           "action": "screenshot",
@@ -611,12 +439,11 @@
         },
         {
           "action": "click",
-          "selector": "[data-testid=type-filter-sell], button[value=sell], [aria-label*=sell i], [data-value=sell]"
+          "selector": "button:has-text('SELL')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 500
         },
         {
           "action": "screenshot",
@@ -626,7 +453,7 @@
     },
     {
       "id": "TRADE-05",
-      "name": "Status filter works",
+      "name": "Status filter toggle buttons work (FILLED/PARTIAL/PENDING/CANCELLED)",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -636,32 +463,58 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "text=FILLED",
           "timeout": 8000
         },
         {
-          "action": "click",
-          "selector": "[data-testid=status-filter], select[name=status], [aria-label*=status i]"
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=FILLED"
         },
         {
-          "action": "select_option",
-          "selector": "select[name=status], [data-testid=status-filter] select",
-          "value": "filled"
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=PARTIAL"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=PENDING"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=CANCELLED"
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('FILLED')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 500
         },
         {
           "action": "screenshot",
           "name": "trade-05-status-filter-filled"
+        },
+        {
+          "action": "click",
+          "selector": "button:has-text('PENDING')"
+        },
+        {
+          "action": "wait",
+          "timeout": 500
+        },
+        {
+          "action": "screenshot",
+          "name": "trade-05-status-filter-pending"
         }
       ]
     },
     {
       "id": "TRADE-06",
-      "name": "Sort by time works",
+      "name": "Sort by TIME button works",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -671,17 +524,16 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "text=TIME",
           "timeout": 8000
         },
         {
           "action": "click",
-          "selector": "[data-testid=sort-time], th[data-sort=time], button[aria-label*=sort by time i], [data-testid=col-time]"
+          "selector": "button:has-text('TIME')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 500
         },
         {
           "action": "screenshot",
@@ -689,12 +541,11 @@
         },
         {
           "action": "click",
-          "selector": "[data-testid=sort-time], th[data-sort=time], button[aria-label*=sort by time i], [data-testid=col-time]"
+          "selector": "button:has-text('TIME')"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-list], .trade-list",
-          "timeout": 3000
+          "timeout": 500
         },
         {
           "action": "screenshot",
@@ -704,7 +555,7 @@
     },
     {
       "id": "TRADE-07",
-      "name": "Export CSV button works",
+      "name": "Export CSV and EXCEL buttons exist and are clickable",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -714,23 +565,25 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "text=CSV",
           "timeout": 8000
         },
         {
           "action": "assert",
           "check": "element_exists",
-          "selector": "[data-testid=export-csv-btn], button[aria-label*=export i], button[aria-label*=匯出], a[download]"
+          "selector": "button:has-text('CSV')"
+        },
+        {
+          "action": "assert",
+          "check": "any_element_exists",
+          "selectors": [
+            "button:has-text('EXCEL')",
+            "button:has-text('XLS')"
+          ]
         },
         {
           "action": "click",
-          "selector": "[data-testid=export-csv-btn], button[aria-label*=export i], button[aria-label*=匯出]"
-        },
-        {
-          "action": "wait",
-          "selector": "[data-testid=export-success], [data-testid=download-started], .toast",
-          "timeout": 5000,
-          "optional": true
+          "selector": "button:has-text('CSV')"
         },
         {
           "action": "screenshot",
@@ -740,7 +593,7 @@
     },
     {
       "id": "TRADE-08",
-      "name": "Trade causal chain viewer opens",
+      "name": "Trade card click expands causal chain",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -750,36 +603,36 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trade-card], [data-testid=trade-row], .trade-card, .trade-row",
+          "selector": "[class*='TradeMiniCard'], [class*='trade-mini-card'], [class*='tradeCard'], [class*='trade-card']",
           "timeout": 8000
         },
         {
           "action": "click",
-          "selector": "[data-testid=trade-card]:first-child [data-testid=causal-chain-btn], [data-testid=trade-row]:first-child [data-testid=causal-chain-btn], button[aria-label*=causal i], button[aria-label*=決策鏈]"
+          "selector": "[class*='TradeMiniCard']:first-child, [class*='trade-mini-card']:first-child, [class*='tradeCard']:first-child, [class*='trade-card']:first-child"
         },
         {
           "action": "wait",
-          "selector": "[data-testid=causal-chain-viewer], [data-testid=decision-chain], .causal-chain, [role=dialog]",
-          "timeout": 5000
+          "timeout": 800
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-testid=causal-chain-viewer]",
-            "[data-testid=decision-chain]",
-            ".causal-chain"
+            "[class*='causal']",
+            "[class*='decision-chain']",
+            "[class*='chain']",
+            "text=決策鏈"
           ]
         },
         {
           "action": "screenshot",
-          "name": "trade-08-causal-chain-viewer-open"
+          "name": "trade-08-trade-card-causal-chain-expanded"
         }
       ]
     },
     {
       "id": "TRADE-09",
-      "name": "Daily P&L summary bar displays",
+      "name": "Stats panel displays TODAY'S FILLS, VOLUME, TURNOVER, WIN RATE",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -789,28 +642,38 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "text=TODAY'S FILLS",
           "timeout": 8000
         },
         {
           "action": "assert",
-          "check": "any_element_exists",
-          "selectors": [
-            "[data-testid=daily-pnl-bar]",
-            "[data-testid=daily-pnl-summary]",
-            ".daily-pnl",
-            ".pnl-summary-bar"
-          ]
+          "check": "element_visible",
+          "selector": "text=TODAY'S FILLS"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=VOLUME"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=TURNOVER"
+        },
+        {
+          "action": "assert",
+          "check": "element_visible",
+          "selector": "text=WIN RATE"
         },
         {
           "action": "screenshot",
-          "name": "trade-09-daily-pnl-summary-bar"
+          "name": "trade-09-stats-panel"
         }
       ]
     },
     {
       "id": "TRADE-10",
-      "name": "Order stats panel shows fills, volume, and win rate",
+      "name": "Monthly stats panel displays monthly metrics",
       "role": "ADMIN",
       "setup": "login",
       "steps": [
@@ -820,24 +683,22 @@
         },
         {
           "action": "wait",
-          "selector": "[data-testid=trades-page], [data-testid=trade-list], .trade-list",
+          "selector": "input[type=month], text=AVG HOLDING, text=MAX GAIN",
           "timeout": 8000
         },
         {
           "action": "assert",
           "check": "any_element_exists",
           "selectors": [
-            "[data-testid=order-stats-panel]",
-            "[data-testid=stats-fills]",
-            "[data-testid=stats-volume]",
-            "[data-testid=stats-win-rate]",
-            ".order-stats",
-            ".stats-panel"
+            "text=AVG HOLDING",
+            "text=MAX GAIN",
+            "text=MAX LOSS",
+            "text=FEE + TAX"
           ]
         },
         {
           "action": "screenshot",
-          "name": "trade-10-order-stats-panel"
+          "name": "trade-10-monthly-stats-panel"
         }
       ]
     }

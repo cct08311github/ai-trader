@@ -142,7 +142,7 @@ function InlinePctField({ label, hint, value, onChange }) {
 function SaveBar({ saving, saved, dirty, onSave }) {
     return (
         <div className="flex items-center gap-3 pt-3">
-            <button type="button" onClick={onSave} disabled={saving || !dirty}
+            <button type="button" data-testid="save-settings" onClick={onSave} disabled={saving || !dirty}
                 className="flex items-center gap-2 border-2 border-[rgb(var(--accent))] bg-[rgba(var(--accent),0.1)] px-5 py-2 font-mono text-[10px] font-bold uppercase tracking-widest text-[rgb(var(--accent))] transition hover:bg-[rgba(var(--accent),0.2)] disabled:opacity-40"
                 style={{ borderRadius: '3px' }}>
                 {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
@@ -381,7 +381,7 @@ export default function SettingsPage() {
     const loading = !capital.data && !sentinel.data && !limits.data
 
     return (
-        <div className="space-y-6 max-w-6xl pb-20 lg:pb-4">
+        <div data-testid="settings-page" className="space-y-6 max-w-6xl pb-20 lg:pb-4">
 
             {/* Errors */}
             {errors.map((e, i) => (
@@ -399,7 +399,7 @@ export default function SettingsPage() {
             {/* ══════════════════════════════════════════════════════════
                 DANGER ZONE -- red border, prominent controls
                 ══════════════════════════════════════════════════════════ */}
-            <div className="border-2 border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.03)] overflow-hidden"
+            <div data-testid="danger-zone" className="border-2 border-[rgb(var(--danger))] bg-[rgba(var(--danger),0.03)] overflow-hidden"
                  style={{ borderRadius: '4px', boxShadow: '0 0 24px rgba(var(--danger),0.08)' }}>
                 {/* Danger header */}
                 <div className="flex items-center gap-3 bg-[rgba(var(--danger),0.08)] px-5 py-3 border-b border-[rgba(var(--danger),0.2)]">

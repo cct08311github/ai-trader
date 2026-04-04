@@ -8,7 +8,7 @@ import { SentimentIndicator } from '../../components/ui/SentimentIndicator'
  */
 export default function ResearchDashboard() {
   return (
-    <div className="space-y-4">
+    <div data-testid="research-dashboard" className="space-y-4">
       <div className="flex items-center justify-between mb-2">
         <h1
           className="text-lg font-medium text-th-text"

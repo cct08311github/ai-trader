@@ -753,7 +753,7 @@ export default function SystemPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div data-testid="system-page" className="space-y-6">
       <div>
         <div className="text-sm font-semibold">系統監控與控制</div>
         <div className="mt-1 text-xs text-slate-400">
@@ -823,7 +823,7 @@ export default function SystemPage() {
         </div>
 
         {/* 右欄：服務狀態、資源、配額、風控 */}
-        <div className="space-y-6">
+        <div data-testid="service-status" className="space-y-6">
           <ServiceStatusPanel health={health} />
           <SentinelPanel health={health} />
           <ResourcePanel health={health} />

@@ -313,7 +313,7 @@ export default function SectorAnalysis() {
   const flowErr = flowError ? (flowError.message || '資料載入失敗') : null
 
   return (
-    <div className="space-y-4">
+    <div data-testid="sector-analysis" className="space-y-4">
       {/* Page title */}
       <h1 className="text-lg font-medium text-th-text" style={{ fontFamily: 'var(--font-ui)' }}>
         產業賽道分析

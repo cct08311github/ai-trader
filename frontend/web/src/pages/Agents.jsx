@@ -359,12 +359,12 @@ export default function AgentsPage() {
     , [agents])
 
     return (
-        <div className="space-y-4 pb-20 lg:pb-4">
+        <div data-testid="agents-page" className="space-y-4 pb-20 lg:pb-4">
 
             {/* ══════════════════════════════════════════════════════════
                 SYSTEM STATUS BAR
                 ══════════════════════════════════════════════════════════ */}
-            <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.5)]" style={{ borderRadius: '4px' }}>
+            <div data-testid="agent-status-bar" className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.5)]" style={{ borderRadius: '4px' }}>
                 <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-3">
                     <div className="flex items-center gap-6">
                         <div className="flex items-center gap-2">
@@ -435,7 +435,7 @@ export default function AgentsPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
 
                 {/* ── MAIN COLUMN: Irregular agent cards ────── */}
-                <div className="lg:col-span-9 space-y-4">
+                <div data-testid="agent-cards" className="lg:col-span-9 space-y-4">
 
                     {/* ERROR agents -- pulled to top, pulsing */}
                     {errorAgents.map(agent => (
@@ -471,7 +471,7 @@ export default function AgentsPage() {
 
                 {/* ── RIGHT SIDEBAR: Execution Timeline ─────── */}
                 <div className="lg:col-span-3">
-                    <div className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] sticky top-4" style={{ borderRadius: '4px' }}>
+                    <div data-testid="execution-timeline" className="border border-[rgba(var(--grid),0.3)] bg-[rgba(var(--surface),0.4)] sticky top-4" style={{ borderRadius: '4px' }}>
                         <div className="border-b border-[rgba(var(--grid),0.3)] px-4 py-2.5">
                             <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-[rgb(var(--text))]">EXECUTION TIMELINE</span>
                         </div>
