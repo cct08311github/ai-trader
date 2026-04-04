@@ -1,4 +1,4 @@
-"""llm_minimax.py — MiniMax M2.5 LLM adapter（OpenAI-compatible API）。
+"""llm_minimax.py — MiniMax LLM adapter（OpenAI-compatible API）。
 
 LLM 呼叫介面：
     minimax_call(model, prompt) -> dict

@@ -40,7 +40,7 @@ def call_agent_llm(
     prompt: str,
     model: str = DEFAULT_MODEL,
 ) -> Dict[str, Any]:
-    """呼叫 MiniMax M2.5，回傳解析後的 dict。失敗時回傳 fallback dict。"""
+    """呼叫 MiniMax LLM，回傳解析後的 dict。失敗時回傳 fallback dict。"""
     try:
         return minimax_call(model, prompt)
     except Exception as e:

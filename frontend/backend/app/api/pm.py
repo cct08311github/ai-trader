@@ -209,7 +209,8 @@ def pm_review():
         context = build_daily_context(conn=None)
 
     # Read model at request time (not module load) so env vars from run.sh are visible
-    model = os.environ.get("PM_LLM_MODEL", "MiniMax-M2.5")
+    from openclaw.llm_minimax import _DEFAULT_MODEL
+    model = os.environ.get("PM_LLM_MODEL", _DEFAULT_MODEL)
     llm_call = _get_llm_call()
     try:
         state = run_daily_pm_review(context=context, llm_call=llm_call, model=model)
