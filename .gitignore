@@ -68,16 +68,14 @@ config/daily_pm_state.json
 config/system_state.json
 config/market_monitor_state.json
 
-# Local editor / Codex artifacts
-.claude/settings.local.json
-.claude/*.local.md
+# Local editor / AI agent artifacts
+.claude/
 _tmp/
 test_crash.py
 frontend/backend/package-lock.json
 
 # Local dev artifacts (not part of CI)
 .serena/
-.claude/plan/
 openclaw_demo.db*
 
 # Playwright MCP / screenshots
