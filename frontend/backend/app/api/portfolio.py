@@ -82,6 +82,7 @@ def portfolio_positions(simulation: Optional[bool] = None):
                 "  FROM eod_prices ep "
                 "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
                 "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
+                "  GROUP BY ep.symbol"
                 ") e ON p.symbol = e.symbol "
                 "WHERE p.quantity > 0 ORDER BY p.symbol"
             ).fetchall()
@@ -498,7 +499,7 @@ def get_portfolio_summary():
     """
     Combined portfolio summary: positions + KPI metrics in a single response.
 
-    Returns total_value, total_cost, unrealized_pnl, daily_change_pct,
+    Returns total_value, total_cost, unrealized_pnl, total_return_pct,
     available_cash, today_trades_count, overall_win_rate, positions[], and alerts[].
     """
     import datetime
@@ -531,6 +532,7 @@ def get_portfolio_summary():
                 "  FROM eod_prices ep "
                 "  JOIN (SELECT symbol, MAX(trade_date) AS trade_date FROM eod_prices GROUP BY symbol) latest "
                 "    ON ep.symbol = latest.symbol AND ep.trade_date = latest.trade_date"
+                "  GROUP BY ep.symbol"
                 ") e ON p.symbol = e.symbol "
                 "WHERE p.quantity > 0 ORDER BY p.symbol"
             ).fetchall()
@@ -597,7 +599,7 @@ def get_portfolio_summary():
     total_market = sum(p["qty"] * p["last_price"] for p in positions)
     unrealized_pnl = round(sum(p["unrealized_pnl"] for p in positions), 2)
     total_value = round(total_market + available_cash, 2)
-    daily_change_pct = round(unrealized_pnl / total_cost * 100, 2) if total_cost > 0 else None
+    total_return_pct = round(unrealized_pnl / total_cost * 100, 2) if total_cost > 0 else None
 
     return {
         "status": "ok",
@@ -605,7 +607,7 @@ def get_portfolio_summary():
             "total_value": total_value,
             "total_cost": round(total_cost, 2),
             "unrealized_pnl": unrealized_pnl,
-            "daily_change_pct": daily_change_pct,
+            "total_return_pct": total_return_pct,
             "available_cash": available_cash,
             "today_trades_count": today_trades_count,
             "overall_win_rate": overall_win_rate,

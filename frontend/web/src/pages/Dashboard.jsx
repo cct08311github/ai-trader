@@ -318,7 +318,7 @@ export default function DashboardPage() {
   const analysis = analysisQ.data || null
 
   const totalValue = portfolio.total_value ?? null
-  const dailyChangePct = portfolio.daily_change_pct ?? null
+  const dailyChangePct = portfolio.total_return_pct ?? null
   const unrealizedPnl = portfolio.unrealized_pnl ?? null
   const totalCost = portfolio.total_cost ?? 1
 
@@ -368,7 +368,7 @@ export default function DashboardPage() {
           value={totalValue}
           format="currency"
           trend={pnlTrend(dailyChangePct)}
-          subtext={dailyChangePct != null ? `今日 ${formatPct(dailyChangePct)}` : '—'}
+          subtext={formatPct(dailyChangePct) || '—'}
           accentColor="rgb(var(--accent))"
         />
         <KpiTile
