@@ -133,3 +133,72 @@ def get_overall_win_rate(conn: sqlite3.Connection) -> float:
 def get_equity_curve(conn: sqlite3.Connection, days: int, start_equity: float) -> list:
     """Build equity curve from daily_pnl_summary (realized_pnl cumsum)."""
     return PnLRepository(conn).get_equity_curve(days, start_equity)
+
+
+def backfill_daily_pnl_summary(conn: sqlite3.Connection) -> int:
+    """從 orders+fills 回填 daily_pnl_summary（修復 #630）。
+
+    用途：daily_pnl_summary 為空但 orders/fills 有歷史成交資料時，
+    重建每日 PnL 摘要。已存在的日期不會重複累加（冪等）。
+
+    Returns: 回填的賣出筆數。
+    """
+    repo = PnLRepository(conn)
+
+    # 已有數據的日期 → 跳過（冪等）
+    existing_dates = {
+        r[0]
+        for r in conn.execute("SELECT trade_date FROM daily_pnl_summary").fetchall()
+    }
+
+    # 取得所有 filled sell orders，含 fills，按日期排序
+    sell_rows = conn.execute(
+        """
+        SELECT
+            date(o.ts_submit) AS trade_date,
+            o.symbol,
+            f.qty AS fill_qty,
+            f.price AS fill_price,
+            f.fee,
+            f.tax
+        FROM orders o
+        JOIN fills f ON f.order_id = o.order_id
+        WHERE o.side = 'sell'
+          AND o.status IN ('filled', 'partially_filled')
+        ORDER BY o.ts_submit ASC
+        """
+    ).fetchall()
+
+    if not sell_rows:
+        log.info("[backfill_daily_pnl] No filled sell orders found, nothing to backfill")
+        return 0
+
+    count = 0
+    for row in sell_rows:
+        trade_date = row[0]
+        symbol = row[1]
+        fill_qty = int(row[2])
+        fill_price = float(row[3])
+        fee = float(row[4] or 0)
+        tax = float(row[5] or 0)
+
+        if trade_date in existing_dates:
+            log.debug("[backfill_daily_pnl] %s already in daily_pnl_summary, skip", trade_date)
+            continue
+
+        avg_cost, _ = repo.get_avg_cost(symbol)
+        if avg_cost <= 0:
+            log.warning("[backfill_daily_pnl] %s: no avg_cost, skip sell on %s", symbol, trade_date)
+            continue
+
+        realized_pnl = (fill_price - avg_cost) * fill_qty - fee - tax
+        repo.upsert_daily_pnl(trade_date, delta_realized=realized_pnl, delta_trades=1)
+        existing_dates.add(trade_date)
+        count += 1
+        log.info(
+            "[backfill_daily_pnl] %s %s: realized_pnl=%.2f (fill=%.2f avg=%.2f qty=%d)",
+            trade_date, symbol, realized_pnl, fill_price, avg_cost, fill_qty,
+        )
+
+    log.info("[backfill_daily_pnl] Done — backfilled %d sell records", count)
+    return count

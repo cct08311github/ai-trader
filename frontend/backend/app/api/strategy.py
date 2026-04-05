@@ -505,6 +505,69 @@ def approve_proposal_url(proposal_id: str, token: str = Query(...)):
     return HTMLResponse("<h2>✅ 提案已核准</h2><p>可關閉此頁面。</p>")
 
 
+@router.post("/proposals/triage-pending")
+def triage_pending_proposals():
+    """批量處理 pending proposals（修復 #631）。
+
+    規則：
+    - confidence >= 0.65 + STOP_LOSS/POSITION_REDUCTION/RISK_CONTROL 類 → approved
+    - DATA_RECOVERY/DATA_REFRESH_REQUIRED → noted（人工追蹤）
+    - confidence < 0.60 且非 DATA 類 → expired
+    - 其餘 → 維持 pending（需人工決策）
+    """
+    _STOP_RULES = {
+        "STOP_LOSS", "STOP_LOSS_THRESHOLD", "STOP_LOSS_ADJUSTMENT", "STOPLOSS_LEVEL",
+        "POSITION_REDUCTION", "POSITION_MANAGEMENT", "RISK_CONTROL", "RISK_THRESHOLD",
+        "停損紀律", "減碼時機與價位", "避免加碼攤平", "NO_AVERAGING_DOWN",
+    }
+    _DATA_RULES = {"DATA_RECOVERY", "DATA_REFRESH_REQUIRED", "資訊追蹤清單"}
+
+    results = {"approved": [], "noted": [], "expired": [], "kept_pending": []}
+    now_ts = int(time.time())
+
+    with db.get_conn_rw() as conn:
+        rows = conn.execute(
+            "SELECT proposal_id, target_rule, rule_category, confidence "
+            "FROM strategy_proposals WHERE status='pending'"
+        ).fetchall()
+
+        for row in rows:
+            pid = row["proposal_id"]
+            rule = row["target_rule"]
+            conf = float(row["confidence"] or 0)
+
+            if rule in _DATA_RULES:
+                conn.execute(
+                    "UPDATE strategy_proposals SET status='noted', decided_at=? WHERE proposal_id=?",
+                    (now_ts, pid),
+                )
+                results["noted"].append({"proposal_id": pid, "rule": rule})
+            elif rule in _STOP_RULES and conf >= 0.65:
+                conn.execute(
+                    "UPDATE strategy_proposals SET status='approved', decided_at=? WHERE proposal_id=?",
+                    (now_ts, pid),
+                )
+                results["approved"].append({"proposal_id": pid, "rule": rule, "confidence": conf})
+            elif conf < 0.60:
+                conn.execute(
+                    "UPDATE strategy_proposals SET status='expired', decided_at=? WHERE proposal_id=?",
+                    (now_ts, pid),
+                )
+                results["expired"].append({"proposal_id": pid, "rule": rule, "confidence": conf})
+            else:
+                results["kept_pending"].append({"proposal_id": pid, "rule": rule, "confidence": conf})
+
+        conn.commit()
+
+    total = sum(len(v) for v in results.values())
+    return {
+        "status": "ok",
+        "processed": total,
+        "summary": {k: len(v) for k, v in results.items()},
+        "details": results,
+    }
+
+
 @router.get("/proposals/{proposal_id}/reject", response_class=HTMLResponse)
 def reject_proposal_url(proposal_id: str, token: str = Query(...)):
     """URL 按鈕拒絕提案（Telegram URL button 用）。"""

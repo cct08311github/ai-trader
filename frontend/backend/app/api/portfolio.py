@@ -1039,12 +1039,23 @@ def close_position(symbol: str):
                  f["qty"], f["price"], f["fee"], f["tax"]),
             )
 
-        # pnl_engine hook — update positions table
+        # pnl_engine hook — update positions + daily_pnl_summary (#630: fix wrong param names)
         try:
+            import datetime as _pnl_dt
+            _trade_date = _pnl_dt.datetime.now(
+                _pnl_dt.timezone(_pnl_dt.timedelta(hours=8))
+            ).strftime("%Y-%m-%d")
             from openclaw.pnl_engine import on_sell_filled, sync_positions_table
             for f in fills_collected:
-                on_sell_filled(conn, symbol=symbol, qty=f["qty"],
-                               sell_price=f["price"], fee=f["fee"], tax=f["tax"])
+                on_sell_filled(
+                    conn,
+                    symbol=symbol,
+                    sell_qty=int(f["qty"]),
+                    sell_price=float(f["price"]),
+                    sell_fee=float(f["fee"]),
+                    sell_tax=float(f["tax"]),
+                    trade_date=_trade_date,
+                )
             sync_positions_table(conn)
         except Exception:  # noqa: BLE001 — dynamic import; can't predict exceptions
             pass  # non-critical
@@ -1251,3 +1262,18 @@ def get_symbol_names():
             "GROUP BY symbol HAVING trade_date=MAX(trade_date)"
         ).fetchall()
     return {"names": {r["symbol"]: r["name"] for r in rows if r["name"]}}
+
+
+@router.post("/backfill-pnl")
+def backfill_pnl_summary():
+    """從 orders+fills 回填 daily_pnl_summary（修復 #630）。
+
+    idempotent: 已存在的日期不會重複累加。
+    """
+    try:
+        from openclaw.pnl_engine import backfill_daily_pnl_summary
+        with get_conn_rw() as conn:
+            count = backfill_daily_pnl_summary(conn)
+        return {"status": "ok", "backfilled_records": count}
+    except Exception as e:  # noqa: BLE001
+        return {"status": "error", "detail": str(e)}

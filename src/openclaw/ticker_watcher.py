@@ -751,6 +751,87 @@ def _evaluate_cash_mode(
     return decision.cash_mode, decision.reason_code
 
 
+# ── PM 未核准時的 Hard Kill 安全出場 (#629) ───────────────────────────────────
+def _pm_hardkill_scan(
+    conn: sqlite3.Connection,
+    positions: Dict[str, tuple],
+    high_water_marks: Dict[str, float],
+) -> int:
+    """PM 未審核時仍執行 hard_kill 安全出場（建立 approved POSITION_REBALANCE 提案）。
+
+    只觸發 hard_kill 條件（HWM DD >= hard_kill_dd_pct），不觸發其他 exit 信號。
+    使用 EOD 收盤價序列評估，不需要即時行情。
+    回傳建立的提案數量。
+    """
+    from openclaw.signal_logic import evaluate_exit as _eval_exit, SignalParams as _SigParams
+
+    _params = _SigParams()
+    created = 0
+    for _sym, (_qty, _avg) in list(positions.items()):
+        _closes = _build_exit_closes(conn, _sym, {})
+        if len(_closes) < 5:
+            continue
+        _hwm = high_water_marks.get(_sym)
+        _sig = _eval_exit(_closes, _avg, _hwm, _params)
+        # 只在 hard_kill 條件下繞過 PM gate
+        if _sig.signal != "sell" or "hard_kill" not in _sig.reason:
+            continue
+
+        # 確認 positions 表有有效 current_price（proposal executor 用此價格）
+        _pos_row = conn.execute(
+            "SELECT current_price FROM positions WHERE symbol=?", (_sym,)
+        ).fetchone()
+        _price = float(_pos_row[0]) if _pos_row and _pos_row[0] else _closes[-1]
+        if _price <= 0:
+            log.warning("[%s] _pm_hardkill_scan: no valid price, skip", _sym)
+            continue
+
+        # 冪等：若已存在未執行的 hard_kill 提案則跳過
+        _dup = conn.execute(
+            """SELECT proposal_id FROM strategy_proposals
+               WHERE json_extract(proposal_json,'$.symbol')=?
+                 AND target_rule='POSITION_REBALANCE'
+                 AND status IN ('approved','queued')
+                 AND json_extract(proposal_json,'$.type')='hard_kill'""",
+            (_sym,),
+        ).fetchone()
+        if _dup:
+            log.debug("[%s] _pm_hardkill_scan: approved hard_kill proposal exists, skip", _sym)
+            continue
+
+        import json as _json
+        _proposal_id = str(uuid.uuid4())
+        conn.execute(
+            """INSERT INTO strategy_proposals
+               (proposal_id, generated_by, target_rule, rule_category,
+                proposed_value, current_value, supporting_evidence, confidence,
+                requires_human_approval, status, proposal_json, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                _proposal_id, "pm_hardkill_scan", "POSITION_REBALANCE", "portfolio",
+                f"hard_kill: {_sym} HWM DD >= {_params.hard_kill_dd_pct:.0%}",
+                str(_price),
+                _sig.reason,
+                1.0, 0, "approved",
+                _json.dumps({
+                    "symbol": _sym,
+                    "reduce_pct": 1.0,
+                    "type": "hard_kill",
+                    "reason": _sig.reason,
+                }),
+                int(time.time()),
+            ),
+        )
+        conn.commit()
+        created += 1
+        log.warning(
+            "[%s] _pm_hardkill_scan: created approved hard_kill proposal (reason=%s)",
+            _sym, _sig.reason,
+        )
+
+    return created
+
+
 # ── 模擬下單執行 ──────────────────────────────────────────────────────────────
 def _execute_sim_order(conn: sqlite3.Connection, *, broker, decision_id: str,
                         symbol: str, side: str, qty: int, price: float,
@@ -1083,6 +1164,79 @@ def run_watcher() -> None:
                         log.info("[tg_approver] Sent %d proposal notifications (PM not approved)", n_tg)
                 except Exception as _tge:  # noqa: BLE001 — dynamic import + Telegram API
                     log.debug("[tg_approver] error: %s", _tge)
+                # Safety bypass (#629): hard_kill exits always fire, even when PM not approved
+                try:
+                    _hk_count = _pm_hardkill_scan(conn, positions, high_water_marks)
+                    if _hk_count > 0:
+                        # Execute the newly created hard_kill proposals immediately
+                        from openclaw.proposal_executor import (
+                            SellIntent,
+                            execute_pending_proposals,
+                            expire_stale_noted_proposals,
+                            mark_intent_executed,
+                            mark_intent_executing,
+                            mark_intent_failed,
+                        )
+                        from openclaw.risk_engine import OrderCandidate
+                        _hk_intents, _ = execute_pending_proposals(conn)
+                        for _hk_intent in _hk_intents:
+                            try:
+                                _hk_candidate = OrderCandidate(
+                                    symbol=_hk_intent.symbol, side="sell",
+                                    qty=_hk_intent.qty, price=_hk_intent.price,
+                                    order_type="limit", tif="ROD",
+                                    opens_new_position=False,
+                                )
+                                mark_intent_executing(conn, _hk_intent.proposal_id, _hk_intent.execution_key)
+                                conn.execute("BEGIN IMMEDIATE")
+                                _hk_ok, _hk_oid = _execute_sim_order(
+                                    conn, broker=broker,
+                                    decision_id=_hk_intent.proposal_id,
+                                    symbol=_hk_intent.symbol,
+                                    side="sell", qty=_hk_intent.qty,
+                                    price=_hk_intent.price, candidate=_hk_candidate,
+                                    guard_limits=limits,
+                                    account_mode="live" if not simulation else "simulation",
+                                )
+                                conn.commit()
+                                if _hk_ok:
+                                    try:
+                                        _hk_trade_date = dt.datetime.now(tz=_TZ_TWN).strftime("%Y-%m-%d")
+                                        _hk_fill = conn.execute(
+                                            "SELECT COALESCE(SUM(fee),0.0), COALESCE(SUM(tax),0.0)"
+                                            " FROM fills WHERE order_id=?", (_hk_oid,),
+                                        ).fetchone()
+                                        on_sell_filled(
+                                            conn, symbol=_hk_intent.symbol,
+                                            sell_qty=_hk_intent.qty,
+                                            sell_price=_hk_intent.price,
+                                            sell_fee=float(_hk_fill[0]),
+                                            sell_tax=float(_hk_fill[1]),
+                                            trade_date=_hk_trade_date,
+                                        )
+                                    except (sqlite3.Error, ValueError, ArithmeticError) as _pnl_err:
+                                        log.warning("[%s] pnl_engine error: %s", _hk_intent.symbol, _pnl_err)
+                                    mark_intent_executed(
+                                        conn, _hk_intent.proposal_id,
+                                        execution_key=_hk_intent.execution_key,
+                                        order_id=_hk_oid,
+                                    )
+                                    positions.pop(_hk_intent.symbol, None)
+                                    high_water_marks.pop(_hk_intent.symbol, None)
+                                    log.warning(
+                                        "[%s] PM-bypass hard_kill executed: qty=%d price=%.2f",
+                                        _hk_intent.symbol, _hk_intent.qty, _hk_intent.price,
+                                    )
+                                else:
+                                    mark_intent_failed(conn, _hk_intent.proposal_id, _hk_intent.execution_key)
+                            except Exception as _hk_err:  # noqa: BLE001
+                                log.error("[%s] hard_kill PM-bypass error: %s", _hk_intent.symbol, _hk_err, exc_info=True)
+                                try:
+                                    conn.execute("ROLLBACK")
+                                except Exception:  # noqa: BLE001
+                                    pass
+                except Exception as _hk_scan_err:  # noqa: BLE001
+                    log.error("_pm_hardkill_scan failed: %s", _hk_scan_err, exc_info=True)
                 conn.close()
                 time.sleep(POLL_INTERVAL_SEC)
                 continue
